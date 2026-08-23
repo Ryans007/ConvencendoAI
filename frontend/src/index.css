@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+/* Tokens do sistema visual da jornada. Ficam registrados aqui, e nao espalhados em
+   valores hexadecimais dentro de classes arbitrarias, para que a primeira tela nasca
+   consumindo nomes e o sistema visual nao se dissolva.
+   O Tailwind 4 e configurado por CSS: este bloco substitui o antigo tailwind.config. */
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+
+  --color-app: #f6f7f8;
+  --color-surface: #ffffff;
+  --color-surface-muted: #fafbfb;
+
+  --color-brand: #00d68f;
+  --color-brand-strong: #00a06b;
+  --color-brand-soft: #e9fbf4;
+  --color-brand-line: #d9f6e9;
+  --color-brand-line-strong: #b7edd8;
+
+  --color-warn: #e8a33d;
+  --color-warn-soft: #fdf4e7;
+  --color-warn-strong: #b4791e;
+
+  --color-ink: #17181a;
+  --color-ink-muted: #7a8290;
+  --color-ink-disabled: #b9bfc7;
+
+  --color-line: #ecedef;
+  --color-line-strong: #f1f2f4;
+
+  --radius-card: 16px;
+  --radius-pill: 999px;
+
+  --shadow-card: 0 1px 2px rgb(23 24 26 / 0.04);
+  --shadow-card-focus: 0 4px 16px rgb(0 214 143 / 0.1);
+
+  --text-page-title: 24px;
+  --text-scenario: 16px;
+  --text-score: 14px;
+  --text-aux: 13px;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-app);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
