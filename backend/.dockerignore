@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.log
+media/
+staticfiles/
+
+# Chave privada nunca entra no contexto de build.
+# O .crt precisa entrar: ele vai para o trust store da imagem.
+certs/*.key
+certs/*.pem

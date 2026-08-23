@@ -1,0 +1,84 @@
+# Ambiente de DESENVOLVIMENTO.
+#
+# Este arquivo tem um par para producao, docker-compose.prod.yml, que nasce junto da
+# etapa de deploy. Os dois sao autocontidos de proposito, para que cada ambiente se leia
+# por inteiro num unico lugar. O preco e duplicacao: mudanca no servico do banco, na
+# versao da imagem ou nos blocos de build precisa ser replicada no par.
+#
+# COMPOSE_FILE no .env aponta para este arquivo, entao "docker compose up" basta.
+# Producao passa "-f docker-compose.prod.yml" explicitamente, o que sobrepoe o .env.
+
+services:
+  db:
+    image: postgres:18
+    container_name: convencendoai_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      # A partir da versao 18 a imagem oficial espera um unico mount neste caminho, e
+      # nao em /var/lib/postgresql/data: os dados passam a viver num subdiretorio por
+      # versao maior, para permitir pg_upgrade --link. Montar no caminho antigo faz a
+      # imagem abortar a inicializacao com erro.
+      - postgres_data:/var/lib/postgresql
+    ports:
+      - "${POSTGRES_PORT_HOST}:${POSTGRES_PORT}"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  backend:
+    build:
+      context: ./backend
+      args:
+        CORPORATE_CA_CERT: ${CORPORATE_CA_CERT}
+    container_name: convencendoai_backend
+    restart: unless-stopped
+    # O comando padrao da imagem e gunicorn com worker ASGI, que e o de producao. Aqui
+    # trocamos por uvicorn --reload para ganhar recarregamento automatico; a pilha ASGI
+    # e a mesma nos dois casos. O migrate na subida e conveniencia de desenvolvimento:
+    # em producao ele e passo deliberado de deploy, e nao parte do comando do servidor,
+    # porque replicas concorrentes disputariam a mesma migration.
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             uvicorn core.asgi:application --host 0.0.0.0 --port ${BACKEND_PORT} --reload"
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app
+    ports:
+      - "${BACKEND_PORT_HOST}:${BACKEND_PORT}"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        CORPORATE_CA_CERT: ${CORPORATE_CA_CERT}
+    container_name: convencendoai_frontend
+    restart: unless-stopped
+    command: npm run dev -- --host 0.0.0.0 --port ${FRONTEND_PORT}
+    # Recebe apenas a variavel de que precisa, e nao o .env inteiro: o frontend nao tem
+    # nada a fazer com a senha do banco.
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+    volumes:
+      - ./frontend:/app
+      # Volume nomeado para o node_modules. Sem ele, o bind mount de /app viria do host,
+      # que nao tem node_modules instalado, e encobriria o que o build instalou.
+      - frontend_node_modules:/app/node_modules
+    ports:
+      - "${FRONTEND_PORT_HOST}:${FRONTEND_PORT}"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  frontend_node_modules:
