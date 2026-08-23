@@ -1,3 +1,44 @@
+# Instrucoes locais e planejamento: uso interno, fora do historico
 CLAUDE.md
-/.claude 
+/.claude
 /openspec
+
+# Ambiente
+.env
+.env.*
+!.env.example
+
+# Certificado de CA corporativa: nunca versionar
+backend/certs/*
+!backend/certs/README.md
+frontend/certs/*
+!frontend/certs/README.md
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+
+# Django
+/backend/media/
+/backend/staticfiles/
+*.log
+
+# Editores e sistema operacional
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
