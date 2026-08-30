@@ -1,9 +1,3 @@
-"""Configuracoes de producao.
-
-Nao exercitadas nesta fase do projeto, mas mantidas coerentes para nao acumular divida.
-O armazenamento de estaticos aqui exige `collectstatic` no passo de deploy.
-"""
-
 from core.settings.base import *  # noqa: F403
 
 DEBUG = False

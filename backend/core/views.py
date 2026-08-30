@@ -1,5 +1,3 @@
-"""Endpoints de infraestrutura, sem dominio de produto."""
-
 from typing import Any
 
 from django.db import DatabaseError, connection

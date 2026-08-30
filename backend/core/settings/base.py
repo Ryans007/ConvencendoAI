@@ -1,9 +1,3 @@
-"""Configuracoes compartilhadas por todos os ambientes.
-
-Toda leitura de ambiente passa por `env`. Valores sensiveis nao tem default: a ausencia
-de uma variavel obrigatoria deve derrubar a subida, e nao passar em silencio.
-"""
-
 from pathlib import Path
 
 import environ
@@ -97,8 +91,6 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# A paginacao fica no default do DRF, e nao view por view: toda listagem do backend deve
-# vir paginada, e um default global torna o esquecimento impossivel.
 REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,

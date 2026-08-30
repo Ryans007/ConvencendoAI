@@ -1,5 +1,3 @@
-"""Testes do endpoint de sanidade."""
-
 import pytest
 from django.urls import reverse
 from rest_framework.test import APIClient

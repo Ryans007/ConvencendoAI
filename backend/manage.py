@@ -1,6 +1,4 @@
 #!/usr/bin/env python
-"""Utilitario de linha de comando do Django."""
-
 import os
 import sys
 
