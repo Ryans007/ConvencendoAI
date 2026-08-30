@@ -33,3 +33,28 @@ def clean_level_weights(level: Level, weights_by_dimension: dict[str, int]) -> N
         validate_dimension_weights(weights_by_dimension)
     except ValidationError as exc:
         raise ValidationError(f"Pesos inválidos para o nível '{level}': {exc.message}") from exc
+
+
+def effective_scenario_level_weights(level: Level, overrides: dict[str, int]) -> dict[str, int]:
+    """Combina os pesos padrão do nível com a sobreposição parcial de um cenário.
+
+    As dimensões presentes em `overrides` substituem o padrão; as demais herdam do
+    nível — a semântica de herança parcial descrita na decisão de projeto sobre pesos.
+    """
+    defaults = {w.dimension: w.weight for w in level.default_weights.all()}
+    return {**defaults, **overrides}
+
+
+def clean_scenario_level_weights(level: Level, overrides: dict[str, int]) -> None:
+    """Valida que os pesos efetivos de um ajuste por cenário e nível somam `RUBRIC_TOTAL`.
+
+    Função pura: recebe o nível e as sobreposições já montadas pelo chamador, sem
+    consultar `ScenarioLevelWeightOverride` diretamente, para ser testável sem fixture.
+    """
+    effective = effective_scenario_level_weights(level, overrides)
+    try:
+        validate_dimension_weights(effective)
+    except ValidationError as exc:
+        raise ValidationError(
+            f"Pesos inválidos para o ajuste no nível '{level}': {exc.message}"
+        ) from exc
