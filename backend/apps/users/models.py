@@ -1,5 +1,3 @@
-"""Modelos do dominio de usuario."""
-
 from django.contrib.auth.models import AbstractUser
 
 

@@ -1,5 +1,3 @@
-"""Ponto de entrada WSGI, mantido para ferramentas que ainda o esperam."""
-
 import os
 
 from django.core.wsgi import get_wsgi_application
