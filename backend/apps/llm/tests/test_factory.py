@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from apps.llm.constants import ModelPurpose
+from apps.llm.constants import ModelCategory, ModelPurpose
 from apps.llm.models import AgentModelConfig, LLMModel, LLMProvider
 from apps.llm.services import factory
 from apps.llm.services.factory import ModelNotConfigured, get_llm
@@ -22,6 +22,31 @@ def _make_model(*, provider_active: bool = True, model_active: bool = True) -> L
         provider=provider,
         model_id="gpt-4o-mini",
         display_name="GPT-4o mini",
+        is_active=model_active,
+    )
+
+
+def _make_audio_model(
+    *,
+    category: str,
+    model_id: str,
+    provider: LLMProvider | None = None,
+    provider_active: bool = True,
+    model_active: bool = True,
+) -> LLMModel:
+    if provider is None:
+        provider = LLMProvider.objects.create(
+            code=f"groq-{model_id}",
+            name="Groq",
+            base_url="https://api.groq.com/openai/v1",
+            api_key="gsk-test",
+            is_active=provider_active,
+        )
+    return LLMModel.objects.create(
+        provider=provider,
+        category=category,
+        model_id=model_id,
+        display_name=model_id,
         is_active=model_active,
     )
 
@@ -132,3 +157,49 @@ def test_get_structured_llm_falls_back_to_empty_schema_when_agent_returns_nothin
     result = structured_llm.invoke(["a message"])
 
     assert result == _Schema()
+
+
+def test_get_audio_client_builds_client_with_configured_parameters():
+    stt_model = _make_audio_model(category=ModelCategory.STT, model_id="whisper-large-v3-turbo")
+    tts_model = _make_audio_model(
+        category=ModelCategory.TTS, model_id="canopylabs/orpheus-v1-english"
+    )
+    config = AgentModelConfig.get_solo()
+    config.stt_model = stt_model
+    config.tts_model = tts_model
+    config.save()
+
+    stt = factory.get_audio_client(ModelCategory.STT)
+    tts = factory.get_audio_client(ModelCategory.TTS)
+
+    assert stt.model_id == "whisper-large-v3-turbo"
+    assert tts.model_id == "canopylabs/orpheus-v1-english"
+    assert isinstance(stt.client, factory.Groq)
+    assert isinstance(tts.client, factory.Groq)
+
+
+def test_get_audio_client_raises_when_no_model_configured():
+    AgentModelConfig.get_solo()
+
+    with pytest.raises(ModelNotConfigured):
+        factory.get_audio_client(ModelCategory.STT)
+
+
+def test_get_audio_client_raises_when_model_inactive():
+    model = _make_audio_model(category=ModelCategory.TTS, model_id="orpheus", model_active=False)
+    config = AgentModelConfig.get_solo()
+    config.tts_model = model
+    config.save()
+
+    with pytest.raises(ModelNotConfigured):
+        factory.get_audio_client(ModelCategory.TTS)
+
+
+def test_get_audio_client_raises_when_provider_inactive():
+    model = _make_audio_model(category=ModelCategory.STT, model_id="whisper", provider_active=False)
+    config = AgentModelConfig.get_solo()
+    config.stt_model = model
+    config.save()
+
+    with pytest.raises(ModelNotConfigured):
+        factory.get_audio_client(ModelCategory.STT)

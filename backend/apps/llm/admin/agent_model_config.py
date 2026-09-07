@@ -8,8 +8,8 @@ from apps.llm.models import AgentModelConfig
 class AgentModelConfigAdmin(admin.ModelAdmin):
     """Configuração única de qual modelo atende personas e qual atende o avaliador."""
 
-    list_display = ["persona_model", "judge_model"]
-    autocomplete_fields = ["persona_model", "judge_model"]
+    list_display = ["persona_model", "judge_model", "stt_model", "tts_model"]
+    autocomplete_fields = ["persona_model", "judge_model", "stt_model", "tts_model"]
 
     def has_add_permission(self, request: HttpRequest) -> bool:
         return not AgentModelConfig.objects.exists()

@@ -22,6 +22,7 @@ DJANGO_APPS = [
 THIRD_PARTY_APPS = [
     "rest_framework",
     "corsheaders",
+    "channels",
 ]
 
 LOCAL_APPS = [
@@ -30,6 +31,7 @@ LOCAL_APPS = [
     "apps.progress",
     "apps.llm",
     "apps.agents",
+    "apps.voice",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS

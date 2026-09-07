@@ -68,3 +68,49 @@ def test_run_and_record_attempt_persists_score_and_criteria(django_user_model, m
     assert criteria["c4"].met is False
 
     assert Attempt.objects.filter(pk=attempt.pk).count() == 1
+
+
+def test_resolve_execution_opens_attempt_with_empty_result_fields(django_user_model):
+    user = django_user_model.objects.create(username="aluno")
+    scenario = Scenario.objects.get(slug="negociar-prazo")
+    level = Level.objects.get(order=3)
+
+    content, memory, attempt = session_runner.resolve_execution(scenario, level, user)
+
+    assert content.slug == scenario.slug
+    assert memory == ""  # sem tentativa anterior na trilha
+    assert attempt.pk is not None
+    assert attempt.completed_at is None
+    assert attempt.final_score is None
+
+
+def test_evaluate_and_record_attempt_updates_the_same_attempt(django_user_model, monkeypatch):
+    user = django_user_model.objects.create(username="aluno")
+    scenario = Scenario.objects.get(slug="negociar-prazo")
+    level = Level.objects.get(order=3)
+
+    content, _memory, attempt = session_runner.resolve_execution(scenario, level, user)
+    opened_pk = attempt.pk
+
+    outcome = EvaluationOutcome(
+        confirmed_criteria={"c1", "c2", "c3", "c4"},
+        judged_dimensions=[
+            JudgedDimension(dimension="fluency", value=15, weight=15),
+            JudgedDimension(dimension="vocabulary", value=10, weight=10),
+            JudgedDimension(dimension="grammar", value=15, weight=15),
+            JudgedDimension(dimension="pragmatics", value=15, weight=15),
+            JudgedDimension(dimension="autonomy", value=5, weight=5),
+        ],
+        feedback="Great job.",
+        memory_summary="Negotiated a one-week extension.",
+        review_items=[],
+    )
+    monkeypatch.setattr(session_runner, "evaluate", lambda content, messages: outcome)
+
+    final_state = {"messages": [HumanMessage(content="Turn one."), AIMessage(content="Reply.")]}
+    result = session_runner.evaluate_and_record_attempt(attempt, content, final_state)
+
+    assert result.pk == opened_pk  # mesma tentativa, não uma nova
+    assert result.final_score == 100
+    assert result.passed is True
+    assert Attempt.objects.filter(user=user).count() == 1
