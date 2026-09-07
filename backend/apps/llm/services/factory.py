@@ -1,9 +1,12 @@
+from dataclasses import dataclass
+
+from groq import Groq
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 from langchain_core.messages import BaseMessage
 from langchain_openai import ChatOpenAI
 
-from apps.llm.constants import ModelPurpose
+from apps.llm.constants import ModelCategory, ModelPurpose
 from apps.llm.models import AgentModelConfig, LLMModel
 
 _TEMPERATURE_BY_PURPOSE = {
@@ -55,6 +58,40 @@ class _StructuredAgent:
     def invoke(self, messages: list[BaseMessage]):
         result = self._agent.invoke({"messages": messages})
         return result.get("structured_response") or self._schema()
+
+
+@dataclass(frozen=True)
+class AudioClient:
+    """Cliente de áudio já resolvido, com o identificador de modelo que a chamada exige.
+
+    O cliente Groq, ao contrário do `ChatOpenAI`, não recebe o modelo no construtor — cada
+    chamada (`audio.transcriptions.create`, `audio.speech.create`) pede o `model` à parte.
+    """
+
+    client: Groq
+    model_id: str
+
+
+def _audio_model_for(purpose: str, config: AgentModelConfig) -> LLMModel:
+    model = config.stt_model if purpose == ModelCategory.STT else config.tts_model
+    if model is None or not model.is_active or not model.provider.is_active:
+        raise ModelNotConfigured(
+            f"Nenhum modelo ativo configurado para o papel '{purpose}'."
+        )
+    return model
+
+
+def get_audio_client(purpose: str) -> AudioClient:
+    """Monta o cliente de áudio (STT ou TTS) a partir do `AgentModelConfig` cadastrado.
+
+    O cliente é sempre `Groq`: mesmo par `base_url`/`api_key` de `LLMProvider`, só o SDK
+    muda, porque os endpoints de áudio não são chamadas de chat.
+    """
+    config = AgentModelConfig.get_solo()
+    model = _audio_model_for(purpose, config)
+    provider = model.provider
+    client = Groq(api_key=provider.api_key, base_url=provider.base_url)
+    return AudioClient(client=client, model_id=model.model_id)
 
 
 def get_structured_llm(purpose: str, schema: type) -> _StructuredAgent:

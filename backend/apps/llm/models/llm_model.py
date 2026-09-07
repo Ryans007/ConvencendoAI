@@ -1,5 +1,6 @@
 from django.db import models
 
+from apps.llm.constants import ModelCategory
 from apps.llm.models.llm_provider import LLMProvider
 
 
@@ -7,6 +8,9 @@ class LLMModel(models.Model):
     """Modelo servido por um provedor, identificado como a API dele espera em `model`."""
 
     provider = models.ForeignKey(LLMProvider, on_delete=models.CASCADE, related_name="models")
+    category = models.CharField(
+        max_length=10, choices=ModelCategory.choices, default=ModelCategory.CHAT
+    )
     model_id = models.CharField(max_length=120)
     display_name = models.CharField(max_length=120)
     is_active = models.BooleanField(default=True)

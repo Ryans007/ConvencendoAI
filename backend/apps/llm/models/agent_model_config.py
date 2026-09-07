@@ -18,6 +18,12 @@ class AgentModelConfig(models.Model):
     judge_model = models.ForeignKey(
         LLMModel, on_delete=models.PROTECT, related_name="+", null=True, blank=True
     )
+    stt_model = models.ForeignKey(
+        LLMModel, on_delete=models.PROTECT, related_name="+", null=True, blank=True
+    )
+    tts_model = models.ForeignKey(
+        LLMModel, on_delete=models.PROTECT, related_name="+", null=True, blank=True
+    )
 
     def save(self, *args, **kwargs) -> None:
         self.pk = 1
