@@ -2,7 +2,7 @@ from django.utils import timezone
 
 from apps.agents.graph.builder import run_scenario as run_graph
 from apps.agents.services.evaluator import evaluate
-from apps.agents.services.scenario_content import load_scenario_content
+from apps.agents.services.scenario_content import ScenarioContent, load_scenario_content
 from apps.catalog.constants import RubricDimension
 from apps.catalog.models import Level, Scenario
 from apps.progress.constants import is_passing_score
@@ -11,18 +11,29 @@ from apps.progress.services.memory import track_memory
 from apps.progress.services.scoring import final_score, objective_score
 
 
-def run_and_record_attempt(user, scenario: Scenario, level: Level) -> Attempt:
-    """Executa um cenário do início ao fim e persiste o resultado como uma tentativa.
+def resolve_execution(scenario: Scenario, level: Level, user) -> tuple[ScenarioContent, str, Attempt]:
+    """Resolve o conteúdo, a memória e abre a tentativa de uma execução — texto ou voz.
 
-    É o ponto de encontro entre o núcleo conversacional e a progressão: o núcleo não
-    sabe que existe um `Attempt`, e a progressão não sabe que existe um grafo.
+    A tentativa nasce aqui, no início da execução, com os campos de resultado vazios
+    (mesmo contrato de `Attempt`: `completed_at` só é preenchido quando a execução
+    termina de verdade, em `evaluate_and_record_attempt`).
     """
     content = load_scenario_content(scenario, level)
     memory = track_memory(user, scenario)
-
     attempt = Attempt.objects.create(user=user, scenario=scenario, level=level)
+    return content, memory, attempt
 
-    final_state = run_graph(content, memory)
+
+def evaluate_and_record_attempt(
+    attempt: Attempt, content: ScenarioContent, final_state: dict
+) -> Attempt:
+    """Avalia o estado final de uma execução já terminada e grava o resultado na tentativa
+    já aberta por `resolve_execution`.
+
+    Reutilizável por qualquer canal: uma execução por texto chama isso uma vez, depois de
+    `run_graph` rodar do início ao fim; uma sessão de voz chama isso quando um `ainvoke()`
+    devolve um estado sem mais pausa pendente — o fim real da execução, não de um turno.
+    """
     messages = list(final_state.get("messages") or [])
     outcome = evaluate(content, messages)
 
@@ -69,3 +80,14 @@ def run_and_record_attempt(user, scenario: Scenario, level: Level) -> Attempt:
     AttemptCriterion.objects.bulk_create(attempt_criteria)
 
     return attempt
+
+
+def run_and_record_attempt(user, scenario: Scenario, level: Level) -> Attempt:
+    """Executa um cenário por texto, do início ao fim, e persiste o resultado.
+
+    É o ponto de encontro entre o núcleo conversacional e a progressão: o núcleo não
+    sabe que existe um `Attempt`, e a progressão não sabe que existe um grafo.
+    """
+    content, memory, attempt = resolve_execution(scenario, level, user)
+    final_state = run_graph(content, memory)
+    return evaluate_and_record_attempt(attempt, content, final_state)
