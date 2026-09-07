@@ -4,6 +4,7 @@ import pytest
 from asgiref.sync import async_to_sync, sync_to_async
 from channels.routing import URLRouter
 from channels.testing import WebsocketCommunicator
+from rest_framework_simplejwt.tokens import AccessToken
 
 from apps.agents.graph import personas as graph_personas
 from apps.agents.services.evaluator import EvaluationOutcome, JudgedDimension
@@ -17,7 +18,8 @@ pytestmark = pytest.mark.django_db
 
 
 def test_live_session_opens_transcribes_a_turn_and_ends(django_user_model, monkeypatch):
-    django_user_model.objects.create(username="aluno")
+    user = django_user_model.objects.create(username="aluno")
+    token = str(AccessToken.for_user(user))
     scenario = Scenario.objects.get(slug="negociar-prazo")
     level = Level.objects.get(order=3)
 
@@ -59,7 +61,7 @@ def test_live_session_opens_transcribes_a_turn_and_ends(django_user_model, monke
     async def run() -> None:
         application = URLRouter(websocket_urlpatterns)
         communicator = WebsocketCommunicator(
-            application, f"/ws/voice/{scenario.slug}/{level.order}/?user=aluno"
+            application, f"/ws/voice/{scenario.slug}/{level.order}/?token={token}"
         )
         connected, _ = await communicator.connect()
         assert connected
@@ -79,6 +81,7 @@ def test_live_session_opens_transcribes_a_turn_and_ends(django_user_model, monke
         assert payload["passed"] is True
 
         attempt = await sync_to_async(Attempt.objects.get)()
+        assert attempt.user_id == user.id
         assert attempt.completed_at is not None
         assert attempt.final_score == 100
 
@@ -87,14 +90,30 @@ def test_live_session_opens_transcribes_a_turn_and_ends(django_user_model, monke
     async_to_sync(run)()
 
 
-def test_live_session_fails_explicitly_for_unknown_user():
+def test_live_session_fails_explicitly_without_token():
+    async def run() -> None:
+        application = URLRouter(websocket_urlpatterns)
+        communicator = WebsocketCommunicator(application, "/ws/voice/negociar-prazo/3/")
+        connected, _ = await communicator.connect()
+        assert connected  # aceita a conexão, depois recusa com uma mensagem clara
+
+        control = await communicator.receive_from()
+        payload = json.loads(control)
+        assert payload["type"] == "error"
+
+        await communicator.disconnect()
+
+    async_to_sync(run)()
+
+
+def test_live_session_fails_explicitly_for_invalid_token():
     async def run() -> None:
         application = URLRouter(websocket_urlpatterns)
         communicator = WebsocketCommunicator(
-            application, "/ws/voice/negociar-prazo/3/?user=ninguem"
+            application, "/ws/voice/negociar-prazo/3/?token=not-a-real-token"
         )
         connected, _ = await communicator.connect()
-        assert connected  # aceita a conexão, depois recusa com uma mensagem clara
+        assert connected
 
         control = await communicator.receive_from()
         payload = json.loads(control)

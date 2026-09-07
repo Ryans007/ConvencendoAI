@@ -17,11 +17,14 @@
 <h1>Cliente de teste — sessão de voz</h1>
 <p>Página solta, fora do React, só para verificar o protocolo de ponta a ponta.</p>
 
+<label>Usuário<input id="user" value="admin" /></label>
+<label>Senha<input id="password" type="password" /></label>
+<button id="login">Entrar</button>
+
 <label>Cenário (slug)<input id="scenario" value="negociar-prazo" /></label>
 <label>Nível (ordem)<input id="level" value="3" /></label>
-<label>Usuário<input id="user" value="admin" /></label>
 
-<button id="connect">Conectar</button>
+<button id="connect" disabled>Conectar</button>
 <button id="talk" disabled>Segure para falar</button>
 
 <div id="status">desconectado</div>
@@ -30,12 +33,35 @@
 let socket = null;
 let recorder = null;
 let chunks = [];
+let accessToken = null;
 const statusBox = document.getElementById("status");
 const talkButton = document.getElementById("talk");
+const connectButton = document.getElementById("connect");
 
 function log(line) {
   statusBox.textContent += "\n" + line;
 }
+
+document.getElementById("login").addEventListener("click", async () => {
+  const user = document.getElementById("user").value.trim();
+  const password = document.getElementById("password").value;
+
+  const response = await fetch("/api/auth/token/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: user, password }),
+  });
+
+  if (!response.ok) {
+    log("login falhou (" + response.status + ")");
+    return;
+  }
+
+  const data = await response.json();
+  accessToken = data.access;
+  connectButton.disabled = false;
+  log("autenticado");
+});
 
 // Fila de reprodução: quando uma persona passa a vez para outra no mesmo turno,
 // dois áudios chegam em sequência rápida — sem fila, o navegador toca os dois ao
@@ -60,11 +86,10 @@ function playNextAudio() {
   audio.play();
 }
 
-document.getElementById("connect").addEventListener("click", () => {
+connectButton.addEventListener("click", () => {
   const scenario = document.getElementById("scenario").value.trim();
   const level = document.getElementById("level").value.trim();
-  const user = document.getElementById("user").value.trim();
-  const url = `ws://${location.host}/ws/voice/${scenario}/${level}/?user=${encodeURIComponent(user)}`;
+  const url = `ws://${location.host}/ws/voice/${scenario}/${level}/?token=${encodeURIComponent(accessToken)}`;
 
   statusBox.textContent = `conectando em ${url}...`;
   socket = new WebSocket(url);
