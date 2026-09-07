@@ -9,6 +9,8 @@ from django.core.exceptions import ObjectDoesNotExist
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.tokens import AccessToken
 
 from apps.agents.graph.builder import build_scenario_graph
 from apps.agents.graph.listen import listen_live
@@ -31,10 +33,10 @@ def _split_speaker(content: str) -> tuple[str, str]:
 class LiveSessionConsumer(AsyncWebsocketConsumer):
     """Sessão de voz ao vivo de um cenário: um turno por vez, controlado pelo aluno.
 
-    Sem channel layer: cada conexão é privada, sem grupos nem broadcast. O usuário vem
-    de um parâmetro de URL (`?user=`) em vez de autenticação real, porque não existe
-    ainda nenhuma API HTTP para autenticar contra — o mesmo motivo pelo qual o
-    management command `run_scenario` recebe `--user` em vez de exigir login.
+    Sem channel layer: cada conexão é privada, sem grupos nem broadcast. O aluno se
+    identifica pelo mesmo token de acesso JWT que a API HTTP usa (`?token=`), validado
+    diretamente com `AccessToken` — sem `AuthMiddlewareStack` do Channels, que exigiria
+    sessão Django, mecanismo que este projeto não usa para a API.
     """
 
     async def connect(self) -> None:
@@ -43,15 +45,21 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         scenario_slug = self.scope["url_route"]["kwargs"]["scenario_slug"]
         level_order = self.scope["url_route"]["kwargs"]["level_order"]
         query = parse_qs(self.scope["query_string"].decode())
-        username = (query.get("user") or [None])[0]
+        token = (query.get("token") or [None])[0]
 
-        if not username:
-            await self._fail("Parâmetro 'user' é obrigatório na URL.")
+        if not token:
+            await self._fail("Parâmetro 'token' é obrigatório na URL.")
+            return
+
+        try:
+            user_id = AccessToken(token)["user_id"]
+        except TokenError:
+            await self._fail("Token inválido ou expirado.")
             return
 
         try:
             content, memory, attempt = await sync_to_async(self._resolve_execution)(
-                username, scenario_slug, level_order
+                user_id, scenario_slug, level_order
             )
         except ObjectDoesNotExist as exc:
             await self._fail(str(exc))
@@ -143,8 +151,8 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         await self.close()
 
     @staticmethod
-    def _resolve_execution(username: str, scenario_slug: str, level_order: int):
-        user = get_user_model().objects.get(username=username)
+    def _resolve_execution(user_id, scenario_slug: str, level_order: int):
+        user = get_user_model().objects.get(pk=user_id)
         scenario = Scenario.objects.get(slug=scenario_slug)
         level = Level.objects.get(order=level_order)
         return resolve_execution(scenario, level, user)
