@@ -8,4 +8,5 @@ urlpatterns = [
     path("api/health/", HealthView.as_view(), name="health"),
     path("api/", include("apps.users.urls")),
     path("api/", include("apps.progress.urls")),
+    path("api/", include("apps.agents.urls")),
 ]
