@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8" />
+<title>Cliente de teste — sessão de voz</title>
+<style>
+  body { font-family: sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+  label { display: block; margin-top: 0.75rem; font-size: 0.9rem; }
+  input { width: 100%; padding: 0.4rem; box-sizing: border-box; }
+  button { margin-top: 1rem; padding: 0.6rem 1.2rem; font-size: 1rem; }
+  #talk { width: 100%; padding: 1.2rem; font-size: 1.2rem; }
+  #talk.recording { background: #c0392b; color: white; }
+  #status { margin-top: 1rem; white-space: pre-wrap; font-family: monospace; background: #f4f4f4; padding: 0.75rem; }
+</style>
+</head>
+<body>
+<h1>Cliente de teste — sessão de voz</h1>
+<p>Página solta, fora do React, só para verificar o protocolo de ponta a ponta.</p>
+
+<label>Cenário (slug)<input id="scenario" value="negociar-prazo" /></label>
+<label>Nível (ordem)<input id="level" value="3" /></label>
+<label>Usuário<input id="user" value="admin" /></label>
+
+<button id="connect">Conectar</button>
+<button id="talk" disabled>Segure para falar</button>
+
+<div id="status">desconectado</div>
+
+<script>
+let socket = null;
+let recorder = null;
+let chunks = [];
+const statusBox = document.getElementById("status");
+const talkButton = document.getElementById("talk");
+
+function log(line) {
+  statusBox.textContent += "\n" + line;
+}
+
+// Fila de reprodução: quando uma persona passa a vez para outra no mesmo turno,
+// dois áudios chegam em sequência rápida — sem fila, o navegador toca os dois ao
+// mesmo tempo em vez de um depois do outro.
+const audioQueue = [];
+let isPlayingAudio = false;
+
+function enqueueAudio(blob) {
+  audioQueue.push(blob);
+  playNextAudio();
+}
+
+function playNextAudio() {
+  if (isPlayingAudio || audioQueue.length === 0) return;
+  isPlayingAudio = true;
+  const blob = audioQueue.shift();
+  const audio = new Audio(URL.createObjectURL(blob));
+  audio.addEventListener("ended", () => {
+    isPlayingAudio = false;
+    playNextAudio();
+  });
+  audio.play();
+}
+
+document.getElementById("connect").addEventListener("click", () => {
+  const scenario = document.getElementById("scenario").value.trim();
+  const level = document.getElementById("level").value.trim();
+  const user = document.getElementById("user").value.trim();
+  const url = `ws://${location.host}/ws/voice/${scenario}/${level}/?user=${encodeURIComponent(user)}`;
+
+  statusBox.textContent = `conectando em ${url}...`;
+  socket = new WebSocket(url);
+  socket.binaryType = "arraybuffer";
+
+  socket.addEventListener("open", () => {
+    log("conectado");
+    talkButton.disabled = false;
+  });
+
+  socket.addEventListener("message", (event) => {
+    if (typeof event.data === "string") {
+      const payload = JSON.parse(event.data);
+      log("controle: " + JSON.stringify(payload));
+      if (payload.type === "session_ended" || payload.type === "error") {
+        talkButton.disabled = true;
+      }
+      return;
+    }
+    log("recebendo áudio da persona...");
+    const blob = new Blob([event.data], { type: "audio/wav" });
+    enqueueAudio(blob);
+  });
+
+  socket.addEventListener("close", () => {
+    log("conexão encerrada");
+    talkButton.disabled = true;
+  });
+
+  socket.addEventListener("error", () => log("erro na conexão"));
+});
+
+async function startRecording() {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  recorder = new MediaRecorder(stream);
+  chunks = [];
+  recorder.ondataavailable = (event) => chunks.push(event.data);
+  recorder.onstop = () => {
+    const blob = new Blob(chunks, { type: recorder.mimeType });
+    blob.arrayBuffer().then((buffer) => {
+      socket.send(buffer);
+      log(`turno enviado (${blob.type}, ${buffer.byteLength} bytes)`);
+    });
+    stream.getTracks().forEach((track) => track.stop());
+  };
+  recorder.start();
+  log("gravando...");
+}
+
+talkButton.addEventListener("mousedown", () => {
+  talkButton.classList.add("recording");
+  startRecording();
+});
+
+talkButton.addEventListener("mouseup", () => {
+  talkButton.classList.remove("recording");
+  if (recorder && recorder.state !== "inactive") {
+    recorder.stop();
+  }
+});
+</script>
+</body>
+</html>
