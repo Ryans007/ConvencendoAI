@@ -2,6 +2,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from apps.agents.graph.state import ScenarioState
 from apps.agents.services.adaptation import adaptation_hint
+from apps.agents.services.participation import scene_participation
 from apps.agents.services.personas import (
     build_system_prompt,
     generate_closing_hint_turn,
@@ -102,7 +103,8 @@ def make_persona_node(content: ScenarioContent, memory: str):
                     "current_speaker": key,
                 }
 
-        system = build_system_prompt(content, role, memory, adaptation_line)
+        participation = scene_participation(content, key, history)
+        system = build_system_prompt(content, role, memory, adaptation_line, participation)
         messages = [SystemMessage(content=system)] + history
 
         llm = get_structured_llm(ModelPurpose.PERSONA, PersonaTurn)
@@ -129,7 +131,10 @@ def make_persona_node(content: ScenarioContent, memory: str):
         next_key = turn.pass_to
         if next_key in keys and next_key != key and not resolved:
             other = content.role(next_key)
-            other_system = build_system_prompt(content, other, memory, adaptation_line)
+            other_participation = scene_participation(content, next_key, history + lines)
+            other_system = build_system_prompt(
+                content, other, memory, adaptation_line, other_participation
+            )
             other_llm = get_structured_llm(ModelPurpose.PERSONA, PersonaTurn)
             other_turn = other_llm.invoke(
                 [SystemMessage(content=other_system)] + history + lines

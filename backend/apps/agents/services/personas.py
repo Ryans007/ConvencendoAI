@@ -2,6 +2,7 @@ import re
 
 from langchain_core.messages import HumanMessage
 
+from apps.agents.services.participation import SceneParticipation
 from apps.agents.services.schemas import ClosingHintTurn, ClosingLine
 from apps.agents.services.scenario_content import Role, ScenarioContent
 from apps.agents.services.transcript import transcript_text
@@ -19,8 +20,36 @@ def sanitize_line(text: str) -> str:
     return text.strip()
 
 
+def _participation_text(
+    content: ScenarioContent, role: Role, participation: SceneParticipation | None
+) -> str:
+    """Descreve a participação na cena como fato, sem ordenar a troca de vez."""
+    if participation is None:
+        return ""
+    facts = []
+    for key, count in participation.lines_by_role.items():
+        if key == role.key:
+            continue
+        name = content.role(key).name
+        if count == 0:
+            facts.append(f"- {name} has not spoken yet in this conversation.")
+        else:
+            facts.append(f"- {name} has spoken {count} time(s) so far.")
+    if participation.consecutive_rounds_led >= 2:
+        facts.append(
+            f"- You have led the last {participation.consecutive_rounds_led} turns in a row."
+        )
+    if not facts:
+        return ""
+    return "\nSCENE PARTICIPATION SO FAR\n" + "\n".join(facts) + "\n"
+
+
 def build_system_prompt(
-    content: ScenarioContent, role: Role, memory: str, adaptation_line: str = ""
+    content: ScenarioContent,
+    role: Role,
+    memory: str,
+    adaptation_line: str = "",
+    participation: SceneParticipation | None = None,
 ) -> str:
     """Monta o system prompt do papel para esta execução.
 
@@ -34,6 +63,11 @@ def build_system_prompt(
     others_text = ", ".join(f"{name} (key: {key})" for key, name in other_names.items())
     if not others_text:
         others_text = "nobody else"
+    participation_text = _participation_text(content, role, participation)
+    areas_text = "\n".join(
+        f"- {content.role(key).name} (key: {key}): {content.role(key).scene_function}"
+        for key in other_keys
+    ) or "- nobody else"
 
     memory_text = ""
     if memory:
@@ -67,7 +101,7 @@ WHAT THE STUDENT WANTS FROM YOU
 {content.objective}
 Do not hand it over easily — make them work for it with language.
 
-The other person in the room: {others_text}. The student is talking to you.
+The other person in the room: {others_text}.
 
 YOUR BEHAVIOUR (always within the QUESTION FORMAT in CRITICAL RULES)
 - How you resist: {role.resistance}
@@ -96,16 +130,20 @@ NEVER REPEAT A QUESTION
 - If the student could not answer a question after 2 attempts, DROP IT and move
   the conversation to a different subject. Never ask the same question a third
   time, even reworded.
-- Look at the conversation so far: if you have been the only one speaking for
-  several turns and the other character fits the moment, hand them the floor
-  — set "pass_to" to their key, and address your own line to THEM, not to the
-  student (a short remark, not a question for the student — "Tom, what do you
-  think?"). They will speak immediately after you, and their line is the one
-  that reaches the student.
+
+SHARING THE CONVERSATION
+This is a conversation among all the characters and the student. Each other
+character has their own area in this scene:
+{areas_text}
+- When the conversation reaches another character's area, hand them the
+  floor: set "pass_to" to their key and address your own line to THEM — a
+  short remark with no question for the student (for example, "Tom, this is
+  your area. Any question?"). They speak immediately after you and ask this
+  turn's question to the student.
 - Never let both of you ask the student something in the same turn. If your
   line is addressed to the other character, it must not also pose a question
   to the student — leave that entirely to whoever speaks last this turn.
-
+{participation_text}
 IF THE STUDENT ASKS FOR HELP
 If they ask how to say something, ask you to repeat, to speak more slowly, or
 say they did not understand: help them immediately and warmly, in character.
@@ -114,7 +152,9 @@ scene. This is never a reason to be impatient.
 
 CRITICAL RULES
 - QUESTION FORMAT (this overrides how you resist and what you ask for):
-  {content.questions} Express your resistance and your conditions to concede
+  {content.questions} This limit is per TURN, not per line: either you ask
+  this turn's question yourself, or you hand the floor to the other character
+  and THEY ask it. Express your resistance and your conditions to concede
   ONLY within this format.
 - Every question is about the student's own experience, preferences or
   situation — never about whether they know a concept, and never about a
