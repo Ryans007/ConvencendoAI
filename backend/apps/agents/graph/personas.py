@@ -144,6 +144,8 @@ def make_persona_node(content: ScenarioContent, memory: str):
                     f"[routing] handoff current_speaker={next_key} "
                     f"pass_to={other_turn.pass_to} scene_resolved={resolved}"
                 )
+                if other_turn.pass_to in keys:
+                    next_key = other_turn.pass_to
             else:
                 next_key = key
         else:
