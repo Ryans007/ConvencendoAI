@@ -36,7 +36,7 @@ def test_live_graph_pauses_at_listen_and_resumes_with_command(monkeypatch):
     content = load_scenario_content(scenario, level)
 
     fake_turn = PersonaTurn(
-        line="Hello, let's talk about the deadline.", pass_to=None, scene_resolved=False
+        line="Hello, let's talk about the deadline.", pass_to="student", scene_resolved=False
     )
     monkeypatch.setattr(
         graph_personas,
@@ -67,7 +67,7 @@ def test_live_graph_ends_when_student_says_an_exit_word(monkeypatch):
     level = Level.objects.get(order=3)
     content = load_scenario_content(scenario, level)
 
-    fake_turn = PersonaTurn(line="Hello there.", pass_to=None, scene_resolved=False)
+    fake_turn = PersonaTurn(line="Hello there.", pass_to="student", scene_resolved=False)
     monkeypatch.setattr(
         graph_personas,
         "get_structured_llm",

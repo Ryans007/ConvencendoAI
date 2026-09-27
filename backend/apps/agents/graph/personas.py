@@ -48,7 +48,7 @@ def make_opening_node(content: ScenarioContent, memory: str):
         system = build_system_prompt(content, role, memory)
         instruction = (
             "Open the scene: say the one line that starts this interaction. "
-            "Set scene_resolved to false and pass_to to null."
+            'Set scene_resolved to false and pass_to to "student".'
         )
 
         llm = get_structured_llm(ModelPurpose.PERSONA, PersonaTurn)
@@ -114,6 +114,10 @@ def make_persona_node(content: ScenarioContent, memory: str):
             return {"messages": []}
 
         _speak(role, text)
+        print(
+            f"[routing] current_speaker={key} pass_to={turn.pass_to} "
+            f"scene_resolved={turn.scene_resolved}"
+        )
 
         lines = [AIMessage(content=f"[{role.name}] {text}")]
         pending_hint = turn.hint
@@ -136,12 +140,17 @@ def make_persona_node(content: ScenarioContent, memory: str):
                 lines.append(AIMessage(content=f"[{other.name}] {other_text}"))
                 pending_hint = other_turn.hint or pending_hint
                 resolved = resolved or other_turn.scene_resolved
+                print(
+                    f"[routing] handoff current_speaker={next_key} "
+                    f"pass_to={other_turn.pass_to} scene_resolved={resolved}"
+                )
             else:
                 next_key = key
         else:
             next_key = next_key if next_key in keys else key
 
         _show_hint(content, pending_hint, struggling)
+        print(f"[routing] next round current_speaker={next_key}")
 
         return {
             "messages": lines,

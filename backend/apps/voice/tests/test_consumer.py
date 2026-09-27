@@ -7,8 +7,9 @@ from channels.testing import WebsocketCommunicator
 from rest_framework_simplejwt.tokens import AccessToken
 
 from apps.agents.graph import personas as graph_personas
+from apps.agents.graph import routing as graph_routing
 from apps.agents.services.evaluator import EvaluationOutcome, JudgedDimension
-from apps.agents.services.schemas import PersonaTurn
+from apps.agents.services.schemas import PersonaTurn, RoutingDecision
 from apps.catalog.models import Level, Scenario
 from apps.progress.models import Attempt
 from apps.voice import consumers as voice_consumers
@@ -24,10 +25,10 @@ def test_live_session_opens_transcribes_a_turn_and_ends(django_user_model, monke
     level = Level.objects.get(order=3)
 
     opening_turn = PersonaTurn(
-        line="Hello, let's talk about the deadline.", pass_to=None, scene_resolved=False
+        line="Hello, let's talk about the deadline.", pass_to="student", scene_resolved=False
     )
     reply_turn = PersonaTurn(
-        line="Understood, let's proceed then.", pass_to=None, scene_resolved=True
+        line="Understood, let's proceed then.", pass_to="student", scene_resolved=True
     )
     turns = iter([opening_turn, reply_turn])
 
@@ -37,6 +38,14 @@ def test_live_session_opens_transcribes_a_turn_and_ends(django_user_model, monke
 
     monkeypatch.setattr(
         graph_personas, "get_structured_llm", lambda purpose, schema: _FakeStructuredLLM()
+    )
+
+    class _FakeRoutingLLM:
+        def invoke(self, messages):
+            return RoutingDecision(speaker="")
+
+    monkeypatch.setattr(
+        graph_routing, "get_structured_llm", lambda purpose, schema: _FakeRoutingLLM()
     )
     monkeypatch.setattr(voice_consumers, "transcribe", lambda audio: "I need one more week.")
     monkeypatch.setattr(voice_consumers, "synthesize", lambda text, voice: b"fake-wav-bytes")
