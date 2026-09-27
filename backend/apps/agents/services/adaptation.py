@@ -1,7 +1,6 @@
 from langchain_core.messages import BaseMessage, HumanMessage
 
 ADAPT_WINDOW = 2
-ADAPT_MIN_WORDS = 8
 
 _HELP_MARKERS = (
     "how do i say", "how do you say", "how to say",
@@ -23,31 +22,18 @@ def asked_for_help(text: str) -> bool:
 
 
 def is_struggling(messages: list[BaseMessage]) -> bool:
-    """Os últimos turnos do aluno indicam que ele está com dificuldade?"""
+    """O aluno pediu ajuda explicitamente num dos últimos turnos?
+
+    Só o pedido explícito conta. Resposta curta não é sinal de dificuldade: no nível de
+    compreensão, responder "Yes, I did." é exatamente o esperado, e tratar isso como
+    dificuldade fazia a persona repetir a mesma pergunta a cada rodada.
+    """
     turns = _student_turns(messages)
-    if not turns:
-        return False
-
-    recent = turns[-ADAPT_WINDOW:]
-    if any(asked_for_help(t) for t in recent):
-        return True
-
-    word_counts = [len(t.split()) for t in recent]
-    average = sum(word_counts) / len(word_counts)
-    return average < ADAPT_MIN_WORDS
+    return any(asked_for_help(turn) for turn in turns[-ADAPT_WINDOW:])
 
 
 def adaptation_hint(messages: list[BaseMessage]) -> str:
-    """Linha a injetar no prompt da persona, ou '' se não há ajuste a fazer.
-
-    Deliberadamente não existe o caminho inverso (endurecer quando os turnos são
-    longos): contagem de palavras não mede fluência, e subir a dificuldade é
-    decisão da trilha, não desta heurística.
-    """
-    turns = _student_turns(messages)
-    if not turns:
-        return ""
-
+    """Linha a injetar no prompt da persona, ou '' se não há ajuste a fazer."""
     if is_struggling(messages):
         return (
             "ADAPT NOW: the student is struggling. Simplify your English, ask one "
