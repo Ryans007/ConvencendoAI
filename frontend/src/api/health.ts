@@ -1,5 +1,3 @@
-/** Chamadas ao endpoint de sanidade do backend. */
-
 import { get } from "./client";
 
 /** Estado reportado por um componente da infraestrutura. */
@@ -13,5 +11,5 @@ export interface HealthStatus {
 
 /** Consulta o estado da aplicacao e do banco. */
 export function fetchHealth(signal?: AbortSignal): Promise<HealthStatus> {
-  return get<HealthStatus>("/health/", signal);
+  return get<HealthStatus>("/health/", { signal });
 }
