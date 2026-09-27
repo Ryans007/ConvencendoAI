@@ -186,6 +186,28 @@ CRITICAL RULES
   then close the interaction naturally."""
 
 
+_QUESTION = re.compile(r"[^.!?]*\?")
+_FALLBACK_WITHOUT_QUESTION = "Sorry, let me ask again. Are you ready to continue?"
+
+
+def fallback_line(role: Role, history: list) -> str:
+    """Fala usada quando o modelo não produz nenhuma fala para a persona na rodada.
+
+    Repete a última pergunta que a própria persona fez, com uma introdução curta: essa
+    pergunta já seguia o formato do nível, e o aluno nunca fica sem resposta. Sem
+    pergunta anterior, usa uma frase fixa, curta e fechada.
+    """
+    prefix = f"[{role.name}]"
+    for message in reversed(history):
+        text = message.content or ""
+        if not text.startswith(prefix):
+            continue
+        questions = _QUESTION.findall(text[len(prefix) :])
+        if questions:
+            return f"Let me ask again: {questions[-1].strip()}"
+    return _FALLBACK_WITHOUT_QUESTION
+
+
 _CLOSING_PROMPT = """You are {name}, {scene_function}, talking to a student who is
 practising English. The conversation has just run out of time.
 
