@@ -144,8 +144,11 @@ def test_get_structured_llm_falls_back_to_empty_schema_when_agent_returns_nothin
     config.persona_model = model
     config.save()
 
+    calls = []
+
     class _FakeAgent:
         def invoke(self, payload):
+            calls.append(payload)
             return {"structured_response": None}
 
     monkeypatch.setattr(
@@ -157,6 +160,30 @@ def test_get_structured_llm_falls_back_to_empty_schema_when_agent_returns_nothin
     result = structured_llm.invoke(["a message"])
 
     assert result == _Schema()
+    assert len(calls) == 2
+
+
+def test_get_structured_llm_retries_once_when_first_response_has_no_schema(monkeypatch):
+    model = _make_model()
+    config = AgentModelConfig.get_solo()
+    config.persona_model = model
+    config.save()
+
+    responses = iter([{"structured_response": None}, {"structured_response": _Schema("ok")}])
+
+    class _FakeAgent:
+        def invoke(self, payload):
+            return next(responses)
+
+    monkeypatch.setattr(
+        "apps.llm.services.factory.create_agent",
+        lambda **kwargs: _FakeAgent(),
+    )
+
+    structured_llm = factory.get_structured_llm(ModelPurpose.PERSONA, _Schema)
+    result = structured_llm.invoke(["a message"])
+
+    assert result == _Schema("ok")
 
 
 def test_get_audio_client_builds_client_with_configured_parameters():
