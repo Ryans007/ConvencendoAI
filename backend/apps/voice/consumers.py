@@ -139,6 +139,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             text_data=json.dumps(
                 {
                     "type": "session_ended",
+                    "attempt_id": attempt.pk,
                     "final_score": attempt.final_score,
                     "passed": attempt.passed,
                 }
