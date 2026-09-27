@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 
-from groq import Groq
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 from langchain_core.messages import BaseMessage
 from langchain_openai import ChatOpenAI
+from openai import OpenAI
 
 from apps.llm.constants import ModelCategory, ModelPurpose
 from apps.llm.models import AgentModelConfig, LLMModel
@@ -69,11 +69,12 @@ class _StructuredAgent:
 class AudioClient:
     """Cliente de áudio já resolvido, com o identificador de modelo que a chamada exige.
 
-    O cliente Groq, ao contrário do `ChatOpenAI`, não recebe o modelo no construtor — cada
-    chamada (`audio.transcriptions.create`, `audio.speech.create`) pede o `model` à parte.
+    O cliente de áudio, ao contrário do `ChatOpenAI`, não recebe o modelo no construtor —
+    cada chamada (`audio.transcriptions.create`, `audio.speech.create`) pede o `model` à
+    parte.
     """
 
-    client: Groq
+    client: OpenAI
     model_id: str
 
 
@@ -89,13 +90,15 @@ def _audio_model_for(purpose: str, config: AgentModelConfig) -> LLMModel:
 def get_audio_client(purpose: str) -> AudioClient:
     """Monta o cliente de áudio (STT ou TTS) a partir do `AgentModelConfig` cadastrado.
 
-    O cliente é sempre `Groq`: mesmo par `base_url`/`api_key` de `LLMProvider`, só o SDK
-    muda, porque os endpoints de áudio não são chamadas de chat.
+    O cliente é o SDK da OpenAI, apontado para o mesmo `base_url` compatível com a OpenAI
+    que o chat usa: assim um único `LLMProvider` (uma URL, uma chave) atende chat, STT e
+    TTS. SDKs próprios de provedor montam o caminho da API por conta própria e esperam
+    outra URL base, o que obrigaria a cadastrar o mesmo provedor duas vezes.
     """
     config = AgentModelConfig.get_solo()
     model = _audio_model_for(purpose, config)
     provider = model.provider
-    client = Groq(api_key=provider.api_key, base_url=provider.base_url)
+    client = OpenAI(api_key=provider.api_key, base_url=provider.base_url)
     return AudioClient(client=client, model_id=model.model_id)
 
 

@@ -174,8 +174,9 @@ def test_get_audio_client_builds_client_with_configured_parameters():
 
     assert stt.model_id == "whisper-large-v3-turbo"
     assert tts.model_id == "canopylabs/orpheus-v1-english"
-    assert isinstance(stt.client, factory.Groq)
-    assert isinstance(tts.client, factory.Groq)
+    assert isinstance(stt.client, factory.OpenAI)
+    assert isinstance(tts.client, factory.OpenAI)
+    assert str(stt.client.base_url).rstrip("/") == "https://api.groq.com/openai/v1"
 
 
 def test_get_audio_client_raises_when_no_model_configured():
