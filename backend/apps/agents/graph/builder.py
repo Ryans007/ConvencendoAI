@@ -3,6 +3,7 @@ from langgraph.graph import END, START, StateGraph
 from apps.agents.graph.edges import make_scene_ended, student_left
 from apps.agents.graph.listen import listen
 from apps.agents.graph.personas import make_opening_node, make_persona_node
+from apps.agents.graph.routing import make_routing_node
 from apps.agents.graph.state import ScenarioState
 from apps.agents.services.scenario_content import ScenarioContent
 
@@ -24,13 +25,15 @@ def build_scenario_graph(
     workflow = StateGraph(ScenarioState)
     workflow.add_node("opening", make_opening_node(content, memory))
     workflow.add_node("listen", listen_node)
+    workflow.add_node("routing", make_routing_node(content))
     workflow.add_node("persona", make_persona_node(content, memory))
 
     workflow.add_edge(START, "opening")
     workflow.add_edge("opening", "listen")
     workflow.add_conditional_edges(
-        "listen", student_left, {"continue": "persona", "end": END}
+        "listen", student_left, {"continue": "routing", "end": END}
     )
+    workflow.add_edge("routing", "persona")
     workflow.add_conditional_edges(
         "persona", make_scene_ended(content.max_turns), {"continue": "listen", "end": END}
     )

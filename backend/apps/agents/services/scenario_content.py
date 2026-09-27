@@ -50,6 +50,7 @@ class ScenarioContent:
     closing_hint: str
     max_turns: int
     difficulty_label: str
+    expected_production: str
     expected_cefr: str
     language: str
     questions: str
@@ -118,6 +119,7 @@ def load_scenario_content(scenario: Scenario, level: Level) -> ScenarioContent:
         closing_hint=closing_hint,
         max_turns=level.max_turns,
         difficulty_label=level.name,
+        expected_production=level.expected_production,
         expected_cefr=level.expected_cefr,
         language=level.language,
         questions=level.questions,

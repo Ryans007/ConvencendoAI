@@ -3,7 +3,15 @@ import importlib
 import pytest
 from django.apps import apps
 
-from apps.catalog.models import Archetype, Criterion, Level, Persona, Scenario, Track
+from apps.catalog.models import (
+    Archetype,
+    Criterion,
+    Level,
+    Persona,
+    Scenario,
+    ScenarioLevelHint,
+    Track,
+)
 
 
 def _seed_function(module_name: str, function_name: str):
@@ -21,10 +29,14 @@ def test_aplicar_a_carga_duas_vezes_nao_duplica_nenhum_registro() -> None:
     seed_levels = _seed_function("0005_seed_archetypes_and_levels", "seed_archetypes_and_levels")
     seed_tracks = _seed_function("0006_seed_validated_tracks", "seed_validated_tracks")
     seed_criteria = _seed_function("0007_seed_criteria", "seed_criteria")
+    seed_closing_hint = _seed_function(
+        "0008_seed_interview_level_one_closing_hint", "seed_interview_level_one_closing_hint"
+    )
 
     seed_levels(apps, None)
     seed_tracks(apps, None)
     seed_criteria(apps, None)
+    seed_closing_hint(apps, None)
 
     assert Archetype.objects.count() == 6
     assert Level.objects.count() == 3
@@ -32,6 +44,16 @@ def test_aplicar_a_carga_duas_vezes_nao_duplica_nenhum_registro() -> None:
     assert Persona.objects.count() == 4
     assert Scenario.objects.count() == 3
     assert Criterion.objects.count() == 15
+    assert ScenarioLevelHint.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_nivel_1_da_entrevista_fecha_com_pergunta_fechada() -> None:
+    """O nível 1 da entrevista usa a dica de fechamento própria, não a do cenário."""
+    hint = ScenarioLevelHint.objects.get(
+        scenario__slug="entrevista-de-emprego", level__order=1
+    )
+    assert "yes or no" in hint.closing_hint_override
 
 
 @pytest.mark.django_db

@@ -11,13 +11,28 @@ class PersonaTurn(BaseModel):
 
     line: str = Field(default="", description="The character's spoken line, in English")
     hint: str = Field(default="", description="Short hint for the student, in Portuguese")
-    pass_to: str | None = Field(
-        default=None,
-        description="Key of the other character who speaks next, or null to keep the floor",
+    pass_to: str = Field(
+        default="student",
+        description=(
+            "Who should respond to this line: \"student\" if it is addressed to the "
+            "student, or the key of the other character if THEY should respond right "
+            "now, in this same turn, because this line was addressed to them instead"
+        ),
     )
     scene_resolved: bool = Field(
         default=False,
         description="True only when the student already got what they wanted from you",
+    )
+
+
+class RoutingDecision(BaseModel):
+    """Saída estruturada do roteador: qual persona deve responder ao aluno agora."""
+
+    speaker: str = Field(
+        default="",
+        description=(
+            "Key of the character who should respond to the student's last message"
+        ),
     )
 
 

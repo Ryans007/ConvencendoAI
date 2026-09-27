@@ -7,8 +7,9 @@ from channels.testing import WebsocketCommunicator
 from rest_framework_simplejwt.tokens import AccessToken
 
 from apps.agents.graph import personas as graph_personas
+from apps.agents.graph import routing as graph_routing
 from apps.agents.services.evaluator import EvaluationOutcome, JudgedDimension
-from apps.agents.services.schemas import PersonaTurn
+from apps.agents.services.schemas import PersonaTurn, RoutingDecision
 from apps.catalog.models import Level, Scenario
 from apps.progress.models import Attempt
 from apps.voice import consumers as voice_consumers
@@ -24,10 +25,10 @@ def test_live_session_opens_transcribes_a_turn_and_ends(django_user_model, monke
     level = Level.objects.get(order=3)
 
     opening_turn = PersonaTurn(
-        line="Hello, let's talk about the deadline.", pass_to=None, scene_resolved=False
+        line="Hello, let's talk about the deadline.", pass_to="student", scene_resolved=False
     )
     reply_turn = PersonaTurn(
-        line="Understood, let's proceed then.", pass_to=None, scene_resolved=True
+        line="Understood, let's proceed then.", pass_to="student", scene_resolved=True
     )
     turns = iter([opening_turn, reply_turn])
 
@@ -37,6 +38,14 @@ def test_live_session_opens_transcribes_a_turn_and_ends(django_user_model, monke
 
     monkeypatch.setattr(
         graph_personas, "get_structured_llm", lambda purpose, schema: _FakeStructuredLLM()
+    )
+
+    class _FakeRoutingLLM:
+        def invoke(self, messages):
+            return RoutingDecision(speaker="")
+
+    monkeypatch.setattr(
+        graph_routing, "get_structured_llm", lambda purpose, schema: _FakeRoutingLLM()
     )
     monkeypatch.setattr(voice_consumers, "transcribe", lambda audio: "I need one more week.")
     monkeypatch.setattr(voice_consumers, "synthesize", lambda text, voice: b"fake-wav-bytes")
@@ -91,12 +100,54 @@ def test_live_session_opens_transcribes_a_turn_and_ends(django_user_model, monke
     async_to_sync(run)()
 
 
+def test_empty_transcription_asks_the_student_to_speak_again(django_user_model, monkeypatch):
+    user = django_user_model.objects.create(username="aluno")
+    token = str(AccessToken.for_user(user))
+
+    opening_turn = PersonaTurn(line="Hello, let's talk.", pass_to="student", scene_resolved=False)
+
+    class _FakeStructuredLLM:
+        def invoke(self, messages):
+            return opening_turn
+
+    monkeypatch.setattr(
+        graph_personas, "get_structured_llm", lambda purpose, schema: _FakeStructuredLLM()
+    )
+    monkeypatch.setattr(voice_consumers, "transcribe", lambda audio: "   ")
+    monkeypatch.setattr(voice_consumers, "synthesize", lambda text, voice: b"fake-wav-bytes")
+
+    async def run() -> None:
+        application = URLRouter(websocket_urlpatterns)
+        communicator = WebsocketCommunicator(
+            application, f"/ws/voice/negociar-prazo/3/?token={token}"
+        )
+        connected, _ = await communicator.connect()
+        assert connected
+        assert await communicator.receive_from() == b"fake-wav-bytes"
+
+        await communicator.send_to(bytes_data=b"silent-audio")
+
+        payload = json.loads(await communicator.receive_from())
+        assert payload == {"type": "no_speech"}
+        assert await communicator.receive_nothing()
+
+        attempt = await sync_to_async(Attempt.objects.get)()
+        assert attempt.completed_at is None
+
+        await communicator.disconnect()
+
+    async_to_sync(run)()
+
+
 def test_live_session_fails_explicitly_without_token():
+    """A conexão é aceita e depois recusada com uma mensagem clara, em vez de ser
+    derrubada sem explicação."""
+
     async def run() -> None:
         application = URLRouter(websocket_urlpatterns)
         communicator = WebsocketCommunicator(application, "/ws/voice/negociar-prazo/3/")
         connected, _ = await communicator.connect()
-        assert connected  # aceita a conexão, depois recusa com uma mensagem clara
+        assert connected
 
         control = await communicator.receive_from()
         payload = json.loads(control)

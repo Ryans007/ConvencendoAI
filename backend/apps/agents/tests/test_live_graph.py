@@ -36,7 +36,7 @@ def test_live_graph_pauses_at_listen_and_resumes_with_command(monkeypatch):
     content = load_scenario_content(scenario, level)
 
     fake_turn = PersonaTurn(
-        line="Hello, let's talk about the deadline.", pass_to=None, scene_resolved=False
+        line="Hello, let's talk about the deadline.", pass_to="student", scene_resolved=False
     )
     monkeypatch.setattr(
         graph_personas,
@@ -62,12 +62,37 @@ def test_live_graph_pauses_at_listen_and_resumes_with_command(monkeypatch):
     assert len(second["messages"]) == 3  # abertura + turno do aluno + resposta da persona
 
 
-def test_live_graph_ends_when_student_says_an_exit_word(monkeypatch):
+def test_live_graph_keeps_waiting_when_the_student_turn_is_empty(monkeypatch):
     scenario = Scenario.objects.get(slug="negociar-prazo")
     level = Level.objects.get(order=3)
     content = load_scenario_content(scenario, level)
 
-    fake_turn = PersonaTurn(line="Hello there.", pass_to=None, scene_resolved=False)
+    fake_turn = PersonaTurn(line="Hello there.", pass_to="student", scene_resolved=False)
+    monkeypatch.setattr(
+        graph_personas,
+        "get_structured_llm",
+        lambda purpose, schema: _FakeStructuredLLM(fake_turn),
+    )
+
+    graph = build_scenario_graph(
+        content, memory="", listen_node=listen_live, checkpointer=MemorySaver()
+    )
+    config = {"configurable": {"thread_id": "test-session-empty"}}
+
+    graph.invoke(_initial_state(), config=config)
+    result = graph.invoke(Command(resume=""), config=config)
+
+    assert "__interrupt__" in result
+    assert result["turn_count"] == 0
+    assert len(result["messages"]) == 1
+
+
+def test_live_graph_does_not_end_when_student_says_goodbye(monkeypatch):
+    scenario = Scenario.objects.get(slug="negociar-prazo")
+    level = Level.objects.get(order=3)
+    content = load_scenario_content(scenario, level)
+
+    fake_turn = PersonaTurn(line="Hello there.", pass_to="student", scene_resolved=False)
     monkeypatch.setattr(
         graph_personas,
         "get_structured_llm",
@@ -82,4 +107,5 @@ def test_live_graph_ends_when_student_says_an_exit_word(monkeypatch):
     graph.invoke(_initial_state(), config=config)
     result = graph.invoke(Command(resume="goodbye"), config=config)
 
-    assert "__interrupt__" not in result
+    assert "__interrupt__" in result
+    assert result["turn_count"] == 1
