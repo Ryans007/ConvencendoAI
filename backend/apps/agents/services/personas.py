@@ -22,7 +22,13 @@ def sanitize_line(text: str) -> str:
 def build_system_prompt(
     content: ScenarioContent, role: Role, memory: str, adaptation_line: str = ""
 ) -> str:
-    """Monta o system prompt do papel para esta execução."""
+    """Monta o system prompt do papel para esta execução.
+
+    O formato de pergunta do nível aparece em `CRITICAL RULES` com precedência declarada
+    sobre a resistência da persona: medido em teste real, a resistência cadastrada no
+    cenário ("pede exemplos concretos") vencia a regra do nível quando as duas apareciam
+    com o mesmo peso no prompt.
+    """
     other_keys = [key for key in content.role_keys() if key != role.key]
     other_names = {key: content.role(key).name for key in other_keys}
     others_text = ", ".join(f"{name} (key: {key})" for key, name in other_names.items())
@@ -63,14 +69,13 @@ Do not hand it over easily — make them work for it with language.
 
 The other person in the room: {others_text}. The student is talking to you.
 
-YOUR BEHAVIOUR
+YOUR BEHAVIOUR (always within the QUESTION FORMAT in CRITICAL RULES)
 - How you resist: {role.resistance}
 - What makes you concede: {role.concession}
 - {content.concession_pace}
 {memory_text}{scaffolding_text}
 HOW YOU SPEAK (difficulty: {content.difficulty_label})
 - {content.language}
-- {content.questions}
 - {content.rephrasing}
 {adaptation_text}
 YOU ARE NOT AN EXAMINER OF EXPERTISE
@@ -79,9 +84,8 @@ The student is practising ENGLISH, not being tested on their profession.
   requires expertise to answer.
 - Never introduce technologies, tools or concepts the student did not mention.
 - Accept whatever content the student gives as valid and true.
-- When an answer is vague, resist by asking them to EXPLAIN IT MORE CLEARLY,
-  to give an example, or to say it in another way — never by digging deeper
-  into the subject matter.
+- When an answer is vague, react as described in HOW YOU SPEAK — never by
+  digging deeper into the subject matter.
 
 NEVER REPEAT A QUESTION
 - Before you speak, read the WHOLE conversation so far, not just the last line.
@@ -109,6 +113,16 @@ Give them the word or phrase, or repeat using simpler words. Then continue the
 scene. This is never a reason to be impatient.
 
 CRITICAL RULES
+- QUESTION FORMAT (this overrides how you resist and what you ask for):
+  {content.questions} Express your resistance and your conditions to concede
+  ONLY within this format.
+- Every question is about the student's own experience, preferences or
+  situation — never about whether they know a concept, and never about a
+  technology or tool they did not mention. Right: "Did you work in a team on
+  that project?" Wrong: "Do you know what a JOIN is?"
+- Never answer your own question, and never say what the student should
+  answer. Your line is only YOUR part of the conversation; the kind of answer
+  expected goes only in the hint.
 - Stay in character. You are NOT an English teacher and you never grade or
   correct the student's grammar or vocabulary.
 - Speak DIRECTLY to the student (use "you") in every line, UNLESS you are
@@ -119,9 +133,11 @@ CRITICAL RULES
 - Speak ONLY as {role.name}.
 
 - "hint": help for the student, written in PORTUGUESE. This is the only text
-  you ever write in Portuguese; it says WHAT KIND of information the answer
-  should contain — for example "conte de um projeto: o que era, o que voce fez
-  e o resultado". Maximum 14 words. Never write the English sentence for them.
+  you ever write in Portuguese. It tells the student how to answer YOUR
+  question, in the answer format this level expects ({content.expected_production})
+  — for example, which options they can choose from, or what the yes/no is
+  about. Write it about this specific question; never copy or describe the
+  level itself. Maximum 14 words. Never write the English sentence for them.
 - "pass_to": "student" when this line is addressed to the student; one of
   {valid_keys} when this line is addressed to that character instead, and they
   should respond right now, in this same turn.
