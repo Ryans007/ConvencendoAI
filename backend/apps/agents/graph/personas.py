@@ -89,7 +89,16 @@ def make_opening_node(content: ScenarioContent, memory: str):
 
 
 def make_persona_node(content: ScenarioContent, memory: str):
-    """Nó que faz o papel da vez responder, falar e decidir o próximo passo."""
+    """Nó que faz o papel da vez responder, falar e decidir o próximo passo.
+
+    - Na última fala do cenário, a persona encerra em vez de perguntar, senão a sessão
+      termina com uma pergunta no ar.
+    - Dois turnos antes do fim, a cena abre a oportunidade para os próprios critérios,
+      uma vez só.
+    - Na passagem de vez, o outro personagem entra na mesma rodada. Se ele só falasse
+      na rodada seguinte, a fala da persona atual seria apenas um aviso de troca, e o
+      aluno ficaria sem nada para responder.
+    """
     keys = content.role_keys()
     max_turns = content.max_turns
 
@@ -101,8 +110,6 @@ def make_persona_node(content: ScenarioContent, memory: str):
         adaptation_line = adaptation_hint(history)
         struggling = bool(adaptation_line)
 
-        # Última fala do cenário: encerra em vez de perguntar, senão a sessão
-        # termina com uma pergunta no ar.
         if state.get("turn_count", 0) >= max_turns:
             text = generate_closing_line(content, role, history)
             _speak(role, text)
@@ -112,8 +119,6 @@ def make_persona_node(content: ScenarioContent, memory: str):
                 "scene_resolved": True,
             }
 
-        # Dois turnos antes do fim, a cena abre a oportunidade para os
-        # próprios critérios (uma vez só).
         if state.get("turn_count", 0) == max_turns - 2 and content.closing_hint:
             text, hint = generate_closing_hint_turn(content, role, history)
             if text:
@@ -141,9 +146,6 @@ def make_persona_node(content: ScenarioContent, memory: str):
         pending_hint = turn.hint
         resolved = turn.scene_resolved
 
-        # Passagem de bola: o outro personagem entra AGORA, no mesmo turno. Se
-        # ele só falasse no turno seguinte, a fala da persona atual seria
-        # apenas um aviso de troca, e o aluno ficaria sem nada para responder.
         next_key = pass_to
         if next_key in keys and next_key != key and not resolved:
             other = content.role(next_key)

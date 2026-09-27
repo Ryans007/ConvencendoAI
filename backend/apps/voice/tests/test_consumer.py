@@ -140,11 +140,14 @@ def test_empty_transcription_asks_the_student_to_speak_again(django_user_model, 
 
 
 def test_live_session_fails_explicitly_without_token():
+    """A conexão é aceita e depois recusada com uma mensagem clara, em vez de ser
+    derrubada sem explicação."""
+
     async def run() -> None:
         application = URLRouter(websocket_urlpatterns)
         communicator = WebsocketCommunicator(application, "/ws/voice/negociar-prazo/3/")
         connected, _ = await communicator.connect()
-        assert connected  # aceita a conexão, depois recusa com uma mensagem clara
+        assert connected
 
         control = await communicator.receive_from()
         payload = json.loads(control)

@@ -85,13 +85,21 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         await self._advance(initial_state, resume=None, started_at=time.monotonic())
 
     async def receive(self, text_data: str | None = None, bytes_data: bytes | None = None) -> None:
+        """Recebe o áudio de um turno do aluno, transcreve e avança a conversa.
+
+        Falha do provedor de STT encerra a sessão com erro explícito, sem fallback
+        silencioso. Transcrição vazia não avança nem encerra: o cliente recebe
+        `no_speech` e a vez continua do aluno. A transcrição só aparece no console do
+        servidor — o cliente nunca a recebe, por decisão de produto (sessão ao vivo sem
+        transcrição na tela).
+        """
         if bytes_data is None:
             return
 
         started_at = time.monotonic()
         try:
             text = await sync_to_async(transcribe)(bytes_data)
-        except Exception as exc:  # falha explícita do provedor de STT, sem fallback silencioso
+        except Exception as exc:
             await self._fail(f"Falha na transcrição: {exc}")
             return
         print(f"[timing] stt: {time.monotonic() - started_at:.2f}s")
@@ -101,8 +109,6 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({"type": "no_speech"}))
             return
 
-        # Só no console do servidor — o cliente nunca recebe a transcrição, por
-        # decisão de produto (sessão ao vivo sem transcrição na tela).
         print(f"You: {text}")
 
         await self._advance(None, resume=text, started_at=started_at)
@@ -135,8 +141,9 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
     async def _speak_new_messages(self, state: dict, started_at: float) -> bool:
         """Sintetiza e envia, em ordem, as falas novas das personas.
 
-        Devolve `False` se a síntese falhou — a sessão já foi encerrada com erro e
-        quem chamou não deve continuar.
+        Falha do provedor de TTS encerra a sessão com erro explícito, sem fallback de
+        síntese local. Devolve `False` nesse caso — a sessão já foi encerrada e quem
+        chamou não deve continuar.
         """
         messages = list(state.get("messages") or [])
         new_messages = messages[self.seen_messages :]
@@ -152,7 +159,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             synthesis_started_at = time.monotonic()
             try:
                 audio = await sync_to_async(synthesize)(text, voice)
-            except Exception as exc:  # falha explícita do provedor de TTS, sem fallback local
+            except Exception as exc:
                 await self._fail(f"Falha na síntese de voz: {exc}")
                 return False
             print(f"[timing] tts ({name}): {time.monotonic() - synthesis_started_at:.2f}s")
