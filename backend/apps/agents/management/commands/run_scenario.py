@@ -3,6 +3,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from apps.agents.services.session_runner import run_and_record_attempt
 from apps.catalog.models import Level, Scenario
+from apps.llm.services.factory import log_active_models
 
 
 class Command(BaseCommand):
@@ -37,6 +38,8 @@ class Command(BaseCommand):
         self.stdout.write(f"\n{scenario.title} — nível {level.name}\n")
         self.stdout.write(f"Objective: {scenario.objective}\n")
         self.stdout.write("Say 'goodbye' to end the session early.\n")
+
+        log_active_models()
 
         attempt = run_and_record_attempt(user, scenario, level)
 

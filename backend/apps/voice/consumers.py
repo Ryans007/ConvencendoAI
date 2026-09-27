@@ -16,7 +16,7 @@ from apps.agents.graph.builder import build_scenario_graph
 from apps.agents.graph.listen import listen_live
 from apps.agents.services.session_runner import evaluate_and_record_attempt, resolve_execution
 from apps.catalog.models import Level, Scenario
-from apps.llm.services.factory import ModelNotConfigured
+from apps.llm.services.factory import ModelNotConfigured, log_active_models
 from apps.voice.services.stt import transcribe
 from apps.voice.services.tts import synthesize
 
@@ -72,6 +72,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             content, memory, listen_node=listen_live, checkpointer=MemorySaver()
         )
         self.thread_config = {"configurable": {"thread_id": str(attempt.pk)}}
+        await sync_to_async(log_active_models)()
 
         initial_state = {
             "messages": [],

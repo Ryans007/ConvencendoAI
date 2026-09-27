@@ -141,6 +141,23 @@ def get_audio_client(purpose: str) -> AudioClient:
     return AudioClient(client=client, model_id=model.model_id)
 
 
+def log_active_models() -> None:
+    """Imprime, uma vez por sessão, qual modelo/provedor atende cada papel configurado."""
+    config = AgentModelConfig.get_solo()
+    roles = (
+        ("persona", config.persona_model),
+        ("judge", config.judge_model),
+        ("stt", config.stt_model),
+        ("tts", config.tts_model),
+        ("router", config.router_model),
+    )
+    for label, model in roles:
+        if model is None or not model.is_active or not model.provider.is_active:
+            print(f"[llm] {label}: nao configurado")
+        else:
+            print(f"[llm] {label}: provider={model.provider.code} model={model.model_id}")
+
+
 def get_structured_llm(purpose: str, schema: type) -> _StructuredAgent:
     """Monta o cliente do papel pedido, já amarrado a um schema de saída estruturada.
 
