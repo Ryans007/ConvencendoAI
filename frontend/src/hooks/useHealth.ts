@@ -1,5 +1,3 @@
-/** Hook que expoe o estado de sanidade do backend para a camada visual. */
-
 import { useEffect, useState } from "react";
 
 import { fetchHealth, type HealthStatus } from "../api/health";
