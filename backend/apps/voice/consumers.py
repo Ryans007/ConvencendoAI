@@ -1,5 +1,6 @@
 import json
 import re
+import time
 from urllib.parse import parse_qs
 
 from asgiref.sync import sync_to_async
@@ -81,17 +82,19 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             "scene_resolved": False,
             "should_end": False,
         }
-        await self._advance(initial_state, resume=None)
+        await self._advance(initial_state, resume=None, started_at=time.monotonic())
 
     async def receive(self, text_data: str | None = None, bytes_data: bytes | None = None) -> None:
         if bytes_data is None:
             return
 
+        started_at = time.monotonic()
         try:
             text = await sync_to_async(transcribe)(bytes_data)
         except Exception as exc:  # falha explícita do provedor de STT, sem fallback silencioso
             await self._fail(f"Falha na transcrição: {exc}")
             return
+        print(f"[timing] stt: {time.monotonic() - started_at:.2f}s")
 
         if not text.strip():
             print("[stt] transcricao vazia; o aluno fala de novo, sem avancar a conversa")
@@ -102,9 +105,16 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         # decisão de produto (sessão ao vivo sem transcrição na tela).
         print(f"You: {text}")
 
-        await self._advance(None, resume=text)
+        await self._advance(None, resume=text, started_at=started_at)
 
-    async def _advance(self, initial_state: dict | None, *, resume: str | None) -> None:
+    async def _advance(
+        self, initial_state: dict | None, *, resume: str | None, started_at: float
+    ) -> None:
+        """Roda o grafo até a próxima pausa e fala as novas mensagens.
+
+        `started_at` marca o início da rodada (a chegada do áudio do aluno, ou a conexão
+        na abertura), para que o tempo total registrado inclua a transcrição.
+        """
         try:
             if initial_state is not None:
                 state = await self.graph.ainvoke(initial_state, config=self.thread_config)
@@ -114,15 +124,24 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             await self._fail(str(exc))
             return
 
-        await self._speak_new_messages(state)
+        spoken = await self._speak_new_messages(state, started_at)
+        if not spoken:
+            return
+        print(f"[timing] round total: {time.monotonic() - started_at:.2f}s")
 
         if "__interrupt__" not in state:
             await self._finish(state)
 
-    async def _speak_new_messages(self, state: dict) -> None:
+    async def _speak_new_messages(self, state: dict, started_at: float) -> bool:
+        """Sintetiza e envia, em ordem, as falas novas das personas.
+
+        Devolve `False` se a síntese falhou — a sessão já foi encerrada com erro e
+        quem chamou não deve continuar.
+        """
         messages = list(state.get("messages") or [])
         new_messages = messages[self.seen_messages :]
         self.seen_messages = len(messages)
+        first_audio_sent = False
 
         for message in new_messages:
             if not isinstance(message, AIMessage):
@@ -130,12 +149,18 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             name, text = _split_speaker(message.content)
             role = next((r for r in self.content.roles if r.name == name), None)
             voice = role.voice if role else self.content.roles[0].voice
+            synthesis_started_at = time.monotonic()
             try:
                 audio = await sync_to_async(synthesize)(text, voice)
             except Exception as exc:  # falha explícita do provedor de TTS, sem fallback local
                 await self._fail(f"Falha na síntese de voz: {exc}")
-                return
+                return False
+            print(f"[timing] tts ({name}): {time.monotonic() - synthesis_started_at:.2f}s")
             await self.send(bytes_data=audio)
+            if not first_audio_sent:
+                first_audio_sent = True
+                print(f"[timing] first audio sent after {time.monotonic() - started_at:.2f}s")
+        return True
 
     async def _finish(self, state: dict) -> None:
         attempt = await sync_to_async(evaluate_and_record_attempt)(
