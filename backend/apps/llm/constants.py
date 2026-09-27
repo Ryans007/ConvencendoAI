@@ -2,10 +2,11 @@ from django.db import models
 
 
 class ModelPurpose(models.TextChoices):
-    """Os dois papéis de chat do núcleo conversacional que consomem um modelo de LLM."""
+    """Os papéis de chat do núcleo conversacional que consomem um modelo de LLM."""
 
     PERSONA = "persona", "Personas"
     JUDGE = "judge", "Avaliador"
+    ROUTER = "router", "Roteador de turno"
 
 
 class ModelCategory(models.TextChoices):

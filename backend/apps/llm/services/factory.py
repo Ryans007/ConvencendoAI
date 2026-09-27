@@ -12,6 +12,13 @@ from apps.llm.models import AgentModelConfig, LLMModel
 _TEMPERATURE_BY_PURPOSE = {
     ModelPurpose.PERSONA: 0.7,
     ModelPurpose.JUDGE: 0.0,
+    ModelPurpose.ROUTER: 0.0,
+}
+
+_FIELD_BY_PURPOSE = {
+    ModelPurpose.PERSONA: "persona_model",
+    ModelPurpose.JUDGE: "judge_model",
+    ModelPurpose.ROUTER: "router_model",
 }
 
 
@@ -20,9 +27,7 @@ class ModelNotConfigured(RuntimeError):
 
 
 def _model_for(purpose: str, config: AgentModelConfig) -> LLMModel:
-    model = (
-        config.persona_model if purpose == ModelPurpose.PERSONA else config.judge_model
-    )
+    model = getattr(config, _FIELD_BY_PURPOSE[purpose])
     if model is None or not model.is_active or not model.provider.is_active:
         raise ModelNotConfigured(
             f"Nenhum modelo ativo configurado para o papel '{purpose}'."
