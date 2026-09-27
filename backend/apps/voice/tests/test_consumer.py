@@ -84,6 +84,7 @@ def test_live_session_opens_transcribes_a_turn_and_ends(django_user_model, monke
         assert attempt.user_id == user.id
         assert attempt.completed_at is not None
         assert attempt.final_score == 100
+        assert payload["attempt_id"] == attempt.pk
 
         await communicator.disconnect()
 
