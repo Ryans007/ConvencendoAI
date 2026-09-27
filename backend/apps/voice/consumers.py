@@ -93,6 +93,11 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             await self._fail(f"Falha na transcrição: {exc}")
             return
 
+        if not text.strip():
+            print("[stt] transcricao vazia; o aluno fala de novo, sem avancar a conversa")
+            await self.send(text_data=json.dumps({"type": "no_speech"}))
+            return
+
         # Só no console do servidor — o cliente nunca recebe a transcrição, por
         # decisão de produto (sessão ao vivo sem transcrição na tela).
         print(f"You: {text}")

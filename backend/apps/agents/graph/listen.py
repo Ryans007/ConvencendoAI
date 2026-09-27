@@ -5,14 +5,17 @@ from apps.agents.graph.state import ScenarioState
 
 
 def listen(state: ScenarioState) -> dict:
-    """Nó do grafo: captura o turno do aluno por texto, via entrada bloqueante de terminal."""
-    try:
-        text = input("\nYou (in English): ").strip()
-    except (EOFError, KeyboardInterrupt):
-        return {"turn_count": state.get("turn_count", 0), "should_end": True}
+    """Nó do grafo: captura o turno do aluno por texto, via entrada bloqueante de terminal.
 
-    if not text:
-        return {"turn_count": state.get("turn_count", 0) + 1, "should_end": True}
+    Linha vazia pede a fala de novo, em vez de encerrar a sessão. Só o fim da entrada
+    (EOF) encerra.
+    """
+    text = ""
+    while not text:
+        try:
+            text = input("\nYou (in English): ").strip()
+        except (EOFError, KeyboardInterrupt):
+            return {"turn_count": state.get("turn_count", 0), "should_end": True}
 
     return {
         "messages": [HumanMessage(content=text)],
@@ -25,12 +28,12 @@ def listen_live(state: ScenarioState) -> dict:
 
     Quem retoma a execução (`Command(resume=texto)`) é o consumer da sessão ao vivo,
     depois de transcrever o áudio recebido pelo WebSocket — este nó não sabe que existe
-    voz, só que alguém vai lhe entregar o texto do turno de fora.
+    voz, só que alguém vai lhe entregar o texto do turno de fora. Um turno vazio nunca
+    encerra a sessão: o nó volta a pausar e espera outro.
     """
-    text = (interrupt(None) or "").strip()
-
-    if not text:
-        return {"turn_count": state.get("turn_count", 0) + 1, "should_end": True}
+    text = ""
+    while not text:
+        text = (interrupt(None) or "").strip()
 
     return {
         "messages": [HumanMessage(content=text)],

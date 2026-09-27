@@ -37,7 +37,7 @@ class Command(BaseCommand):
 
         self.stdout.write(f"\n{scenario.title} — nível {level.name}\n")
         self.stdout.write(f"Objective: {scenario.objective}\n")
-        self.stdout.write("Say 'goodbye' to end the session early.\n")
+        self.stdout.write("Send EOF (Ctrl+D, or Ctrl+Z then Enter on Windows) to end early.\n")
 
         log_active_models()
 

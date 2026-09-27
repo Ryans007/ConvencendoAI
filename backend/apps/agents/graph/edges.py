@@ -1,17 +1,15 @@
 from apps.agents.graph.state import ScenarioState
 
-EXIT_WORDS = ["goodbye", "quit", "exit", "stop the session"]
-
 
 def student_left(state: ScenarioState) -> str:
-    """Roteamento após `listen`: o aluno pediu para encerrar, ou a entrada acabou?"""
+    """Roteamento após `listen`: a entrada do aluno acabou?
+
+    O conteúdo da fala nunca encerra a sessão. Procurar palavras como "goodbye" ou
+    "exit" dentro da fala encerrava a cena quando o aluno só as usava numa frase
+    ("our exit strategy"); para sair antes, a tela tem o próprio botão.
+    """
     if state.get("should_end"):
         return "end"
-    messages = list(state["messages"])
-    if messages:
-        last = (messages[-1].content or "").lower()
-        if any(word in last for word in EXIT_WORDS):
-            return "end"
     return "continue"
 
 

@@ -100,6 +100,45 @@ def test_live_session_opens_transcribes_a_turn_and_ends(django_user_model, monke
     async_to_sync(run)()
 
 
+def test_empty_transcription_asks_the_student_to_speak_again(django_user_model, monkeypatch):
+    user = django_user_model.objects.create(username="aluno")
+    token = str(AccessToken.for_user(user))
+
+    opening_turn = PersonaTurn(line="Hello, let's talk.", pass_to="student", scene_resolved=False)
+
+    class _FakeStructuredLLM:
+        def invoke(self, messages):
+            return opening_turn
+
+    monkeypatch.setattr(
+        graph_personas, "get_structured_llm", lambda purpose, schema: _FakeStructuredLLM()
+    )
+    monkeypatch.setattr(voice_consumers, "transcribe", lambda audio: "   ")
+    monkeypatch.setattr(voice_consumers, "synthesize", lambda text, voice: b"fake-wav-bytes")
+
+    async def run() -> None:
+        application = URLRouter(websocket_urlpatterns)
+        communicator = WebsocketCommunicator(
+            application, f"/ws/voice/negociar-prazo/3/?token={token}"
+        )
+        connected, _ = await communicator.connect()
+        assert connected
+        assert await communicator.receive_from() == b"fake-wav-bytes"
+
+        await communicator.send_to(bytes_data=b"silent-audio")
+
+        payload = json.loads(await communicator.receive_from())
+        assert payload == {"type": "no_speech"}
+        assert await communicator.receive_nothing()
+
+        attempt = await sync_to_async(Attempt.objects.get)()
+        assert attempt.completed_at is None
+
+        await communicator.disconnect()
+
+    async_to_sync(run)()
+
+
 def test_live_session_fails_explicitly_without_token():
     async def run() -> None:
         application = URLRouter(websocket_urlpatterns)

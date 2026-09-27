@@ -18,9 +18,10 @@ def test_student_left_ends_when_should_end_flag_is_set():
     assert student_left(_state(should_end=True)) == "end"
 
 
-def test_student_left_ends_on_exit_word():
-    state = _state(messages=[HumanMessage(content="Okay, goodbye everyone")])
-    assert student_left(state) == "end"
+def test_student_left_does_not_end_on_words_inside_the_speech():
+    for text in ("Okay, goodbye everyone", "Our exit strategy was clear", "I quit that job"):
+        state = _state(messages=[HumanMessage(content=text)])
+        assert student_left(state) == "continue"
 
 
 def test_student_left_continues_otherwise():
