@@ -114,3 +114,38 @@ def test_evaluate_and_record_attempt_updates_the_same_attempt(django_user_model,
     assert result.final_score == 100
     assert result.passed is True
     assert Attempt.objects.filter(user=user).count() == 1
+
+
+def test_recording_a_completed_attempt_again_does_not_reevaluate(django_user_model, monkeypatch):
+    """Uma segunda gravação da mesma tentativa devolve o resultado da primeira, sem
+    chamar o avaliador de novo nem duplicar notas e critérios."""
+    user = django_user_model.objects.create(username="aluno")
+    scenario = Scenario.objects.get(slug="negociar-prazo")
+    level = Level.objects.get(order=3)
+    content, _, attempt = session_runner.resolve_execution(scenario, level, user)
+
+    calls = []
+    outcome = EvaluationOutcome(
+        confirmed_criteria={"c1"},
+        judged_dimensions=[JudgedDimension(dimension="fluency", value=10, weight=15)],
+        feedback="Ok.",
+        memory_summary="Pediu mais prazo.",
+        review_items=[],
+    )
+
+    def fake_evaluate(content, messages):
+        calls.append(messages)
+        return outcome
+
+    monkeypatch.setattr(session_runner, "evaluate", fake_evaluate)
+    final_state = {"messages": [HumanMessage(content="I need one more week.")]}
+
+    first = session_runner.evaluate_and_record_attempt(attempt, content, final_state)
+    breakdowns_after_first = ScoreBreakdown.objects.filter(attempt=first).count()
+    second = session_runner.evaluate_and_record_attempt(attempt, content, final_state)
+
+    assert len(calls) == 1
+    assert second.pk == first.pk
+    assert second.final_score == first.final_score
+    assert ScoreBreakdown.objects.filter(attempt=first).count() == breakdowns_after_first
+    assert AttemptCriterion.objects.filter(attempt=first).count() == len(content.criteria)

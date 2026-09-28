@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.utils import timezone
 
 from apps.agents.graph.builder import run_scenario as run_graph
@@ -33,7 +34,15 @@ def evaluate_and_record_attempt(
     Reutilizável por qualquer canal: uma execução por texto chama isso uma vez, depois de
     `run_graph` rodar do início ao fim; uma sessão de voz chama isso quando um `ainvoke()`
     devolve um estado sem mais pausa pendente — o fim real da execução, não de um turno.
+
+    Idempotente: para uma tentativa já concluída, devolve a tentativa como está, sem
+    chamar o avaliador de novo. A gravação é atômica, para que uma tentativa nunca fique
+    marcada como concluída com notas ou critérios pela metade.
     """
+    if Attempt.objects.filter(pk=attempt.pk, completed_at__isnull=False).exists():
+        attempt.refresh_from_db()
+        return attempt
+
     messages = list(final_state.get("messages") or [])
     outcome = evaluate(content, messages)
 
@@ -69,15 +78,17 @@ def evaluate_and_record_attempt(
     attempt.memory_summary = outcome.memory_summary
     attempt.feedback = outcome.feedback
     attempt.completed_at = timezone.now()
-    attempt.save()
 
-    for breakdown in breakdowns:
-        breakdown.attempt = attempt
-    ScoreBreakdown.objects.bulk_create(breakdowns)
+    with transaction.atomic():
+        attempt.save()
 
-    for criterion in attempt_criteria:
-        criterion.attempt = attempt
-    AttemptCriterion.objects.bulk_create(attempt_criteria)
+        for breakdown in breakdowns:
+            breakdown.attempt = attempt
+        ScoreBreakdown.objects.bulk_create(breakdowns)
+
+        for criterion in attempt_criteria:
+            criterion.attempt = attempt
+        AttemptCriterion.objects.bulk_create(attempt_criteria)
 
     return attempt
 
