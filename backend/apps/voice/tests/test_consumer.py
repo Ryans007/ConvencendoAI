@@ -83,6 +83,9 @@ def test_live_session_opens_transcribes_a_turn_and_ends(django_user_model, monke
         reply_audio = await communicator.receive_from()
         assert reply_audio == b"fake-wav-bytes"
 
+        evaluating = json.loads(await communicator.receive_from())
+        assert evaluating == {"type": "evaluating"}
+
         control = await communicator.receive_from()
         payload = json.loads(control)
         assert payload["type"] == "session_ended"
@@ -94,6 +97,78 @@ def test_live_session_opens_transcribes_a_turn_and_ends(django_user_model, monke
         assert attempt.completed_at is not None
         assert attempt.final_score == 100
         assert payload["attempt_id"] == attempt.pk
+
+        await communicator.disconnect()
+
+    async_to_sync(run)()
+
+
+def test_audio_sent_during_evaluation_is_ignored(django_user_model, monkeypatch):
+    """Um áudio que chega enquanto a cena termina fica na fila do consumer; quando é
+    processado, a cena já acabou, e ele não pode transcrever, avaliar nem gravar de novo."""
+    user = django_user_model.objects.create(username="aluno")
+    token = str(AccessToken.for_user(user))
+
+    turns = iter([
+        PersonaTurn(line="Hello, let's talk.", pass_to="student", scene_resolved=False),
+        PersonaTurn(line="Deal, see you next week.", pass_to="student", scene_resolved=True),
+    ])
+
+    class _FakeStructuredLLM:
+        def invoke(self, messages):
+            return next(turns)
+
+    class _FakeRoutingLLM:
+        def invoke(self, messages):
+            return RoutingDecision(speaker="")
+
+    transcribed, evaluated = [], []
+    outcome = EvaluationOutcome(
+        confirmed_criteria=set(),
+        judged_dimensions=[JudgedDimension(dimension="fluency", value=10, weight=15)],
+        feedback="Ok.",
+        memory_summary="Pediu mais prazo.",
+        review_items=[],
+    )
+
+    def fake_evaluate(content, messages):
+        evaluated.append(messages)
+        return outcome
+
+    def fake_transcribe(audio):
+        transcribed.append(audio)
+        return "I need one more week."
+
+    monkeypatch.setattr(
+        graph_personas, "get_structured_llm", lambda purpose, schema: _FakeStructuredLLM()
+    )
+    monkeypatch.setattr(
+        graph_routing, "get_structured_llm", lambda purpose, schema: _FakeRoutingLLM()
+    )
+    monkeypatch.setattr(voice_consumers, "transcribe", fake_transcribe)
+    monkeypatch.setattr(voice_consumers, "synthesize", lambda text, voice: b"fake-wav-bytes")
+    monkeypatch.setattr("apps.agents.services.session_runner.evaluate", fake_evaluate)
+
+    async def run() -> None:
+        application = URLRouter(websocket_urlpatterns)
+        communicator = WebsocketCommunicator(
+            application, f"/ws/voice/negociar-prazo/3/?token={token}"
+        )
+        connected, _ = await communicator.connect()
+        assert connected
+        assert await communicator.receive_from() == b"fake-wav-bytes"
+
+        await communicator.send_to(bytes_data=b"last-student-turn")
+        await communicator.send_to(bytes_data=b"spoken-during-evaluation")
+
+        assert await communicator.receive_from() == b"fake-wav-bytes"
+        assert json.loads(await communicator.receive_from()) == {"type": "evaluating"}
+        assert json.loads(await communicator.receive_from())["type"] == "session_ended"
+        assert (await communicator.receive_output())["type"] == "websocket.close"
+        assert await communicator.receive_nothing(timeout=0.5)
+
+        assert transcribed == [b"last-student-turn"]
+        assert len(evaluated) == 1
 
         await communicator.disconnect()
 
