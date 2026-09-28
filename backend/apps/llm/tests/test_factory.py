@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+import httpx
+import openai
 import pytest
 
 from apps.llm.constants import ModelCategory, ModelPurpose
@@ -184,6 +186,59 @@ def test_get_structured_llm_retries_once_when_first_response_has_no_schema(monke
     result = structured_llm.invoke(["a message"])
 
     assert result == _Schema("ok")
+
+
+def _provider_error(code: str) -> openai.BadRequestError:
+    response = httpx.Response(400, request=httpx.Request("POST", "https://provider.test"))
+    body = {"message": "rejected", "type": "invalid_request_error", "code": code}
+    return openai.BadRequestError("Error code: 400", response=response, body=body)
+
+
+def _structured_llm_with(monkeypatch, outcomes: list):
+    model = _make_model()
+    config = AgentModelConfig.get_solo()
+    config.persona_model = model
+    config.save()
+
+    pending = iter(outcomes)
+
+    class _FakeAgent:
+        def invoke(self, payload):
+            outcome = next(pending)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+    monkeypatch.setattr(
+        "apps.llm.services.factory.create_agent",
+        lambda **kwargs: _FakeAgent(),
+    )
+    return factory.get_structured_llm(ModelPurpose.PERSONA, _Schema)
+
+
+def test_get_structured_llm_retries_when_provider_refuses_output_outside_schema(monkeypatch):
+    structured_llm = _structured_llm_with(
+        monkeypatch,
+        [_provider_error("tool_use_failed"), {"structured_response": _Schema("ok")}],
+    )
+
+    assert structured_llm.invoke(["a message"]) == _Schema("ok")
+
+
+def test_get_structured_llm_returns_empty_schema_when_provider_refuses_twice(monkeypatch):
+    structured_llm = _structured_llm_with(
+        monkeypatch,
+        [_provider_error("tool_use_failed"), _provider_error("output_parse_failed")],
+    )
+
+    assert structured_llm.invoke(["a message"]) == _Schema()
+
+
+def test_get_structured_llm_propagates_other_provider_errors(monkeypatch):
+    structured_llm = _structured_llm_with(monkeypatch, [_provider_error("invalid_api_key")])
+
+    with pytest.raises(openai.BadRequestError):
+        structured_llm.invoke(["a message"])
 
 
 def test_get_audio_client_builds_client_with_configured_parameters():
