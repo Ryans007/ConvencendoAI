@@ -5,7 +5,7 @@ from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_openai import ChatOpenAI
-from openai import OpenAI
+from openai import BadRequestError, OpenAI
 
 from apps.llm.constants import ModelCategory, ModelPurpose
 from apps.llm.models import AgentModelConfig, LLMModel
@@ -64,9 +64,16 @@ class _StructuredAgent:
     Se o agente terminar sem resposta estruturada, registra o que o modelo devolveu (para
     diagnosticar a causa) e tenta uma única vez mais. O limite é uma, para não voltar a
     esconder uma cadeia de retentativas dentro do tempo de uma fala.
+
+    A recusa do provedor por saída fora do schema segue o mesmo caminho. Provedores que
+    validam o schema no servidor, como a Groq, respondem HTTP 400 com os códigos de
+    `_SCHEMA_REFUSAL_CODES` quando o modelo escreve texto em vez de preencher a estrutura;
+    sem esse tratamento, a exceção atravessava o grafo e derrubava a sessão. Qualquer outro
+    erro do provedor continua sendo propagado.
     """
 
     _ATTEMPTS = 2
+    _SCHEMA_REFUSAL_CODES = frozenset({"tool_use_failed", "output_parse_failed"})
 
     def __init__(self, agent, schema: type, purpose: str):
         self._agent = agent
@@ -92,7 +99,14 @@ class _StructuredAgent:
         model_calls = 0
         structured = None
         for _ in range(self._ATTEMPTS):
-            result = self._agent.invoke({"messages": messages})
+            try:
+                result = self._agent.invoke({"messages": messages})
+            except BadRequestError as exc:
+                if exc.code not in self._SCHEMA_REFUSAL_CODES:
+                    raise
+                model_calls += 1
+                print(f"[warning] {self._purpose}: provedor recusou a resposta fora do schema ({exc.code})")
+                continue
             new_messages = result.get("messages", [])[len(messages) :]
             model_calls += sum(1 for message in new_messages if isinstance(message, AIMessage))
             structured = result.get("structured_response")

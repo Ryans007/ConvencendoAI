@@ -167,6 +167,44 @@ describe("services/liveSession", () => {
     expect(states.at(-1)?.turnCount).toBe(1);
   });
 
+  it("depois do aviso de avaliacao, o fim do audio leva a fase de avaliacao, e nao a vez do aluno", () => {
+    const session = new LiveSession("negociar-prazo", 3);
+    const socket = FakeWebSocket.instances[0];
+    const states = collectStates(session);
+    socket.dispatch("open", {});
+
+    socket.dispatch("message", { data: new ArrayBuffer(4) });
+    socket.dispatch("message", { data: JSON.stringify({ type: "evaluating" }) });
+    FakeAudio.instances[0].triggerEnded();
+
+    expect(states.at(-1)?.phase).toBe("evaluating");
+    expect(states.some((state) => state.phase === "student-turn")).toBe(false);
+
+    socket.dispatch("message", {
+      data: JSON.stringify({ type: "session_ended", attempt_id: 7, final_score: 80, passed: true }),
+    });
+
+    expect(states.at(-1)?.phase).toBe("ended");
+    expect(states.at(-1)?.result).toEqual({ attemptId: 7, finalScore: 80, passed: true });
+  });
+
+  it("o fechamento logo apos o fim de sessao nao vira conexao perdida enquanto o audio toca", () => {
+    const session = new LiveSession("negociar-prazo", 3);
+    const socket = FakeWebSocket.instances[0];
+    const states = collectStates(session);
+    socket.dispatch("open", {});
+
+    socket.dispatch("message", { data: new ArrayBuffer(4) });
+    socket.dispatch("message", {
+      data: JSON.stringify({ type: "session_ended", attempt_id: 7, final_score: 80, passed: true }),
+    });
+    socket.close();
+    FakeAudio.instances[0].triggerEnded();
+
+    expect(states.some((state) => state.phase === "connection-lost")).toBe(false);
+    expect(states.at(-1)?.phase).toBe("ended");
+  });
+
   it("uma mensagem de erro so aparece depois que o audio pendente termina", () => {
     const session = new LiveSession("negociar-prazo", 3);
     const socket = FakeWebSocket.instances[0];

@@ -62,7 +62,7 @@ export default function SessaoAoVivoPage() {
           type="button"
           onClick={leaveEarly}
           className="text-aux text-ink-muted hover:text-ink"
-          disabled={phase === "connecting" || phase === "ended"}
+          disabled={phase === "connecting" || phase === "evaluating" || phase === "ended"}
         >
           Sair
         </button>
@@ -117,14 +117,14 @@ export default function SessaoAoVivoPage() {
         </div>
       )}
 
-      {phase === "ended" && result && (
-        <div className="flex flex-1 flex-col items-center justify-center gap-6">
+      {(phase === "evaluating" || (phase === "ended" && result)) && (
+        <div role="status" className="flex flex-1 flex-col items-center justify-center gap-6">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-brand text-white shadow-card-focus">
             <span className="text-[26px] font-bold">&#10003;</span>
           </div>
           <div className="flex flex-col items-center gap-2">
-            <span className="text-[22px] font-semibold tracking-tight">Sessao concluida!</span>
-            <span className="text-scenario text-ink-muted">Preparando seu relatorio...</span>
+            <span className="text-[22px] font-semibold tracking-tight">Sessão concluída!</span>
+            <span className="text-scenario text-ink-muted">Preparando seu relatório...</span>
           </div>
         </div>
       )}

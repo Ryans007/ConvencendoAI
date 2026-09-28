@@ -41,6 +41,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
     """
 
     async def connect(self) -> None:
+        self.scene_over = False
         await self.accept()
 
         scenario_slug = self.scope["url_route"]["kwargs"]["scenario_slug"]
@@ -92,8 +93,15 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         `no_speech` e a vez continua do aluno. A transcrição só aparece no console do
         servidor — o cliente nunca a recebe, por decisão de produto (sessão ao vivo sem
         transcrição na tela).
+
+        Depois do fim da cena, o áudio é ignorado antes mesmo de transcrever: os handlers
+        rodam um de cada vez, então um áudio que chegou durante a avaliação só é
+        processado depois dela, e retomá-lo avaliaria e gravaria a tentativa de novo.
         """
         if bytes_data is None:
+            return
+        if self.scene_over:
+            print("[session] audio recebido depois do fim da cena; ignorado")
             return
 
         started_at = time.monotonic()
@@ -170,6 +178,14 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         return True
 
     async def _finish(self, state: dict) -> None:
+        """Encerra a cena: avisa o cliente, avalia, grava a tentativa e manda o resultado.
+
+        O aviso `evaluating` sai antes do avaliador, que leva dezenas de segundos: sem
+        ele, o cliente devolvia a vez ao aluno ao terminar o último áudio, como se a
+        conversa continuasse.
+        """
+        self.scene_over = True
+        await self.send(text_data=json.dumps({"type": "evaluating"}))
         attempt = await sync_to_async(evaluate_and_record_attempt)(
             self.attempt, self.content, state
         )
@@ -186,6 +202,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         await self.close()
 
     async def _fail(self, message: str) -> None:
+        self.scene_over = True
         await self.send(text_data=json.dumps({"type": "error", "message": message}))
         await self.close()
 

@@ -8,6 +8,7 @@ export type LiveSessionPhase =
   | "persona-speaking"
   | "student-turn"
   | "recording"
+  | "evaluating"
   | "ended"
   | "left"
   | "connection-lost"
@@ -30,7 +31,7 @@ export interface LiveSessionState {
 type Listener = (state: LiveSessionState) => void;
 
 interface ControlMessage {
-  type: "session_ended" | "error" | "no_speech";
+  type: "session_ended" | "error" | "no_speech" | "evaluating";
   attempt_id?: number;
   final_score?: number;
   passed?: boolean;
@@ -66,6 +67,7 @@ export class LiveSession {
   private readonly audioQueue: Blob[] = [];
   private playingAudio = false;
   private pendingOutcome: PendingOutcome | null = null;
+  private evaluationStarted = false;
   private endedByStudent = false;
 
   private mediaStream: MediaStream | null = null;
@@ -104,7 +106,9 @@ export class LiveSession {
         this.setState({ phase: "student-turn", noSpeechNotice: true });
         return;
       }
-      if (payload.type === "session_ended") {
+      if (payload.type === "evaluating") {
+        this.evaluationStarted = true;
+      } else if (payload.type === "session_ended") {
         this.pendingOutcome = {
           phase: "ended",
           result: {
@@ -156,7 +160,12 @@ export class LiveSession {
     });
   }
 
-  /** So resolve o desfecho pendente (fim de sessao ou erro) quando o audio ja acabou de tocar. */
+  /**
+   * So resolve o desfecho pendente (fim de sessao ou erro) quando o audio ja acabou de tocar.
+   *
+   * Depois do aviso de avaliacao, a fila vazia leva a fase de avaliacao, e nunca de volta a
+   * vez do aluno: a cena ja terminou, e o servidor ignoraria qualquer fala enviada ali.
+   */
   private settleIfIdle(): void {
     if (this.playingAudio || this.audioQueue.length > 0) {
       return;
@@ -173,13 +182,30 @@ export class LiveSession {
       return;
     }
 
+    if (this.evaluationStarted) {
+      if (this.state.phase !== "evaluating") {
+        this.setState({ phase: "evaluating" });
+      }
+      return;
+    }
+
     if (this.state.phase === "persona-speaking") {
       this.setState({ phase: "student-turn", turnCount: this.state.turnCount + 1 });
     }
   }
 
+  /**
+   * Conexao fechada sem desfecho conhecido vira "conexao perdida". O servidor fecha logo
+   * depois de mandar o fim de sessao; se o ultimo audio ainda estiver tocando, o desfecho
+   * esta pendente, e o fechamento nao pode ser tratado como queda.
+   */
   private handleClose(): void {
-    if (this.endedByStudent || this.state.phase === "ended" || this.state.phase === "error") {
+    if (
+      this.endedByStudent ||
+      this.pendingOutcome !== null ||
+      this.state.phase === "ended" ||
+      this.state.phase === "error"
+    ) {
       return;
     }
     this.setState({ phase: "connection-lost" });
