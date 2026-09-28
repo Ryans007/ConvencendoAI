@@ -110,3 +110,46 @@ def test_empty_line_never_triggers_a_same_round_handoff(monkeypatch):
 
     assert len(result["messages"]) == 1
     assert result["current_speaker"] == key
+
+
+def test_persona_taking_over_gets_the_entering_instruction_and_keeps_the_floor(monkeypatch):
+    content = _content()
+    rachel, tom = content.role_keys()
+    rachel_name = content.role(rachel).name
+    history = [
+        AIMessage(content=f"[{rachel_name}] Did you work in a team on that project?"),
+        HumanMessage(content="Yes, I did."),
+    ]
+    prompts = []
+
+    class _RecordingLLM:
+        def invoke(self, messages):
+            prompts.append(messages[0].content)
+            return PersonaTurn(line="Nice. Did you also write the tests?", pass_to=rachel)
+
+    monkeypatch.setattr(graph_personas, "get_structured_llm", lambda purpose, schema: _RecordingLLM())
+    state = {**_state(history, tom), "taking_over": True}
+
+    result = make_persona_node(content, "")(state)
+
+    assert "YOU ARE TAKING THE LEAD NOW" in prompts[0]
+    assert len(prompts) == 1
+    assert result["current_speaker"] == tom
+    assert result["taking_over"] is False
+
+
+def test_persona_not_taking_over_gets_no_entering_instruction(monkeypatch):
+    content = _content()
+    key = content.role_keys()[0]
+    prompts = []
+
+    class _RecordingLLM:
+        def invoke(self, messages):
+            prompts.append(messages[0].content)
+            return PersonaTurn(line="Did you use Python?", pass_to="student")
+
+    monkeypatch.setattr(graph_personas, "get_structured_llm", lambda purpose, schema: _RecordingLLM())
+
+    make_persona_node(content, "")(_state([HumanMessage(content="Hi.")], key))
+
+    assert "YOU ARE TAKING THE LEAD NOW" not in prompts[0]
