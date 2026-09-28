@@ -87,7 +87,7 @@ class ScenarioAdmin(admin.ModelAdmin):
     cadastrável numa única tela.
     """
 
-    list_display = ["title", "track", "order", "cooldown_hours"]
+    list_display = ["title", "track", "order", "cooldown_hours", "max_consecutive_turns"]
     list_filter = ["track"]
     search_fields = ["title", "slug"]
     autocomplete_fields = ["track"]

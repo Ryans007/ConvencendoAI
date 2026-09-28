@@ -49,6 +49,7 @@ class ScenarioContent:
     context: str
     closing_hint: str
     max_turns: int
+    max_consecutive_turns: int
     difficulty_label: str
     expected_production: str
     expected_cefr: str
@@ -118,6 +119,7 @@ def load_scenario_content(scenario: Scenario, level: Level) -> ScenarioContent:
         context=scenario.context,
         closing_hint=closing_hint,
         max_turns=level.max_turns,
+        max_consecutive_turns=scenario.max_consecutive_turns,
         difficulty_label=level.name,
         expected_production=level.expected_production,
         expected_cefr=level.expected_cefr,
