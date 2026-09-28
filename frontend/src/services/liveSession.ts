@@ -194,8 +194,18 @@ export class LiveSession {
     }
   }
 
+  /**
+   * Conexao fechada sem desfecho conhecido vira "conexao perdida". O servidor fecha logo
+   * depois de mandar o fim de sessao; se o ultimo audio ainda estiver tocando, o desfecho
+   * esta pendente, e o fechamento nao pode ser tratado como queda.
+   */
   private handleClose(): void {
-    if (this.endedByStudent || this.state.phase === "ended" || this.state.phase === "error") {
+    if (
+      this.endedByStudent ||
+      this.pendingOutcome !== null ||
+      this.state.phase === "ended" ||
+      this.state.phase === "error"
+    ) {
       return;
     }
     this.setState({ phase: "connection-lost" });
