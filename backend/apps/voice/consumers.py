@@ -82,6 +82,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             "turn_count": 0,
             "scene_resolved": False,
             "should_end": False,
+            "taking_over": False,
         }
         await self._advance(initial_state, resume=None, started_at=time.monotonic())
 

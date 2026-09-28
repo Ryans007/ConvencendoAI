@@ -50,5 +50,6 @@ def run_scenario(content: ScenarioContent, memory: str = "") -> dict:
         "turn_count": 0,
         "scene_resolved": False,
         "should_end": False,
+        "taking_over": False,
     }
     return graph.invoke(initial_state, config={"recursion_limit": 200})

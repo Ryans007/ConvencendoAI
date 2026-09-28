@@ -69,7 +69,8 @@ class _StructuredAgent:
     validam o schema no servidor, como a Groq, respondem HTTP 400 com os códigos de
     `_SCHEMA_REFUSAL_CODES` quando o modelo escreve texto em vez de preencher a estrutura;
     sem esse tratamento, a exceção atravessava o grafo e derrubava a sessão. Qualquer outro
-    erro do provedor continua sendo propagado.
+    erro do provedor continua sendo propagado. O log da recusa inclui o que o modelo
+    gerou (`failed_generation`, quando o provedor devolve), para diagnosticar a causa.
     """
 
     _ATTEMPTS = 2
@@ -105,7 +106,12 @@ class _StructuredAgent:
                 if exc.code not in self._SCHEMA_REFUSAL_CODES:
                     raise
                 model_calls += 1
-                print(f"[warning] {self._purpose}: provedor recusou a resposta fora do schema ({exc.code})")
+                body = exc.body if isinstance(exc.body, dict) else {}
+                generated = str(body.get("failed_generation", ""))[:200]
+                print(
+                    f"[warning] {self._purpose}: provedor recusou a resposta fora do schema "
+                    f"({exc.code}); gerado={generated!r}"
+                )
                 continue
             new_messages = result.get("messages", [])[len(messages) :]
             model_calls += sum(1 for message in new_messages if isinstance(message, AIMessage))

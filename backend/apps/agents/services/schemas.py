@@ -26,12 +26,18 @@ class PersonaTurn(BaseModel):
 
 
 class RoutingDecision(BaseModel):
-    """Saída estruturada do roteador: qual persona deve responder ao aluno agora."""
+    """Saída estruturada do roteador: a qual persona o aluno se dirigiu, se a alguma.
+
+    `"none"` quando o aluno não se dirige a ninguém em especial: separar esse caso de "o
+    aluno chamou a persona atual" é o que permite ao equilíbrio de turno valer só quando
+    a escolha não foi do aluno.
+    """
 
     speaker: str = Field(
-        default="",
+        default="none",
         description=(
-            "Key of the character who should respond to the student's last message"
+            "Key of the character the student's last message clearly addresses, "
+            'or "none" if it does not address one specific character'
         ),
     )
 

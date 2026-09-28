@@ -44,12 +44,21 @@ def _participation_text(
     return "\nSCENE PARTICIPATION SO FAR\n" + "\n".join(facts) + "\n"
 
 
+_TAKING_OVER_TEXT = """
+YOU ARE TAKING THE LEAD NOW
+Until now the other character was leading the conversation, and the student's last
+message was an answer to them. React briefly to that answer (one short sentence), then
+ask this turn's question to the student yourself. Do not hand the floor back in this line.
+"""
+
+
 def build_system_prompt(
     content: ScenarioContent,
     role: Role,
     memory: str,
     adaptation_line: str = "",
     participation: SceneParticipation | None = None,
+    taking_over: bool = False,
 ) -> str:
     """Monta o system prompt do papel para esta execução.
 
@@ -57,6 +66,9 @@ def build_system_prompt(
     sobre a resistência da persona: medido em teste real, a resistência cadastrada no
     cenário ("pede exemplos concretos") vencia a regra do nível quando as duas apareciam
     com o mesmo peso no prompt.
+
+    Com `taking_over`, a persona está assumindo a conversa pelo equilíbrio de turno: a
+    última fala do aluno respondeu a outro personagem, e é ela quem faz a transição.
     """
     other_keys = [key for key in content.role_keys() if key != role.key]
     other_names = {key: content.role(key).name for key in other_keys}
@@ -64,6 +76,7 @@ def build_system_prompt(
     if not others_text:
         others_text = "nobody else"
     participation_text = _participation_text(content, role, participation)
+    taking_over_text = _TAKING_OVER_TEXT if taking_over else ""
     areas_text = "\n".join(
         f"- {content.role(key).name} (key: {key}): {content.role(key).scene_function}"
         for key in other_keys
@@ -143,7 +156,7 @@ character has their own area in this scene:
 - Never let both of you ask the student something in the same turn. If your
   line is addressed to the other character, it must not also pose a question
   to the student — leave that entirely to whoever speaks last this turn.
-{participation_text}
+{participation_text}{taking_over_text}
 IF THE STUDENT ASKS FOR HELP
 If they ask how to say something, ask you to repeat, to speak more slowly, or
 say they did not understand: help them immediately and warmly, in character.
