@@ -4,7 +4,7 @@ import httpx
 import openai
 import pytest
 
-from apps.llm.constants import ModelCategory, ModelPurpose
+from apps.llm.constants import ModelCategory, ModelPurpose, StructuredOutputMethod
 from apps.llm.models import AgentModelConfig, LLMModel, LLMProvider
 from apps.llm.services import factory
 from apps.llm.services.factory import ModelNotConfigured, get_llm
@@ -12,7 +12,12 @@ from apps.llm.services.factory import ModelNotConfigured, get_llm
 pytestmark = pytest.mark.django_db
 
 
-def _make_model(*, provider_active: bool = True, model_active: bool = True) -> LLMModel:
+def _make_model(
+    *,
+    provider_active: bool = True,
+    model_active: bool = True,
+    structured_output_method: str = StructuredOutputMethod.TOOL_CALLING,
+) -> LLMModel:
     provider = LLMProvider.objects.create(
         code="openai",
         name="OpenAI",
@@ -24,6 +29,7 @@ def _make_model(*, provider_active: bool = True, model_active: bool = True) -> L
         provider=provider,
         model_id="gpt-4o-mini",
         display_name="GPT-4o mini",
+        structured_output_method=structured_output_method,
         is_active=model_active,
     )
 
@@ -136,6 +142,42 @@ def test_get_structured_llm_uses_tool_strategy(monkeypatch):
     assert captured["tools"] == []
     assert captured["messages"] == ["a message"]
     assert isinstance(captured["response_format"], factory.ToolStrategy)
+
+
+def _captured_response_format(monkeypatch, method: str):
+    model = _make_model(structured_output_method=method)
+    config = AgentModelConfig.get_solo()
+    config.persona_model = model
+    config.save()
+
+    captured = {}
+
+    def fake_create_agent(*, model, tools, response_format):
+        captured["response_format"] = response_format
+        return object()
+
+    monkeypatch.setattr("apps.llm.services.factory.create_agent", fake_create_agent)
+    factory.get_structured_llm(ModelPurpose.PERSONA, _Schema)
+    return captured["response_format"]
+
+
+def test_new_model_defaults_to_tool_calling():
+    assert _make_model().structured_output_method == StructuredOutputMethod.TOOL_CALLING
+
+
+def test_tool_calling_model_uses_tool_strategy(monkeypatch):
+    response_format = _captured_response_format(monkeypatch, StructuredOutputMethod.TOOL_CALLING)
+
+    assert isinstance(response_format, factory.ToolStrategy)
+
+
+def test_strict_model_uses_provider_strategy_with_strict_schema(monkeypatch):
+    response_format = _captured_response_format(
+        monkeypatch, StructuredOutputMethod.JSON_SCHEMA_STRICT
+    )
+
+    assert isinstance(response_format, factory.ProviderStrategy)
+    assert response_format.schema_spec.strict is True
 
 
 def test_get_structured_llm_falls_back_to_empty_schema_when_agent_returns_nothing(
