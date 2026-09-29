@@ -67,7 +67,11 @@ def test_student_addressing_the_other_character_switches_without_taking_over(mon
 
     result = make_routing_node(content, _FixedDraw(3))(_state(current))
 
-    assert result == {"current_speaker": other, "taking_over": False}
+    assert result == {
+        "current_speaker": other,
+        "taking_over": False,
+        "addressed_by_student": True,
+    }
 
 
 def test_student_addressing_the_current_character_wins_over_the_limit(monkeypatch):
@@ -79,7 +83,18 @@ def test_student_addressing_the_current_character_wins_over_the_limit(monkeypatc
     node = make_routing_node(content, _FixedDraw(2))
     result = node(_state(current, _history(name, content.max_consecutive_turns)))
 
-    assert result == {}
+    assert result == {"addressed_by_student": True}
+
+
+def test_nobody_addressed_never_marks_the_student_as_addressing_someone(monkeypatch):
+    content = _content()
+    current, _ = content.role_keys()
+    name = content.role(current).name
+    _router_says(monkeypatch, NO_ADDRESSEE)
+    node = make_routing_node(content, _FixedDraw(2))
+
+    assert "addressed_by_student" not in node(_state(current, _history(name, 1)))
+    assert "addressed_by_student" not in node(_state(current, _history(name, 2)))
 
 
 def test_nobody_addressed_below_the_drawn_limit_keeps_the_current_character(monkeypatch):
@@ -184,7 +199,11 @@ def test_student_calling_the_other_character_in_a_long_conversation_switches(mon
     history = _long_history(content, f"{other_name}, can I ask you about the stack?")
     result = make_routing_node(content, _FixedDraw(3))(_state(current, history))
 
-    assert result == {"current_speaker": other, "taking_over": False}
+    assert result == {
+        "current_speaker": other,
+        "taking_over": False,
+        "addressed_by_student": True,
+    }
 
 
 def test_student_just_answering_in_a_long_conversation_addresses_nobody(monkeypatch):

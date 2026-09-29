@@ -16,8 +16,9 @@ class Level(models.Model):
     comportamento da persona, os dois acoplados por construção, não por escolha
     independente.
 
-    `language`, `questions`, `rephrasing` e `concession_pace` são instrução dirigida ao
-    modelo de linguagem e ficam em inglês, porque compõem o prompt da persona. Os demais
+    `language`, `questions`, `rephrasing`, `concession_pace` e `reply_to_student` são
+    instrução dirigida ao modelo de linguagem e ficam em inglês, porque compõem o prompt
+    da persona. Os demais
     campos de texto do catálogo — objetivo, contexto, critério, traço — descrevem a cena
     para o aluno e ficam em português.
     """
@@ -29,6 +30,13 @@ class Level(models.Model):
     questions = models.TextField()
     rephrasing = models.TextField()
     concession_pace = models.TextField()
+    reply_to_student = models.TextField(
+        verbose_name="como responder ao aluno",
+        help_text=(
+            "Instrução em inglês para a persona: como ela responde quando o aluno "
+            "faz uma pergunta ou um comentário a ela, e como devolve a vez depois."
+        ),
+    )
     scaffolding_enabled = models.BooleanField(default=False)
     hints = models.CharField(max_length=20, choices=HintPolicy.choices)
     max_turns = models.PositiveSmallIntegerField()

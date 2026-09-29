@@ -13,6 +13,10 @@ class ScenarioState(TypedDict):
     `taking_over` fica ligado só na rodada em que o equilíbrio de turno entregou a vez a
     outra persona: é ela quem conduz a transição, reagindo à resposta que o aluno deu ao
     outro personagem.
+
+    `addressed_by_student` fica ligado só na rodada em que o roteador reconheceu que o
+    aluno falou com uma persona específica, inclusive a que já era a da vez: quem foi
+    chamado responde ao que ele disse e fecha a rodada.
     """
 
     messages: Annotated[Sequence[BaseMessage], add_messages]
@@ -21,3 +25,4 @@ class ScenarioState(TypedDict):
     scene_resolved: bool
     should_end: bool
     taking_over: bool
+    addressed_by_student: bool

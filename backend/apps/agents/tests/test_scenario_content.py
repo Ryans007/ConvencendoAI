@@ -43,6 +43,41 @@ def test_load_scenario_content_applies_level_closing_hint_override_when_present(
     assert content.closing_hint == scenario.closing_hint
 
 
+def test_both_interviewers_know_the_same_facts_about_the_company_the_process_and_the_team():
+    scenario = Scenario.objects.get(slug="entrevista-de-emprego")
+
+    content = load_scenario_content(scenario, Level.objects.get(order=2))
+
+    rachel = content.role("rachel")
+    tom = content.role("tom")
+    assert rachel.extra_instruction == tom.extra_instruction
+    for fact in ("três etapas", "seis pessoas", "PyTest", "200 funcionários"):
+        assert fact in rachel.extra_instruction
+
+
+def test_content_carries_how_the_level_wants_the_persona_to_reply_to_the_student():
+    scenario = Scenario.objects.get(slug="entrevista-de-emprego")
+
+    replies = {
+        order: load_scenario_content(scenario, Level.objects.get(order=order)).reply_to_student
+        for order in (1, 2, 3)
+    }
+
+    assert "one short, simple sentence" in replies[1]
+    assert "closed question" in replies[1]
+    assert "invite the student to go on" not in replies[1]
+    assert "invite the student to go on" in replies[2]
+    assert "invite the student to go on" in replies[3]
+
+
+def test_other_scenarios_keep_roles_without_extra_instruction():
+    scenario = Scenario.objects.get(slug="negociar-prazo")
+
+    content = load_scenario_content(scenario, Level.objects.get(order=2))
+
+    assert all(role.extra_instruction == "" for role in content.roles)
+
+
 def test_load_scenario_content_scopes_criteria_to_comprehension_level():
     scenario = Scenario.objects.get(slug="problema-no-quarto")
     level = Level.objects.get(order=1)

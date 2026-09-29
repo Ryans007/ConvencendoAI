@@ -57,6 +57,7 @@ class ScenarioContent:
     questions: str
     rephrasing: str
     concession_pace: str
+    reply_to_student: str
     hints_policy: str
     weights: dict[str, int]
     roles: list[Role]
@@ -127,6 +128,7 @@ def load_scenario_content(scenario: Scenario, level: Level) -> ScenarioContent:
         questions=level.questions,
         rephrasing=level.rephrasing,
         concession_pace=level.concession_pace,
+        reply_to_student=level.reply_to_student,
         hints_policy=level.hints,
         weights=weights,
         roles=roles,
