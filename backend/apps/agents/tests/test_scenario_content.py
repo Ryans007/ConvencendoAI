@@ -43,17 +43,16 @@ def test_load_scenario_content_applies_level_closing_hint_override_when_present(
     assert content.closing_hint == scenario.closing_hint
 
 
-def test_interview_roles_carry_only_the_facts_their_function_would_know():
+def test_both_interviewers_know_the_same_facts_about_the_company_the_process_and_the_team():
     scenario = Scenario.objects.get(slug="entrevista-de-emprego")
 
     content = load_scenario_content(scenario, Level.objects.get(order=2))
 
     rachel = content.role("rachel")
     tom = content.role("tom")
-    assert "três etapas" in rachel.extra_instruction
-    assert "PyTest" not in rachel.extra_instruction
-    assert "PyTest" in tom.extra_instruction
-    assert "três etapas" not in tom.extra_instruction
+    assert rachel.extra_instruction == tom.extra_instruction
+    for fact in ("três etapas", "seis pessoas", "PyTest", "200 funcionários"):
+        assert fact in rachel.extra_instruction
 
 
 def test_content_carries_how_the_level_wants_the_persona_to_reply_to_the_student():
