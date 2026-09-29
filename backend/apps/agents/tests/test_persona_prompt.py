@@ -31,6 +31,14 @@ def test_extra_instruction_reaches_the_prompt_before_the_critical_rules():
     assert prompt.index(_FACTS) < prompt.index("CRITICAL RULES")
 
 
+def test_facts_block_says_the_facts_are_only_for_answering_and_never_for_own_questions():
+    prompt = _prompt_with_extra_instruction(_FACTS)
+
+    block = prompt[prompt.index("MORE ABOUT YOUR ROLE") : prompt.index(_FACTS)]
+    assert "ONLY to answer what the student asks you" in block
+    assert "Never build your own questions from them" in block
+
+
 def test_role_without_extra_instruction_adds_no_block():
     prompt = _prompt_with_extra_instruction("")
 

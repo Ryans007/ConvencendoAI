@@ -86,8 +86,11 @@ def build_system_prompt(
 
     A instrução extra do papel, cadastrada no admin, entra num bloco próprio antes das
     regras: é onde o cenário dá à persona os fatos que ela precisa para responder ao
-    aluno. Como `CRITICAL RULES` vem depois e declara precedência, nenhuma instrução do
-    administrador desliga uma regra de comportamento.
+    aluno. O bloco avisa que os fatos servem só para responder: medido em sessões
+    simuladas, sem o aviso a persona usava um fato do cadastro para montar a própria
+    pergunta (por exemplo, perguntar sobre Django ao aluno que não o citou). Como
+    `CRITICAL RULES` vem depois e declara precedência, nenhuma instrução do administrador
+    desliga uma regra de comportamento.
     """
     other_keys = [key for key in content.role_keys() if key != role.key]
     other_names = {key: content.role(key).name for key in other_keys}
@@ -103,6 +106,10 @@ def build_system_prompt(
         extra_text = (
             "\nMORE ABOUT YOUR ROLE IN THIS SCENE\n"
             "(these notes may be written in Portuguese; you still speak only English)\n"
+            "Use any facts in these notes ONLY to answer what the student asks you. "
+            "Never build your own questions from them: do not ask the student about a "
+            "technology, tool or detail from these notes that the student did not "
+            "mention.\n"
             f"{extra_instruction}\n"
         )
     areas_text = "\n".join(
