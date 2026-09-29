@@ -276,6 +276,24 @@ def test_get_structured_llm_returns_empty_schema_when_provider_refuses_twice(mon
     assert structured_llm.invoke(["a message"]) == _Schema()
 
 
+def test_get_structured_llm_retries_when_the_generated_json_does_not_validate(monkeypatch):
+    structured_llm = _structured_llm_with(
+        monkeypatch,
+        [_provider_error("json_validate_failed"), {"structured_response": _Schema("ok")}],
+    )
+
+    assert structured_llm.invoke(["a message"]) == _Schema("ok")
+
+
+def test_get_structured_llm_returns_empty_schema_when_the_json_never_validates(monkeypatch):
+    structured_llm = _structured_llm_with(
+        monkeypatch,
+        [_provider_error("json_validate_failed"), _provider_error("json_validate_failed")],
+    )
+
+    assert structured_llm.invoke(["a message"]) == _Schema()
+
+
 def test_get_structured_llm_propagates_other_provider_errors(monkeypatch):
     structured_llm = _structured_llm_with(monkeypatch, [_provider_error("invalid_api_key")])
 

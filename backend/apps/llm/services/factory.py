@@ -74,7 +74,9 @@ class _StructuredAgent:
     """
 
     _ATTEMPTS = 2
-    _SCHEMA_REFUSAL_CODES = frozenset({"tool_use_failed", "output_parse_failed"})
+    _SCHEMA_REFUSAL_CODES = frozenset(
+        {"tool_use_failed", "output_parse_failed", "json_validate_failed"}
+    )
 
     def __init__(self, agent, schema: type, purpose: str):
         self._agent = agent
