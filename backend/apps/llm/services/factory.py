@@ -2,12 +2,12 @@ import time
 from dataclasses import dataclass
 
 from langchain.agents import create_agent
-from langchain.agents.structured_output import ToolStrategy
+from langchain.agents.structured_output import ProviderStrategy, ToolStrategy
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_openai import ChatOpenAI
 from openai import BadRequestError, OpenAI
 
-from apps.llm.constants import ModelCategory, ModelPurpose
+from apps.llm.constants import ModelCategory, ModelPurpose, StructuredOutputMethod
 from apps.llm.models import AgentModelConfig, LLMModel
 
 _TEMPERATURE_BY_PURPOSE = {
@@ -181,13 +181,23 @@ def log_active_models() -> None:
 def get_structured_llm(purpose: str, schema: type) -> _StructuredAgent:
     """Monta o cliente do papel pedido, já amarrado a um schema de saída estruturada.
 
-    Usa `create_agent` com `ToolStrategy`, que força a chamada da ferramenta — em teste
-    real contra este provedor e modelo, é o único caminho confiável: `ProviderStrategy`
-    (saída estruturada nativa do provedor) falhou em todas as tentativas, e
-    `ChatOpenAI.with_structured_output` nos três métodos (`function_calling`,
-    `json_mode`, `json_schema`) já devolveu texto solto, `None`, ou objeto com campo
-    obrigatório ausente.
+    O método é o que o modelo do papel declara em `structured_output_method`, sempre via
+    `create_agent`:
+
+    - `ToolStrategy` (padrão): força a chamada da ferramenta. Foi o único caminho
+      confiável no Ollama Cloud, onde `ProviderStrategy` falhou em todas as tentativas e
+      `with_structured_output` já devolveu texto solto, `None` ou objeto incompleto. Na
+      Groq, porém, o modelo às vezes responde em texto em vez de chamar a ferramenta, e o
+      provedor recusa com HTTP 400.
+    - `ProviderStrategy` estrito: o provedor restringe a geração ao schema. Na Groq, com
+      os gpt-oss, foi o método sem recusa nem fala vazia em 22 de 22 chamadas.
     """
+    config = AgentModelConfig.get_solo()
+    model = _model_for(purpose, config)
     llm = get_llm(purpose)
-    agent = create_agent(model=llm, tools=[], response_format=ToolStrategy(schema))
+    if model.structured_output_method == StructuredOutputMethod.JSON_SCHEMA_STRICT:
+        response_format = ProviderStrategy(schema, strict=True)
+    else:
+        response_format = ToolStrategy(schema)
+    agent = create_agent(model=llm, tools=[], response_format=response_format)
     return _StructuredAgent(agent, schema, purpose)

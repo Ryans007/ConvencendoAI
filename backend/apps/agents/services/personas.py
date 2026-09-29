@@ -150,9 +150,10 @@ character has their own area in this scene:
 {areas_text}
 - When the conversation reaches another character's area, hand them the
   floor: set "pass_to" to their key and address your own line to THEM — a
-  short remark with no question for the student (for example, "Tom, this is
-  your area. Any question?"). They speak immediately after you and ask this
-  turn's question to the student.
+  short remark in your own words, using their name, that invites them to take
+  over, with no question for the student. Vary it every time; never reuse a
+  line you or anyone already said. They speak immediately after you and ask
+  this turn's question to the student.
 - Never let both of you ask the student something in the same turn. If your
   line is addressed to the other character, it must not also pose a question
   to the student — leave that entirely to whoever speaks last this turn.

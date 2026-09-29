@@ -75,3 +75,46 @@ def test_evaluate_never_judges_objective_or_pronunciation(monkeypatch):
     dimensions = {d.dimension for d in outcome.judged_dimensions}
     assert "objective" not in dimensions
     assert "pronunciation" not in dimensions
+
+
+def _captured_evaluation_prompt(monkeypatch, level_order: int) -> str:
+    scenario = Scenario.objects.get(slug="entrevista-de-emprego")
+    content = load_scenario_content(scenario, Level.objects.get(order=level_order))
+    prompts = []
+
+    class _RecordingLLM:
+        def invoke(self, messages):
+            prompts.append(messages[0].content)
+            return EvaluationResult()
+
+    monkeypatch.setattr(evaluator, "get_structured_llm", lambda purpose, schema: _RecordingLLM())
+    evaluator.evaluate(
+        content,
+        [AIMessage(content="[Rachel] Did you work in a team?"), HumanMessage(content="Yes, I did.")],
+    )
+    return prompts[0]
+
+
+def test_evaluation_prompt_carries_the_level_answer_format(monkeypatch):
+    content_level_1 = Level.objects.get(order=1)
+
+    prompt = _captured_evaluation_prompt(monkeypatch, 1)
+
+    assert content_level_1.expected_production in prompt
+    assert "WHAT THIS LEVEL ASKS OF THE STUDENT" in prompt
+
+
+def test_evaluation_prompt_forbids_penalising_the_format_the_level_asks_for(monkeypatch):
+    prompt = _captured_evaluation_prompt(monkeypatch, 1)
+
+    assert "it is NOT a weakness" in prompt
+    assert "never mention its brevity as something to improve" in prompt
+    assert "Never present as" in prompt
+
+
+def test_evaluation_prompt_changes_with_the_level(monkeypatch):
+    level_1 = _captured_evaluation_prompt(monkeypatch, 1)
+    level_3 = _captured_evaluation_prompt(monkeypatch, 3)
+
+    assert Level.objects.get(order=3).expected_production in level_3
+    assert Level.objects.get(order=3).expected_production not in level_1
