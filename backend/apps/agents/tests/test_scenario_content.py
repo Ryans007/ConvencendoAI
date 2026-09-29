@@ -56,6 +56,21 @@ def test_interview_roles_carry_only_the_facts_their_function_would_know():
     assert "três etapas" not in tom.extra_instruction
 
 
+def test_content_carries_how_the_level_wants_the_persona_to_reply_to_the_student():
+    scenario = Scenario.objects.get(slug="entrevista-de-emprego")
+
+    replies = {
+        order: load_scenario_content(scenario, Level.objects.get(order=order)).reply_to_student
+        for order in (1, 2, 3)
+    }
+
+    assert "one short, simple sentence" in replies[1]
+    assert "closed question" in replies[1]
+    assert "invite the student to go on" not in replies[1]
+    assert "invite the student to go on" in replies[2]
+    assert "invite the student to go on" in replies[3]
+
+
 def test_other_scenarios_keep_roles_without_extra_instruction():
     scenario = Scenario.objects.get(slug="negociar-prazo")
 
