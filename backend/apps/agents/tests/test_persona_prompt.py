@@ -48,3 +48,48 @@ def test_technology_rule_restricts_the_persona_questions_not_the_answers():
 
     assert "into a\n  question you ask them" in prompt
     assert "you may state the facts you know about the scene" in prompt
+
+
+def _prompt(level_order: int = 1, **flags) -> str:
+    content = load_scenario_content(
+        Scenario.objects.get(slug="entrevista-de-emprego"), Level.objects.get(order=level_order)
+    )
+    return build_system_prompt(content, content.roles[0], memory="", **flags)
+
+
+def test_answer_first_rule_carries_the_level_instruction_for_replying():
+    level_one = _prompt(1)
+    level_three = _prompt(3)
+
+    assert "ANSWER THE STUDENT FIRST" in level_one
+    assert "Answer in one short, simple sentence." in level_one
+    assert "Answer with the detail the question needs" in level_three
+    assert "Answer with the detail the question needs" not in level_one
+
+
+def test_answer_first_rule_is_among_the_critical_rules():
+    prompt = _prompt(2)
+
+    assert prompt.index("\nCRITICAL RULES\n") < prompt.index("ANSWER THE STUDENT FIRST")
+    assert prompt.index("- QUESTION FORMAT (") < prompt.index("ANSWER THE STUDENT FIRST")
+
+
+def test_an_invitation_to_go_on_counts_as_the_turns_question():
+    prompt = _prompt(3)
+
+    assert 'An invitation to the student to go on' in prompt
+    assert "counts as this turn's question" in prompt
+
+
+def test_hint_rule_covers_a_line_that_ends_with_an_invitation():
+    prompt = _prompt(3)
+
+    assert "ends with an invitation instead of a question" in prompt
+
+
+def test_notice_that_the_student_is_talking_to_the_persona_appears_only_when_flagged():
+    assert "THE STUDENT IS TALKING TO YOU" not in _prompt(1)
+    flagged = _prompt(1, addressed_by_student=True)
+
+    assert "THE STUDENT IS TALKING TO YOU" in flagged
+    assert "do not\nhand the floor to the other character" in flagged

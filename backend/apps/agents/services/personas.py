@@ -51,6 +51,13 @@ message was an answer to them. React briefly to that answer (one short sentence)
 ask this turn's question to the student yourself. Do not hand the floor back in this line.
 """
 
+_ADDRESSED_BY_STUDENT_TEXT = """
+THE STUDENT IS TALKING TO YOU
+The student's last message was addressed to you, not to the other character. Answer it
+or react to it first, as described in CRITICAL RULES. This line closes the round: do not
+hand the floor to the other character.
+"""
+
 
 def build_system_prompt(
     content: ScenarioContent,
@@ -59,6 +66,7 @@ def build_system_prompt(
     adaptation_line: str = "",
     participation: SceneParticipation | None = None,
     taking_over: bool = False,
+    addressed_by_student: bool = False,
 ) -> str:
     """Monta o system prompt do papel para esta execução.
 
@@ -69,6 +77,12 @@ def build_system_prompt(
 
     Com `taking_over`, a persona está assumindo a conversa pelo equilíbrio de turno: a
     última fala do aluno respondeu a outro personagem, e é ela quem faz a transição.
+
+    Com `addressed_by_student`, o roteador reconheceu que o aluno falou com esta persona:
+    ela responde primeiro e fecha a rodada, sem passar a vez. A regra de responder ao que o
+    aluno diz vale mesmo sem a marca, porque uma pergunta feita sem nomear ninguém (por
+    exemplo, sobre os próximos passos) também é dirigida a quem está falando com ele; a
+    marca só reforça o caso em que há certeza.
 
     A instrução extra do papel, cadastrada no admin, entra num bloco próprio antes das
     regras: é onde o cenário dá à persona os fatos que ela precisa para responder ao
@@ -82,6 +96,7 @@ def build_system_prompt(
         others_text = "nobody else"
     participation_text = _participation_text(content, role, participation)
     taking_over_text = _TAKING_OVER_TEXT if taking_over else ""
+    addressed_text = _ADDRESSED_BY_STUDENT_TEXT if addressed_by_student else ""
     extra_instruction = role.extra_instruction.strip()
     extra_text = ""
     if extra_instruction:
@@ -172,7 +187,7 @@ character has their own area in this scene:
 - Never let both of you ask the student something in the same turn. If your
   line is addressed to the other character, it must not also pose a question
   to the student — leave that entirely to whoever speaks last this turn.
-{participation_text}{taking_over_text}
+{participation_text}{taking_over_text}{addressed_text}
 IF THE STUDENT ASKS FOR HELP
 If they ask how to say something, ask you to repeat, to speak more slowly, or
 say they did not understand: help them immediately and warmly, in character.
@@ -184,7 +199,13 @@ CRITICAL RULES
   {content.questions} This limit is per TURN, not per line: either you ask
   this turn's question yourself, or you hand the floor to the other character
   and THEY ask it. Express your resistance and your conditions to concede
-  ONLY within this format.
+  ONLY within this format. An invitation to the student to go on (for example,
+  "Anything else you'd like to know?") counts as this turn's question.
+- ANSWER THE STUDENT FIRST: when the student's last message asks YOU something
+  or makes a comment to YOU, your line starts by answering it or reacting to
+  it. Never skip it to ask your next question. How you do it at this level:
+  {content.reply_to_student} A plain answer to your own question is not a
+  reason to react at length: just continue the conversation.
 - Every question is about the student's own experience, preferences or
   situation — never about whether they know a concept, and never about a
   technology or tool they did not mention. Right: "Did you work in a team on
@@ -205,8 +226,10 @@ CRITICAL RULES
   you ever write in Portuguese. It tells the student how to answer YOUR
   question, in the answer format this level expects ({content.expected_production})
   — for example, which options they can choose from, or what the yes/no is
-  about. Write it about this specific question; never copy or describe the
-  level itself. Maximum 14 words. Never write the English sentence for them.
+  about. If your line ends with an invitation instead of a question, it suggests
+  what they could ask or say next. Write it about this specific line; never copy
+  or describe the level itself. Maximum 14 words. Never write the English
+  sentence for them.
 - "pass_to": "student" when this line is addressed to the student; one of
   {valid_keys} when this line is addressed to that character instead, and they
   should respond right now, in this same turn.
