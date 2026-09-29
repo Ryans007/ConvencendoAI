@@ -83,6 +83,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             "scene_resolved": False,
             "should_end": False,
             "taking_over": False,
+            "addressed_by_student": False,
         }
         await self._advance(initial_state, resume=None, started_at=time.monotonic())
 

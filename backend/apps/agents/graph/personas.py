@@ -103,6 +103,10 @@ def make_persona_node(content: ScenarioContent, memory: str):
       recebe a instrução de reagir à resposta do aluno e perguntar, e a passagem de vez
       dela nessa fala é ignorada: senão o aluno poderia ficar sem pergunta na rodada. A
       marca é desligada depois da fala.
+    - Quando o aluno chamou a persona (`addressed_by_student`), ela responde ao que ele
+      disse e fecha a rodada: passar a vez deixaria a resposta ao aluno no meio da rodada,
+      com a pergunta vindo de um personagem que ele não chamou. A marca também é
+      desligada depois da fala, em todos os caminhos de saída.
     """
     keys = content.role_keys()
     max_turns = content.max_turns
@@ -115,6 +119,7 @@ def make_persona_node(content: ScenarioContent, memory: str):
         adaptation_line = adaptation_hint(history)
         struggling = bool(adaptation_line)
         taking_over = bool(state.get("taking_over"))
+        addressed = bool(state.get("addressed_by_student"))
 
         if state.get("turn_count", 0) >= max_turns:
             text = generate_closing_line(content, role, history)
@@ -124,6 +129,7 @@ def make_persona_node(content: ScenarioContent, memory: str):
                 "current_speaker": key,
                 "scene_resolved": True,
                 "taking_over": False,
+                "addressed_by_student": False,
             }
 
         if state.get("turn_count", 0) == max_turns - 2 and content.closing_hint:
@@ -135,11 +141,18 @@ def make_persona_node(content: ScenarioContent, memory: str):
                     "messages": [AIMessage(content=f"[{role.name}] {text}")],
                     "current_speaker": key,
                     "taking_over": False,
+                    "addressed_by_student": False,
                 }
 
         participation = scene_participation(content, key, history)
         system = build_system_prompt(
-            content, role, memory, adaptation_line, participation, taking_over=taking_over
+            content,
+            role,
+            memory,
+            adaptation_line,
+            participation,
+            taking_over=taking_over,
+            addressed_by_student=addressed,
         )
         messages = conversation_messages(system, history)
 
@@ -147,6 +160,9 @@ def make_persona_node(content: ScenarioContent, memory: str):
         turn, text, pass_to = _generate_turn(llm, messages, role, history)
         if taking_over and pass_to in keys:
             print(f"[routing] {role.name} acabou de assumir; passagem de vez ignorada")
+            pass_to = "student"
+        elif addressed and pass_to in keys:
+            print(f"[routing] {role.name} foi chamado pelo aluno; passagem de vez ignorada")
             pass_to = "student"
 
         _speak(role, text)
@@ -191,6 +207,7 @@ def make_persona_node(content: ScenarioContent, memory: str):
             "current_speaker": next_key,
             "scene_resolved": resolved,
             "taking_over": False,
+            "addressed_by_student": False,
         }
 
     return node_persona

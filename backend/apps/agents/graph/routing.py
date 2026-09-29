@@ -30,6 +30,10 @@ def make_routing_node(content: ScenarioContent, rng: random.Random | None = None
     equilíbrio: se a persona da vez já conduziu rodadas seguidas demais, a rodada passa a
     outro personagem, e `taking_over` avisa quem entra que é ela quem faz a transição.
 
+    Sempre que reconhece um destinatário, liga `addressed_by_student`, inclusive quando
+    ele já era a persona da vez: a persona chamada responde ao que o aluno disse e fecha
+    a rodada, e sem essa marca ela não teria como saber que o aluno falou com ela.
+
     Sem modelo de roteamento configurado, ou se a chamada falhar por qualquer motivo, o
     nó trata como "sem destinatário" — o equilíbrio continua valendo, e a execução nunca
     é interrompida. `rng` é injetável para os testes controlarem o sorteio.
@@ -63,8 +67,12 @@ def make_routing_node(content: ScenarioContent, rng: random.Random | None = None
         if addressed is not None:
             if addressed != current:
                 print(f"[routing] aluno direcionou para {addressed} (era {current})")
-                return {"current_speaker": addressed, "taking_over": False}
-            return {}
+                return {
+                    "current_speaker": addressed,
+                    "taking_over": False,
+                    "addressed_by_student": True,
+                }
+            return {"addressed_by_student": True}
 
         history = list(state["messages"])
         rounds_led = scene_participation(content, current, history).consecutive_rounds_led

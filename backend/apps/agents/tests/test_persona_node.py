@@ -228,3 +228,96 @@ def test_second_persona_of_a_handoff_also_receives_text_with_the_handover_line(m
     assert len(second) == 2
     assert not any(isinstance(message, AIMessage) for message in second)
     assert f"[{rachel_name}] Tom, would you like to take over?" in second[1].content
+
+
+def _recording_llm(prompts: list, turn: PersonaTurn):
+    class _RecordingLLM:
+        def invoke(self, messages):
+            prompts.append(messages[0].content)
+            return turn
+
+    return _RecordingLLM()
+
+
+def test_persona_called_by_the_student_is_told_so_and_closes_the_round(monkeypatch):
+    content = _content()
+    rachel, tom = content.role_keys()
+    history = [
+        AIMessage(content=f"[{content.role(rachel).name}] Did you work in a team?"),
+        HumanMessage(content="Yes. And Tom, you already use PyTest."),
+    ]
+    prompts = []
+    turn = PersonaTurn(line="Yes, we use PyTest.", pass_to=rachel)
+    monkeypatch.setattr(
+        graph_personas, "get_structured_llm", lambda purpose, schema: _recording_llm(prompts, turn)
+    )
+    state = {**_state(history, tom), "addressed_by_student": True}
+
+    result = make_persona_node(content, "")(state)
+
+    assert "THE STUDENT IS TALKING TO YOU" in prompts[0]
+    assert len(prompts) == 1
+    assert [m.content for m in result["messages"]] == [
+        f"[{content.role(tom).name}] Yes, we use PyTest."
+    ]
+    assert result["current_speaker"] == tom
+    assert result["addressed_by_student"] is False
+
+
+def test_persona_not_called_by_the_student_gets_no_notice_and_may_hand_over(monkeypatch):
+    content = _content()
+    rachel, tom = content.role_keys()
+    history = [HumanMessage(content="Yes, I did.")]
+    prompts = []
+    turns = iter([
+        PersonaTurn(line="Tom, this one is for you.", pass_to=tom),
+        PersonaTurn(line="Did you write tests?", pass_to="student"),
+    ])
+
+    class _SequenceLLM:
+        def invoke(self, messages):
+            prompts.append(messages[0].content)
+            return next(turns)
+
+    monkeypatch.setattr(graph_personas, "get_structured_llm", lambda purpose, schema: _SequenceLLM())
+
+    result = make_persona_node(content, "")(_state(history, rachel))
+
+    assert "THE STUDENT IS TALKING TO YOU" not in prompts[0]
+    assert len(prompts) == 2
+    assert result["current_speaker"] == tom
+    assert result["addressed_by_student"] is False
+
+
+def test_the_mark_is_cleared_when_the_scene_closes_even_if_the_student_called_someone(monkeypatch):
+    content = _content()
+    key = content.role_keys()[0]
+    monkeypatch.setattr(graph_personas, "generate_closing_line", lambda *args: "Thank you.")
+    state = {
+        **_state([HumanMessage(content="Rachel, thank you.")], key),
+        "turn_count": content.max_turns,
+        "addressed_by_student": True,
+    }
+
+    result = make_persona_node(content, "")(state)
+
+    assert result["addressed_by_student"] is False
+
+
+def test_the_mark_is_cleared_on_the_closing_hint_turn(monkeypatch):
+    content = _content()
+    key = content.role_keys()[0]
+    monkeypatch.setattr(
+        graph_personas,
+        "generate_closing_hint_turn",
+        lambda *args: ("Any questions for us?", "Pergunte sobre a vaga."),
+    )
+    state = {
+        **_state([HumanMessage(content="Rachel, thank you.")], key),
+        "turn_count": content.max_turns - 2,
+        "addressed_by_student": True,
+    }
+
+    result = make_persona_node(content, "")(state)
+
+    assert result["addressed_by_student"] is False
