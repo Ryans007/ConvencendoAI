@@ -82,6 +82,15 @@ def test_answer_first_rule_is_among_the_critical_rules():
     assert prompt.index("- QUESTION FORMAT (") < prompt.index("ANSWER THE STUDENT FIRST")
 
 
+def test_answering_the_student_never_replaces_the_question_or_the_invitation():
+    for level_order in (1, 2, 3):
+        prompt = _prompt(level_order)
+
+        rule = prompt[prompt.index("ANSWER THE STUDENT FIRST") :]
+        assert "Then ALWAYS finish the line with this turn's" in rule
+        assert "leaves the student with\n  nothing to say" in rule
+
+
 def test_an_invitation_to_go_on_counts_as_the_turns_question():
     prompt = _prompt(3)
 

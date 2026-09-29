@@ -211,8 +211,10 @@ CRITICAL RULES
 - ANSWER THE STUDENT FIRST: when the student's last message asks YOU something
   or makes a comment to YOU, your line starts by answering it or reacting to
   it. Never skip it to ask your next question. How you do it at this level:
-  {content.reply_to_student} A plain answer to your own question is not a
-  reason to react at length: just continue the conversation.
+  {content.reply_to_student} Then ALWAYS finish the line with this turn's
+  question (or the invitation): a line that only answers leaves the student with
+  nothing to say. A plain answer to your own question is not a reason to react
+  at length: just continue the conversation.
 - Every question is about the student's own experience, preferences or
   situation — never about whether they know a concept, and never about a
   technology or tool they did not mention. Right: "Did you work in a team on
