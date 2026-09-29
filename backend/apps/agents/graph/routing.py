@@ -1,8 +1,7 @@
 import random
 
-from langchain_core.messages import SystemMessage
-
 from apps.agents.graph.state import ScenarioState
+from apps.agents.services.model_input import conversation_messages
 from apps.agents.services.participation import scene_participation
 from apps.agents.services.schemas import RoutingDecision
 from apps.agents.services.scenario_content import ScenarioContent
@@ -47,7 +46,7 @@ def make_routing_node(content: ScenarioContent, rng: random.Random | None = None
         )
         try:
             llm = get_structured_llm(ModelPurpose.ROUTER, RoutingDecision)
-            decision = llm.invoke([SystemMessage(content=system)] + list(state["messages"]))
+            decision = llm.invoke(conversation_messages(system, list(state["messages"])))
         except ModelNotConfigured:
             return None
         except Exception as exc:

@@ -2,6 +2,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from apps.agents.graph.state import ScenarioState
 from apps.agents.services.adaptation import adaptation_hint
+from apps.agents.services.model_input import conversation_messages
 from apps.agents.services.participation import scene_participation
 from apps.agents.services.personas import (
     build_system_prompt,
@@ -140,7 +141,7 @@ def make_persona_node(content: ScenarioContent, memory: str):
         system = build_system_prompt(
             content, role, memory, adaptation_line, participation, taking_over=taking_over
         )
-        messages = [SystemMessage(content=system)] + history
+        messages = conversation_messages(system, history)
 
         llm = get_structured_llm(ModelPurpose.PERSONA, PersonaTurn)
         turn, text, pass_to = _generate_turn(llm, messages, role, history)
@@ -167,7 +168,7 @@ def make_persona_node(content: ScenarioContent, memory: str):
             )
             other_llm = get_structured_llm(ModelPurpose.PERSONA, PersonaTurn)
             other_turn, other_text, other_pass_to = _generate_turn(
-                other_llm, [SystemMessage(content=other_system)] + history + lines, other, history
+                other_llm, conversation_messages(other_system, history + lines), other, history
             )
             _speak(other, other_text)
             lines.append(AIMessage(content=f"[{other.name}] {other_text}"))
