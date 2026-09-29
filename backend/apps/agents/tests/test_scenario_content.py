@@ -43,6 +43,27 @@ def test_load_scenario_content_applies_level_closing_hint_override_when_present(
     assert content.closing_hint == scenario.closing_hint
 
 
+def test_interview_roles_carry_only_the_facts_their_function_would_know():
+    scenario = Scenario.objects.get(slug="entrevista-de-emprego")
+
+    content = load_scenario_content(scenario, Level.objects.get(order=2))
+
+    rachel = content.role("rachel")
+    tom = content.role("tom")
+    assert "três etapas" in rachel.extra_instruction
+    assert "PyTest" not in rachel.extra_instruction
+    assert "PyTest" in tom.extra_instruction
+    assert "três etapas" not in tom.extra_instruction
+
+
+def test_other_scenarios_keep_roles_without_extra_instruction():
+    scenario = Scenario.objects.get(slug="negociar-prazo")
+
+    content = load_scenario_content(scenario, Level.objects.get(order=2))
+
+    assert all(role.extra_instruction == "" for role in content.roles)
+
+
 def test_load_scenario_content_scopes_criteria_to_comprehension_level():
     scenario = Scenario.objects.get(slug="problema-no-quarto")
     level = Level.objects.get(order=1)
