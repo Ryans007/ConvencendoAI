@@ -21,8 +21,14 @@ JUDGED_DIMENSIONS = [
 ]
 
 _DIMENSION_GUIDANCE = {
-    RubricDimension.FLUENCY: "length and smoothness of the student's utterances, hesitation.",
-    RubricDimension.VOCABULARY: "range and precision; penalise repetition of basic words.",
+    RubricDimension.FLUENCY: (
+        "smoothness and clarity of the student's utterances, and hesitation. Length only "
+        "counts when the level's format asks for developed answers."
+    ),
+    RubricDimension.VOCABULARY: (
+        "precision of the words used. Range and variety only count when the level's "
+        "format asks for developed answers; basic words are fine at the lower levels."
+    ),
     RubricDimension.GRAMMAR: "accuracy; count real errors, ignore transcription noise.",
     RubricDimension.PRAGMATICS: (
         "register appropriate to the role (politeness, firmness). If the student got "
@@ -39,9 +45,15 @@ CALIBRATION — READ FIRST
 This task was set at difficulty "{difficulty}", where the expected level is
 {expected_cefr}. Grade the linguistic dimensions RELATIVE to that level: a
 student who performs solidly at {expected_cefr} deserves around 80% of each
-maximum. Do not penalise them for not sounding like a C1 speaker, and do not
-penalise short answers that are appropriate and clear at their level. Reserve
+maximum. Do not penalise them for not sounding like a C1 speaker. Reserve
 low scores for what genuinely blocks communication.
+
+WHAT THIS LEVEL ASKS OF THE STUDENT
+"{expected_production}"
+Judge length, range and fluency AGAINST THIS FORMAT, not against free
+conversation. If the level asks for yes/no or short answers, a clear short
+answer is exactly what was asked: it is NOT a weakness, so do not lower any
+score for it and never mention its brevity as something to improve.
 
 TASK GOAL
 {objective}
@@ -67,7 +79,9 @@ Also decide:
 
 Also write:
 - "feedback": 2-3 sentences addressed to the student, in English, saying what
-  worked and the single most important thing to improve.
+  worked and the single most important thing to improve. Never present as
+  something to improve what the level's format asks for (for example, short
+  answers when the level asks for short answers).
 - "memory_summary": 3-4 very short factual notes in English about this
   student, to be remembered in a future conversation (role, project mentioned,
   commitments made, recurring language difficulty). Third person, no grades.
@@ -119,6 +133,7 @@ def evaluate(content: ScenarioContent, messages: list[BaseMessage]) -> Evaluatio
     prompt = _PROMPT.format(
         difficulty=content.difficulty_label,
         expected_cefr=content.expected_cefr,
+        expected_production=content.expected_production,
         objective=content.objective,
         criteria_status=criteria_status,
         transcript=transcript_text(messages),
