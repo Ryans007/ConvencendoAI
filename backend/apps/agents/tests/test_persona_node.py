@@ -153,3 +153,22 @@ def test_persona_not_taking_over_gets_no_entering_instruction(monkeypatch):
     make_persona_node(content, "")(_state([HumanMessage(content="Hi.")], key))
 
     assert "YOU ARE TAKING THE LEAD NOW" not in prompts[0]
+
+
+def test_handoff_instruction_has_no_ready_made_line_to_copy(monkeypatch):
+    content = _content()
+    key = content.role_keys()[0]
+    prompts = []
+
+    class _RecordingLLM:
+        def invoke(self, messages):
+            prompts.append(messages[0].content)
+            return PersonaTurn(line="Did you use Python?", pass_to="student")
+
+    monkeypatch.setattr(graph_personas, "get_structured_llm", lambda purpose, schema: _RecordingLLM())
+
+    make_persona_node(content, "")(_state([HumanMessage(content="Hi.")], key))
+
+    assert "SHARING THE CONVERSATION" in prompts[0]
+    assert "this is your area" not in prompts[0].lower()
+    assert "Any question?" not in prompts[0]
