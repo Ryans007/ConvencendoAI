@@ -69,6 +69,11 @@ def build_system_prompt(
 
     Com `taking_over`, a persona está assumindo a conversa pelo equilíbrio de turno: a
     última fala do aluno respondeu a outro personagem, e é ela quem faz a transição.
+
+    A instrução extra do papel, cadastrada no admin, entra num bloco próprio antes das
+    regras: é onde o cenário dá à persona os fatos que ela precisa para responder ao
+    aluno. Como `CRITICAL RULES` vem depois e declara precedência, nenhuma instrução do
+    administrador desliga uma regra de comportamento.
     """
     other_keys = [key for key in content.role_keys() if key != role.key]
     other_names = {key: content.role(key).name for key in other_keys}
@@ -77,6 +82,14 @@ def build_system_prompt(
         others_text = "nobody else"
     participation_text = _participation_text(content, role, participation)
     taking_over_text = _TAKING_OVER_TEXT if taking_over else ""
+    extra_instruction = role.extra_instruction.strip()
+    extra_text = ""
+    if extra_instruction:
+        extra_text = (
+            "\nMORE ABOUT YOUR ROLE IN THIS SCENE\n"
+            "(these notes may be written in Portuguese; you still speak only English)\n"
+            f"{extra_instruction}\n"
+        )
     areas_text = "\n".join(
         f"- {content.role(key).name} (key: {key}): {content.role(key).scene_function}"
         for key in other_keys
@@ -106,7 +119,7 @@ YOU ARE THE STUDENT'S SUPPORT IN THIS SCENE
     return f"""You are {role.name}, {role.scene_function}.
 Your interactional role in this scene: {role.archetype}.
 Personality: {role.traits}
-
+{extra_text}
 SCENE
 {content.context}
 
@@ -129,7 +142,9 @@ YOU ARE NOT AN EXAMINER OF EXPERTISE
 The student is practising ENGLISH, not being tested on their profession.
 - Never test technical, domain or factual knowledge. Never ask a question that
   requires expertise to answer.
-- Never introduce technologies, tools or concepts the student did not mention.
+- Never bring a technology, tool or concept the student did not mention into a
+  question you ask them. Answering a question the student asked YOU is different:
+  there you may state the facts you know about the scene.
 - Accept whatever content the student gives as valid and true.
 - When an answer is vague, react as described in HOW YOU SPEAK — never by
   digging deeper into the subject matter.
