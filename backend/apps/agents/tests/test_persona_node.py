@@ -172,3 +172,59 @@ def test_handoff_instruction_has_no_ready_made_line_to_copy(monkeypatch):
     assert "SHARING THE CONVERSATION" in prompts[0]
     assert "this is your area" not in prompts[0].lower()
     assert "Any question?" not in prompts[0]
+
+
+def test_persona_receives_the_conversation_as_one_text_message(monkeypatch):
+    content = _content()
+    key = content.role_keys()[0]
+    name = content.role(key).name
+    history = [
+        AIMessage(content=f"[{name}] Did you work in a team?"),
+        HumanMessage(content="Yes, I did."),
+        AIMessage(content=f"[{name}] Did you use Python?"),
+        HumanMessage(content="No, I didn't."),
+    ]
+    received = []
+
+    class _RecordingLLM:
+        def invoke(self, messages):
+            received.append(messages)
+            return PersonaTurn(line="Did you write tests?", pass_to="student")
+
+    monkeypatch.setattr(graph_personas, "get_structured_llm", lambda purpose, schema: _RecordingLLM())
+
+    make_persona_node(content, "")(_state(history, key))
+
+    assert len(received[0]) == 2
+    assert not any(isinstance(message, AIMessage) for message in received[0])
+    assert f"[{name}] Did you use Python?" in received[0][1].content
+    assert "Student: No, I didn't." in received[0][1].content
+
+
+def test_second_persona_of_a_handoff_also_receives_text_with_the_handover_line(monkeypatch):
+    content = _content()
+    rachel, tom = content.role_keys()
+    rachel_name = content.role(rachel).name
+    history = [
+        AIMessage(content=f"[{rachel_name}] Did you use Python?"),
+        HumanMessage(content="Yes, I did."),
+    ]
+    received = []
+    turns = iter([
+        PersonaTurn(line="Tom, would you like to take over?", pass_to=tom),
+        PersonaTurn(line="Sure. Did you write tests?", pass_to="student"),
+    ])
+
+    class _RecordingLLM:
+        def invoke(self, messages):
+            received.append(messages)
+            return next(turns)
+
+    monkeypatch.setattr(graph_personas, "get_structured_llm", lambda purpose, schema: _RecordingLLM())
+
+    make_persona_node(content, "")(_state(history, rachel))
+
+    second = received[1]
+    assert len(second) == 2
+    assert not any(isinstance(message, AIMessage) for message in second)
+    assert f"[{rachel_name}] Tom, would you like to take over?" in second[1].content
