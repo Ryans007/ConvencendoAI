@@ -306,14 +306,21 @@ def generate_closing_line(content: ScenarioContent, role: Role, history: list) -
 
 _CLOSING_HINT_PROMPT = """You are {name}, {scene_function}, talking to a student who is
 practising English. Keep your English simple.
-
+{facts}
 Last exchanges:
 {excerpt}
 
-Your next line MUST do exactly this:
+If the student's last message asked you something or made a comment to you, start with
+one short sentence that answers it or reacts to it. Then your line MUST do exactly this:
 {hint}
 
-One or two short sentences, in character. Nothing else."""
+At most three short sentences, in character. Nothing else."""
+
+_CLOSING_HINT_FACTS = """
+WHAT YOU KNOW ABOUT THIS SCENE (may be written in Portuguese; you speak only English).
+Use it only to answer the student, never to build your own question:
+{facts}
+"""
 
 
 def generate_closing_hint_turn(
@@ -325,10 +332,20 @@ def generate_closing_hint_turn(
     o padrão de perguntar dos turnos anteriores prevalece e a instrução é
     ignorada. Sem esta abertura, critérios que dependem de uma pergunta do
     aluno ficam inalcançáveis.
+
+    Por ser um prompt à parte, ele não herda a regra de responder ao aluno nem os fatos da
+    cena do papel: sem eles, uma pergunta do aluno que cai justamente nesta rodada seria
+    ignorada e a persona repetiria o convite. Por isso o prompt pede uma frase curta que
+    responda ou reaja antes do convite, e traz os fatos do papel quando há.
     """
+    extra_instruction = role.extra_instruction.strip()
+    facts = (
+        _CLOSING_HINT_FACTS.format(facts=extra_instruction) if extra_instruction else ""
+    )
     prompt = _CLOSING_HINT_PROMPT.format(
         name=role.name,
         scene_function=role.scene_function,
+        facts=facts,
         excerpt=transcript_text(history, last=3),
         hint=content.closing_hint,
     )

@@ -1,9 +1,12 @@
 from dataclasses import replace
 
 import pytest
+from langchain_core.messages import AIMessage, HumanMessage
 
-from apps.agents.services.personas import build_system_prompt
+from apps.agents.services import personas as personas_service
+from apps.agents.services.personas import build_system_prompt, generate_closing_hint_turn
 from apps.agents.services.scenario_content import load_scenario_content
+from apps.agents.services.schemas import ClosingHintTurn
 from apps.catalog.models import Level, Scenario
 
 pytestmark = pytest.mark.django_db
@@ -110,3 +113,50 @@ def test_notice_that_the_student_is_talking_to_the_persona_appears_only_when_fla
 
     assert "THE STUDENT IS TALKING TO YOU" in flagged
     assert "do not\nhand the floor to the other character" in flagged
+
+
+class _CapturingLLM:
+    def __init__(self, prompts: list):
+        self._prompts = prompts
+
+    def invoke(self, messages):
+        self._prompts.append(messages[0].content)
+        return ClosingHintTurn(line="Sure. Do you have any questions for us?", hint="dica")
+
+
+def _closing_hint_prompt(monkeypatch, extra_instruction: str) -> str:
+    content = _content()
+    role = replace(content.roles[0], extra_instruction=extra_instruction)
+    prompts = []
+    monkeypatch.setattr(
+        personas_service, "get_structured_llm", lambda purpose, schema: _CapturingLLM(prompts)
+    )
+    history = [
+        AIMessage(content="[Rachel] Tell me about your last project."),
+        HumanMessage(content="What are the next steps in the process?"),
+    ]
+
+    generate_closing_hint_turn(content, role, history)
+
+    return prompts[0]
+
+
+def test_closing_hint_turn_answers_the_student_before_the_invitation(monkeypatch):
+    prompt = _closing_hint_prompt(monkeypatch, _FACTS)
+
+    assert "What are the next steps in the process?" in prompt
+    assert "start with\none short sentence that answers it or reacts to it" in prompt
+    assert prompt.index("answers it or reacts to it") < prompt.index("MUST do exactly this")
+
+
+def test_closing_hint_turn_carries_the_role_facts_only_for_answering(monkeypatch):
+    prompt = _closing_hint_prompt(monkeypatch, _FACTS)
+
+    assert _FACTS in prompt
+    assert "Use it only to answer the student, never to build your own question" in prompt
+
+
+def test_closing_hint_turn_without_facts_has_no_facts_block(monkeypatch):
+    prompt = _closing_hint_prompt(monkeypatch, "")
+
+    assert "WHAT YOU KNOW ABOUT THIS SCENE" not in prompt
