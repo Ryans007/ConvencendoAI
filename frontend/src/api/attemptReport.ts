@@ -20,6 +20,8 @@ export interface AttemptReport {
   passed: boolean;
   feedback: string;
   completed_at: string;
+  hints_enabled: boolean;
+  hints_used: number;
   score_breakdowns: ScoreBreakdown[];
   criteria: AttemptCriterion[];
 }

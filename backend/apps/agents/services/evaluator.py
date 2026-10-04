@@ -4,7 +4,7 @@ from langchain_core.messages import BaseMessage, HumanMessage
 
 from apps.agents.services.scenario_content import ScenarioContent
 from apps.agents.services.schemas import EvaluationResult, ReviewItem
-from apps.agents.services.transcript import transcript_text
+from apps.agents.services.transcript import answered_after_hint, transcript_text
 from apps.catalog.constants import RubricDimension
 from apps.llm.constants import ModelPurpose
 from apps.llm.services.factory import get_structured_llm
@@ -37,6 +37,15 @@ _DIMENSION_GUIDANCE = {
     RubricDimension.AUTONOMY: "did the student ask for help, switch to Portuguese, or give up?",
 }
 
+_HINTS_NOTE = """
+SUGGESTED ANSWERS
+Turns marked "Student (after a suggested answer)" came after the student asked for help
+and saw a suggested answer, written in Portuguese, which they then said in English. Count
+those turns as less autonomous in the autonomy score, in proportion to how many there
+are. Judge every other dimension, and the acceptance criteria, exactly as for any other
+turn: saying the suggestion in English is still the student's own English.
+"""
+
 _PROMPT = """You are a strict but fair English examiner. You will grade a
 student's performance in a role-play task. The student is a Brazilian
 professional practising spoken English.
@@ -63,7 +72,7 @@ ACCEPTANCE CRITERIA AND WHAT THE STUDENT ACHIEVED
 
 TRANSCRIPT (the student's turns are marked "Student:")
 {transcript}
-
+{hints_note}
 Grade ONLY these dimensions, each from 0 up to its maximum:
 {dimensions}
 
@@ -120,6 +129,10 @@ def evaluate(content: ScenarioContent, messages: list[BaseMessage]) -> Evaluatio
     É a única etapa que valida os critérios de aceite — uma chamada ao modelo, ao
     fim da execução. As sub-notas voltam sempre limitadas ao peso da dimensão, para
     nunca confiar na aritmética do modelo.
+
+    As falas que o aluno deu depois de ver uma dica saem marcadas na transcrição, e só
+    quando há alguma o prompt explica a marca: ela pesa apenas na autonomia, porque dizer
+    em inglês a sugestão em português continua sendo o inglês do próprio aluno.
     """
     criteria_status = "\n".join(f"- {c.code}: {c.text}" for c in content.criteria)
     dimensions_text = "\n".join(
@@ -136,7 +149,8 @@ def evaluate(content: ScenarioContent, messages: list[BaseMessage]) -> Evaluatio
         expected_production=content.expected_production,
         objective=content.objective,
         criteria_status=criteria_status,
-        transcript=transcript_text(messages),
+        transcript=transcript_text(messages, mark_hints=True),
+        hints_note=_HINTS_NOTE if any(answered_after_hint(m) for m in messages) else "",
         dimensions=dimensions_text,
         guidance=guidance_text,
     )

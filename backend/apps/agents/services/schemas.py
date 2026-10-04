@@ -2,15 +2,18 @@ from pydantic import BaseModel, Field
 
 
 class PersonaTurn(BaseModel):
-    """Saída estruturada de um turno de persona: fala, dica e roteamento da cena.
+    """Saída estruturada de um turno de persona: fala e roteamento da cena.
 
     Todo campo tem um default seguro: o modelo às vezes devolve uma chamada de
     ferramenta com campo ausente, e a falta de `line` já é tratada pelo chamador como
     um turno vazio a pular, não como erro.
+
+    Não tem dica para o aluno: uma dica útil precisa dos critérios do cenário, que a
+    persona não recebe, e pedir ao mesmo modelo, na mesma saída, o que o aluno deveria
+    responder leva a persona a falar pelo aluno.
     """
 
     line: str = Field(default="", description="The character's spoken line, in English")
-    hint: str = Field(default="", description="Short hint for the student, in Portuguese")
     pass_to: str = Field(
         default="student",
         description=(
@@ -42,17 +45,21 @@ class RoutingDecision(BaseModel):
     )
 
 
+class SuggestedAnswer(BaseModel):
+    """Saída estruturada do tutor: a resposta que o aluno poderia dar, em português."""
+
+    text: str = Field(
+        default="",
+        description=(
+            "The answer the student could give, written in Portuguese, in the first person"
+        ),
+    )
+
+
 class ClosingLine(BaseModel):
     """Saída estruturada da fala de fechamento, quando os turnos se esgotam."""
 
     line: str = Field(default="", description="The character's final line, in English")
-
-
-class ClosingHintTurn(BaseModel):
-    """Saída estruturada da fala que abre a oportunidade dos critérios de aceite."""
-
-    line: str = Field(default="", description="The character's line, in English")
-    hint: str = Field(default="", description="Short hint for the student, in Portuguese")
 
 
 class ReviewItem(BaseModel):

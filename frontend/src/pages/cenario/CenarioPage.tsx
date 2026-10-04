@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { AvatarPlaceholder } from "../../components/AvatarPlaceholder";
@@ -5,13 +6,19 @@ import { LogoutLink } from "../../components/LogoutLink";
 import { useScenarioBriefing } from "../../hooks/useScenarioBriefing";
 import type { ReportContext } from "../relatorio/reportContext";
 
-/** Tela de briefing: o que o aluno precisa saber antes de comecar um cenario e nivel. */
+/**
+ * Tela de briefing: o que o aluno precisa saber antes de comecar um cenario e nivel.
+ *
+ * A opcao de dicas comeca desligada toda vez que o briefing abre: o aluno decide, sessao a
+ * sessao, se quer o apoio, e a escolha vai para a sessao no estado de navegacao.
+ */
 export default function CenarioPage() {
   const { scenarioSlug = "", levelOrder = "" } = useParams();
   const level = Number(levelOrder);
   const navigate = useNavigate();
   const location = useLocation();
   const trackTitle = (location.state as { trackTitle?: string } | null)?.trackTitle;
+  const [hintsEnabled, setHintsEnabled] = useState(false);
 
   const { data: briefing, isLoading, isError } = useScenarioBriefing(scenarioSlug, level);
 
@@ -86,6 +93,22 @@ export default function CenarioPage() {
               </div>
             )}
 
+            <label className="mb-6 flex cursor-pointer items-start gap-3 rounded-card border border-line bg-surface p-5 shadow-card">
+              <input
+                type="checkbox"
+                checked={hintsEnabled}
+                onChange={(event) => setHintsEnabled(event.target.checked)}
+                className="mt-1 h-4 w-4 accent-brand"
+              />
+              <span className="flex flex-col gap-1">
+                <span className="text-scenario font-medium text-ink">Quero ter dicas nesta sessão</span>
+                <span className="text-aux leading-relaxed text-ink-muted">
+                  Na sua vez de falar, você poderá ver uma sugestão de resposta em português para dizer
+                  em inglês. As dicas usadas aparecem no relatório.
+                </span>
+              </span>
+            </label>
+
             <button
               type="button"
               onClick={() => {
@@ -95,7 +118,7 @@ export default function CenarioPage() {
                   trackTitle,
                 };
                 navigate(`/sessao/${scenarioSlug}/${level}`, {
-                  state: { maxTurns: briefing.max_turns, reportContext },
+                  state: { maxTurns: briefing.max_turns, reportContext, hintsEnabled },
                 });
               }}
               className="w-full rounded-pill bg-brand px-6 py-[18px] text-scenario font-semibold text-white shadow-card-focus"

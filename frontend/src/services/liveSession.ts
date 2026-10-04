@@ -20,6 +20,13 @@ export interface LiveSessionResult {
   passed: boolean;
 }
 
+export type SessionHintStatus = "idle" | "loading" | "shown" | "unavailable";
+
+export interface SessionHint {
+  status: SessionHintStatus;
+  text: string | null;
+}
+
 export interface LiveSessionState {
   phase: LiveSessionPhase;
   turnCount: number;
@@ -27,17 +34,21 @@ export interface LiveSessionState {
   errorCode: string | null;
   result: LiveSessionResult | null;
   noSpeechNotice: boolean;
+  hint: SessionHint;
 }
+
+export const NO_HINT: SessionHint = { status: "idle", text: null };
 
 type Listener = (state: LiveSessionState) => void;
 
 interface ControlMessage {
-  type: "session_ended" | "error" | "no_speech" | "evaluating";
+  type: "session_ended" | "error" | "no_speech" | "evaluating" | "hint" | "hint_unavailable";
   attempt_id?: number;
   final_score?: number;
   passed?: boolean;
   message?: string;
   code?: string;
+  text?: string;
 }
 
 interface PendingOutcome {
@@ -66,6 +77,7 @@ export class LiveSession {
     errorCode: null,
     result: null,
     noSpeechNotice: false,
+    hint: NO_HINT,
   };
 
   private readonly audioQueue: Blob[] = [];
@@ -78,9 +90,13 @@ export class LiveSession {
   private recorder: MediaRecorder | null = null;
   private recordedChunks: Blob[] = [];
 
-  constructor(scenarioSlug: string, levelOrder: number) {
+  private readonly hintsEnabled: boolean;
+
+  constructor(scenarioSlug: string, levelOrder: number, hintsEnabled = false) {
     const token = getAccessToken() ?? "";
-    const url = `${wsBaseUrl}/voice/${scenarioSlug}/${levelOrder}/?token=${encodeURIComponent(token)}`;
+    const hintsParam = hintsEnabled ? "&hints=1" : "";
+    const url = `${wsBaseUrl}/voice/${scenarioSlug}/${levelOrder}/?token=${encodeURIComponent(token)}${hintsParam}`;
+    this.hintsEnabled = hintsEnabled;
     this.socket = new WebSocket(url);
     this.socket.binaryType = "arraybuffer";
     this.socket.addEventListener("open", () => this.setState({ phase: "persona-speaking" }));
@@ -108,6 +124,14 @@ export class LiveSession {
       const payload = JSON.parse(event.data) as ControlMessage;
       if (payload.type === "no_speech") {
         this.setState({ phase: "student-turn", noSpeechNotice: true });
+        return;
+      }
+      if (payload.type === "hint") {
+        this.setState({ hint: { status: "shown", text: payload.text ?? null } });
+        return;
+      }
+      if (payload.type === "hint_unavailable") {
+        this.setState({ hint: { status: "unavailable", text: null } });
         return;
       }
       if (payload.type === "evaluating") {
@@ -250,8 +274,24 @@ export class LiveSession {
 
     blob.arrayBuffer().then((buffer) => {
       this.socket.send(buffer);
-      this.setState({ phase: "persona-speaking" });
+      this.setState({ phase: "persona-speaking", hint: NO_HINT });
     });
+  }
+
+  /**
+   * Pede ao servidor a dica da vez atual. So vale numa sessao aberta com as dicas ligadas,
+   * na vez do aluno, e uma vez por vez: com a dica ja pedida ou visivel, nada e enviado
+   * de novo. A dica volta a "idle" quando o aluno envia a resposta.
+   */
+  requestHint(): void {
+    if (!this.hintsEnabled || this.state.phase !== "student-turn") {
+      return;
+    }
+    if (this.state.hint.status === "loading" || this.state.hint.status === "shown") {
+      return;
+    }
+    this.setState({ hint: { status: "loading", text: null } });
+    this.socket.send(JSON.stringify({ type: "hint_request" }));
   }
 
   /** O aluno decide sair antes do fim: encerra a conexao, sem produzir relatorio. */

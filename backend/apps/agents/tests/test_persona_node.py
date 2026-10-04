@@ -309,8 +309,8 @@ def test_the_mark_is_cleared_on_the_closing_hint_turn(monkeypatch):
     key = content.role_keys()[0]
     monkeypatch.setattr(
         graph_personas,
-        "generate_closing_hint_turn",
-        lambda *args: ("Any questions for us?", "Pergunte sobre a vaga."),
+        "generate_closing_hint_line",
+        lambda *args: "Any questions for us?",
     )
     state = {
         **_state([HumanMessage(content="Rachel, thank you.")], key),
@@ -353,7 +353,11 @@ def test_resolved_scene_with_a_question_in_the_line_is_closed_without_it(monkeyp
         AIMessage(content=f"[{name}] Does the new date work for you?"),
         HumanMessage(content="Yes, it works."),
     ]
-    turn = PersonaTurn(line="We will set June 30th. Do you need any resources?", pass_to="student", scene_resolved=True, hint="Responda sim ou não.")
+    turn = PersonaTurn(
+        line="We will set June 30th. Do you need any resources?",
+        pass_to="student",
+        scene_resolved=True,
+    )
     monkeypatch.setattr(
         graph_personas, "get_structured_llm", lambda purpose, schema: _resolving_llm([], turn)
     )

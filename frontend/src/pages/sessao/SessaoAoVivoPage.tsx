@@ -6,6 +6,7 @@ import { LogoutLink } from "../../components/LogoutLink";
 import { useLiveSession } from "../../hooks/useLiveSession";
 import { sessionErrorMessage } from "../../services/sessionErrors";
 import type { ReportContext } from "../relatorio/reportContext";
+import { HintPanel } from "./HintPanel";
 
 const ENDED_TRANSITION_MS = 1400;
 
@@ -13,18 +14,24 @@ const ENDED_TRANSITION_MS = 1400;
  * Tela de sessao ao vivo: o aluno fala com as personas em tempo real, um turno por vez.
  *
  * Em caso de erro, o motivo tecnico vai so para o console, para quem esta depurando — o
- * aluno ve apenas a mensagem generica.
+ * aluno ve a mensagem correspondente ao codigo do erro. Com as dicas ligadas no briefing,
+ * a vez do aluno oferece a dica, unico texto que a tela mostra durante a sessao.
  */
 export default function SessaoAoVivoPage() {
   const { scenarioSlug = "", levelOrder = "" } = useParams();
   const level = Number(levelOrder);
   const navigate = useNavigate();
   const location = useLocation();
-  const navState = location.state as { maxTurns?: number; reportContext?: ReportContext } | null;
+  const navState = location.state as {
+    maxTurns?: number;
+    reportContext?: ReportContext;
+    hintsEnabled?: boolean;
+  } | null;
   const maxTurns = navState?.maxTurns ?? null;
   const reportContext = navState?.reportContext;
+  const hintsEnabled = navState?.hintsEnabled ?? false;
 
-  const session = useLiveSession(scenarioSlug, level);
+  const session = useLiveSession(scenarioSlug, level, hintsEnabled);
   const {
     phase,
     turnCount,
@@ -32,9 +39,11 @@ export default function SessaoAoVivoPage() {
     errorCode,
     result,
     noSpeechNotice,
+    hint,
     startRecording,
     stopRecording,
     leaveEarly,
+    requestHint,
   } = session;
 
   useEffect(() => {
@@ -121,6 +130,10 @@ export default function SessaoAoVivoPage() {
                 {recording ? "Solte para enviar" : "Segure para falar"}
               </span>
             </div>
+          )}
+
+          {hintsEnabled && studentTurn && (
+            <HintPanel hint={hint} canRequest={!recording} onRequest={requestHint} />
           )}
         </div>
       )}

@@ -7,13 +7,12 @@ from apps.agents.services.participation import scene_participation
 from apps.agents.services.personas import (
     build_system_prompt,
     fallback_line,
-    generate_closing_hint_turn,
+    generate_closing_hint_line,
     generate_closing_line,
     sanitize_line,
 )
 from apps.agents.services.schemas import PersonaTurn
 from apps.agents.services.scenario_content import Role, ScenarioContent
-from apps.catalog.models.level import HintPolicy
 from apps.llm.constants import ModelPurpose
 from apps.llm.services.factory import get_structured_llm
 
@@ -46,18 +45,6 @@ def _generate_turn(
     return turn, fallback_line(role, history), "student"
 
 
-def _show_hint(content: ScenarioContent, hint: str, struggling: bool) -> None:
-    """Imprime a dica de contexto na tela (nunca é falada)."""
-    hint = (hint or "").strip()
-    if not hint:
-        return
-    if content.hints_policy == HintPolicy.NEVER:
-        return
-    if content.hints_policy == HintPolicy.WHEN_STUCK and not struggling:
-        return
-    print(f"    (hint: {hint})")
-
-
 def make_opening_node(content: ScenarioContent, memory: str):
     """Nó de abertura: a primeira persona inicia a cena.
 
@@ -79,7 +66,6 @@ def make_opening_node(content: ScenarioContent, memory: str):
 
         text = sanitize_line(turn.line) or "Hello. Let's get started."
         _speak(role, text)
-        _show_hint(content, turn.hint, struggling=True)
 
         return {
             "messages": [AIMessage(content=f"[{role.name}] {text}")],
@@ -123,7 +109,6 @@ def make_persona_node(content: ScenarioContent, memory: str):
 
         history = list(state["messages"])
         adaptation_line = adaptation_hint(history)
-        struggling = bool(adaptation_line)
         taking_over = bool(state.get("taking_over"))
         addressed = bool(state.get("addressed_by_student"))
 
@@ -139,10 +124,9 @@ def make_persona_node(content: ScenarioContent, memory: str):
             }
 
         if state.get("turn_count", 0) == max_turns - 2 and content.closing_hint:
-            text, hint = generate_closing_hint_turn(content, role, history)
+            text = generate_closing_hint_line(content, role, history)
             if text:
                 _speak(role, text)
-                _show_hint(content, hint, struggling)
                 return {
                     "messages": [AIMessage(content=f"[{role.name}] {text}")],
                     "current_speaker": key,
@@ -179,7 +163,6 @@ def make_persona_node(content: ScenarioContent, memory: str):
 
         lines = [AIMessage(content=f"[{role.name}] {text}")]
         speaker = role
-        pending_hint = turn.hint
         resolved = turn.scene_resolved
 
         next_key = pass_to
@@ -196,7 +179,6 @@ def make_persona_node(content: ScenarioContent, memory: str):
             _speak(other, other_text)
             lines.append(AIMessage(content=f"[{other.name}] {other_text}"))
             speaker = other
-            pending_hint = other_turn.hint or pending_hint
             resolved = resolved or other_turn.scene_resolved
             print(
                 f"[routing] handoff current_speaker={next_key} "
@@ -215,9 +197,7 @@ def make_persona_node(content: ScenarioContent, memory: str):
             closing = generate_closing_line(content, speaker, history + lines[:-1])
             _speak(speaker, closing)
             lines[-1] = AIMessage(content=f"[{speaker.name}] {closing}")
-            pending_hint = ""
 
-        _show_hint(content, pending_hint, struggling)
         print(f"[routing] next round current_speaker={next_key}")
 
         return {

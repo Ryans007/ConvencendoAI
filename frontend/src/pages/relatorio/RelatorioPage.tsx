@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { useAttemptReport } from "../../hooks/useAttemptReport";
 import { DIMENSION_LABELS } from "./dimensionLabels";
+import { hintsUsageText } from "./hintsUsage";
 import { prettifySlug, type ReportContext } from "./reportContext";
 
 /** Tela de relatório: nota final, sub-notas por dimensão e critérios de uma tentativa. */
@@ -89,6 +90,12 @@ export default function RelatorioPage() {
                 </span>
                 <p className="text-scenario leading-relaxed text-ink">{report.feedback}</p>
               </div>
+
+              {hintsUsageText(report.hints_enabled, report.hints_used) && (
+                <span className="text-aux text-ink-muted">
+                  {hintsUsageText(report.hints_enabled, report.hints_used)}
+                </span>
+              )}
             </div>
 
             <div className="mb-6 flex flex-col gap-5 rounded-card border border-line bg-surface p-7 shadow-card">

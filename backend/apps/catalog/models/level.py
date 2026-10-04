@@ -3,14 +3,6 @@ from django.db import models
 from apps.catalog.constants import RubricDimension
 
 
-class HintPolicy(models.TextChoices):
-    """Política de exibição de dicas de contexto na tela durante a sessão."""
-
-    ALWAYS = "always", "Sempre"
-    WHEN_STUCK = "when_stuck", "Quando o aluno travar"
-    NEVER = "never", "Nunca"
-
-
 class Level(models.Model):
     """Um dos três níveis de dificuldade: eixo único de produção esperada do aluno e de
     comportamento da persona, os dois acoplados por construção, não por escolha
@@ -38,7 +30,6 @@ class Level(models.Model):
         ),
     )
     scaffolding_enabled = models.BooleanField(default=False)
-    hints = models.CharField(max_length=20, choices=HintPolicy.choices)
     max_turns = models.PositiveSmallIntegerField()
     expected_cefr = models.CharField(max_length=20)
 

@@ -12,6 +12,9 @@ class Attempt(models.Model):
     diferente: notas de níveis distintos não são comparáveis entre si. Nasce ao
     início da sessão, com `started_at`; os campos de resultado ficam vazios até o
     avaliador concluir, quando `completed_at` é preenchido.
+
+    `hints_enabled` e `hints_used` registram o apoio que o aluno escolheu ter: a dica não
+    entra na nota, mas a auditoria precisa ver quanto o aluno dependeu dela.
     """
 
     user = models.ForeignKey(
@@ -23,6 +26,16 @@ class Attempt(models.Model):
     passed = models.BooleanField(null=True, blank=True)
     memory_summary = models.TextField(blank=True)
     feedback = models.TextField(blank=True)
+    hints_enabled = models.BooleanField(
+        default=False,
+        verbose_name="dicas ligadas",
+        help_text="O aluno começou a sessão com as dicas ligadas.",
+    )
+    hints_used = models.PositiveSmallIntegerField(
+        default=0,
+        verbose_name="dicas usadas",
+        help_text="Quantas dicas o aluno pediu na sessão, no máximo uma por vez dele.",
+    )
     started_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 

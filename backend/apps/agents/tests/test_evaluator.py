@@ -118,3 +118,47 @@ def test_evaluation_prompt_changes_with_the_level(monkeypatch):
 
     assert Level.objects.get(order=3).expected_production in level_3
     assert Level.objects.get(order=3).expected_production not in level_1
+
+
+def _prompt_for(monkeypatch, messages) -> str:
+    content = load_scenario_content(
+        Scenario.objects.get(slug="entrevista-de-emprego"), Level.objects.get(order=3)
+    )
+    prompts = []
+
+    class _RecordingLLM:
+        def invoke(self, received):
+            prompts.append(received[0].content)
+            return EvaluationResult()
+
+    monkeypatch.setattr(evaluator, "get_structured_llm", lambda purpose, schema: _RecordingLLM())
+    evaluator.evaluate(content, messages)
+    return prompts[0]
+
+
+def test_answers_after_a_hint_are_marked_and_explained_only_for_autonomy(monkeypatch):
+    prompt = _prompt_for(
+        monkeypatch,
+        [
+            AIMessage(content="[Tom] What decision did you make?"),
+            HumanMessage(content="I chose PostgreSQL.", additional_kwargs={"after_hint": True}),
+            AIMessage(content="[Rachel] Did you work in a team?"),
+            HumanMessage(content="Yes, four of us."),
+        ],
+    )
+
+    assert "Student (after a suggested answer): I chose PostgreSQL." in prompt
+    assert "Student: Yes, four of us." in prompt
+    assert "SUGGESTED ANSWERS" in prompt
+    assert "less autonomous in the autonomy score" in prompt
+    assert "Judge every other dimension, and the acceptance criteria, exactly as" in prompt
+
+
+def test_without_hints_the_prompt_has_no_hint_section(monkeypatch):
+    prompt = _prompt_for(
+        monkeypatch,
+        [AIMessage(content="[Tom] What decision did you make?"), HumanMessage(content="Postgres.")],
+    )
+
+    assert "SUGGESTED ANSWERS" not in prompt
+    assert "after a suggested answer" not in prompt

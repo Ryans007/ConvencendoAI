@@ -8,6 +8,7 @@ from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
+from django.db.models import F
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
@@ -17,7 +18,10 @@ from rest_framework_simplejwt.tokens import AccessToken
 from apps.agents.graph.builder import build_scenario_graph
 from apps.agents.graph.listen import listen_live
 from apps.agents.services.session_runner import evaluate_and_record_attempt, resolve_execution
+from apps.agents.services.transcript import AFTER_HINT_KEY
+from apps.agents.services.tutor import suggest_answer
 from apps.catalog.models import Level, Scenario
+from apps.progress.models import Attempt
 from apps.llm.services.factory import log_active_models
 from apps.voice.services.failures import (
     FAILURE_DESCRIPTIONS,
@@ -49,13 +53,21 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
     """
 
     async def connect(self) -> None:
+        """Autentica o aluno, abre a tentativa e faz a persona abrir a cena.
+
+        `?hints=1` na URL diz que o aluno ligou as dicas no briefing: só assim os pedidos
+        de dica são atendidos, e a tentativa registra a escolha.
+        """
         self.scene_over = False
+        self.hints_enabled = False
+        self.current_hint: str | None = None
         await self.accept()
 
         scenario_slug = self.scope["url_route"]["kwargs"]["scenario_slug"]
         level_order = self.scope["url_route"]["kwargs"]["level_order"]
         query = parse_qs(self.scope["query_string"].decode())
         token = (query.get("token") or [None])[0]
+        hints_requested = (query.get("hints") or ["0"])[0] == "1"
 
         if not token:
             await self._fail("Parâmetro 'token' é obrigatório na URL.")
@@ -78,6 +90,11 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         self.content = content
         self.attempt = attempt
         self.seen_messages = 0
+        if hints_requested:
+            await sync_to_async(
+                Attempt.objects.filter(pk=attempt.pk).update
+            )(hints_enabled=True)
+            self.hints_enabled = True
         self.graph = build_scenario_graph(
             content, memory, listen_node=listen_live, checkpointer=MemorySaver()
         )
@@ -107,8 +124,14 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         Depois do fim da cena, o áudio é ignorado antes mesmo de transcrever: os handlers
         rodam um de cada vez, então um áudio que chegou durante a avaliação só é
         processado depois dela, e retomá-lo avaliaria e gravaria a tentativa de novo.
+
+        Mensagens de texto são pedidos do cliente; o único que existe é o pedido de dica.
+        Quando o aluno viu uma dica nesta vez, a fala dele segue marcada para o grafo, e
+        a dica da vez é esquecida: a próxima vez começa sem dica.
         """
         if bytes_data is None:
+            if text_data is not None:
+                await self._handle_client_message(text_data)
             return
         if self.scene_over:
             print("[session] audio recebido depois do fim da cena; ignorado")
@@ -129,10 +152,50 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
 
         print(f"You: {text}")
 
-        await self._advance(None, resume=text, started_at=started_at)
+        resume = {"text": text, AFTER_HINT_KEY: True} if self.current_hint else text
+        self.current_hint = None
+        await self._advance(None, resume=resume, started_at=started_at)
+
+    async def _handle_client_message(self, text_data: str) -> None:
+        """Atende uma mensagem de texto do cliente; mensagens desconhecidas são ignoradas."""
+        try:
+            message = json.loads(text_data)
+        except json.JSONDecodeError:
+            return
+        if isinstance(message, dict) and message.get("type") == "hint_request":
+            await self._answer_hint_request()
+
+    async def _answer_hint_request(self) -> None:
+        """Manda ao aluno a dica da vez atual, gerando-a na primeira vez que ele pede.
+
+        Só vale numa sessão aberta com as dicas ligadas e antes do fim da cena. A dica da
+        vez fica guardada: pedir de novo devolve a mesma, sem nova chamada ao modelo nem
+        nova contagem. Se o tutor falhar ou não produzir nada, o aluno é avisado de que a
+        dica não está disponível e a sessão segue, porque a dica é um apoio, não uma etapa
+        da conversa; nesse caso nada é contado.
+        """
+        if not self.hints_enabled or self.scene_over:
+            return
+        if self.current_hint is None:
+            snapshot = await self.graph.aget_state(self.thread_config)
+            history = list(snapshot.values.get("messages") or [])
+            try:
+                suggestion = await sync_to_async(suggest_answer)(self.content, history)
+            except Exception as exc:
+                logger.error("Dica não gerada", exc_info=exc)
+                suggestion = ""
+            if not suggestion:
+                await self.send(text_data=json.dumps({"type": "hint_unavailable"}))
+                return
+            self.current_hint = suggestion
+            await sync_to_async(
+                Attempt.objects.filter(pk=self.attempt.pk).update
+            )(hints_used=F("hints_used") + 1)
+            print(f"[hint] {suggestion}")
+        await self.send(text_data=json.dumps({"type": "hint", "text": self.current_hint}))
 
     async def _advance(
-        self, initial_state: dict | None, *, resume: str | None, started_at: float
+        self, initial_state: dict | None, *, resume: str | dict | None, started_at: float
     ) -> None:
         """Roda o grafo até a próxima pausa e fala as novas mensagens.
 
