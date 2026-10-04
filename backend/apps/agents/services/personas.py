@@ -3,7 +3,7 @@ import re
 from langchain_core.messages import HumanMessage
 
 from apps.agents.services.participation import SceneParticipation
-from apps.agents.services.schemas import ClosingHintTurn, ClosingLine
+from apps.agents.services.schemas import ClosingLine
 from apps.agents.services.scenario_content import Role, ScenarioContent
 from apps.agents.services.transcript import transcript_text
 from apps.llm.constants import ModelPurpose
@@ -223,8 +223,7 @@ CRITICAL RULES
   technology or tool they did not mention. Right: "Did you work in a team on
   that project?" Wrong: "Do you know what a JOIN is?"
 - Never answer your own question, and never say what the student should
-  answer. Your line is only YOUR part of the conversation; the kind of answer
-  expected goes only in the hint.
+  answer. Your line is only YOUR part of the conversation.
 - Stay in character. You are NOT an English teacher and you never grade or
   correct the student's grammar or vocabulary.
 - Speak DIRECTLY to the student (use "you") in every line, UNLESS you are
@@ -234,14 +233,6 @@ CRITICAL RULES
 - Never reveal what the student must do to succeed. Do not coach the task.
 - Speak ONLY as {role.name}.
 
-- "hint": help for the student, written in PORTUGUESE. This is the only text
-  you ever write in Portuguese. It tells the student how to answer YOUR
-  question, in the answer format this level expects ({content.expected_production})
-  — for example, which options they can choose from, or what the yes/no is
-  about. If your line ends with an invitation instead of a question, it suggests
-  what they could ask or say next. Write it about this specific line; never copy
-  or describe the level itself. Maximum 14 words. Never write the English
-  sentence for them.
 - "pass_to": "student" when this line is addressed to the student; one of
   {valid_keys} when this line is addressed to that character instead, and they
   should respond right now, in this same turn.
@@ -316,7 +307,7 @@ Last exchanges:
 
 If the student's last message asked you something or made a comment to you, start with
 one short sentence that answers it or reacts to it. Then your line MUST do exactly this:
-{hint}
+{closing_instruction}
 
 At most three short sentences, in character. Nothing else."""
 
@@ -327,9 +318,7 @@ Use it only to answer the student, never to build your own question:
 """
 
 
-def generate_closing_hint_turn(
-    content: ScenarioContent, role: Role, history: list
-) -> tuple[str, str]:
+def generate_closing_hint_line(content: ScenarioContent, role: Role, history: list) -> str:
     """Gera a fala que abre a oportunidade para os critérios do cenário.
 
     Chamada dedicada e curta, pela mesma razão do fechamento: no prompt completo
@@ -351,8 +340,8 @@ def generate_closing_hint_turn(
         scene_function=role.scene_function,
         facts=facts,
         excerpt=transcript_text(history, last=3),
-        hint=content.closing_hint,
+        closing_instruction=content.closing_hint,
     )
-    llm = get_structured_llm(ModelPurpose.PERSONA, ClosingHintTurn)
+    llm = get_structured_llm(ModelPurpose.PERSONA, ClosingLine)
     turn = llm.invoke([HumanMessage(content=prompt)])
-    return sanitize_line(turn.line), turn.hint
+    return sanitize_line(turn.line)

@@ -4,9 +4,9 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
 from apps.agents.services import personas as personas_service
-from apps.agents.services.personas import build_system_prompt, generate_closing_hint_turn
+from apps.agents.services.personas import build_system_prompt, generate_closing_hint_line
 from apps.agents.services.scenario_content import load_scenario_content
-from apps.agents.services.schemas import ClosingHintTurn
+from apps.agents.services.schemas import ClosingLine
 from apps.catalog.models import Level, Scenario
 
 pytestmark = pytest.mark.django_db
@@ -111,10 +111,13 @@ def test_an_invitation_to_go_on_counts_as_the_turns_question():
     assert "counts as this turn's question" in prompt
 
 
-def test_hint_rule_covers_a_line_that_ends_with_an_invitation():
-    prompt = _prompt(3)
+def test_the_persona_is_never_asked_to_write_a_hint_for_the_student():
+    for level_order in (1, 2, 3):
+        prompt = _prompt(level_order)
 
-    assert "ends with an invitation instead of a question" in prompt
+        assert '"hint"' not in prompt
+        assert "PORTUGUESE" not in prompt
+        assert "goes only in the hint" not in prompt
 
 
 def test_notice_that_the_student_is_talking_to_the_persona_appears_only_when_flagged():
@@ -131,7 +134,7 @@ class _CapturingLLM:
 
     def invoke(self, messages):
         self._prompts.append(messages[0].content)
-        return ClosingHintTurn(line="Sure. Do you have any questions for us?", hint="dica")
+        return ClosingLine(line="Sure. Do you have any questions for us?")
 
 
 def _closing_hint_prompt(monkeypatch, extra_instruction: str) -> str:
@@ -146,7 +149,7 @@ def _closing_hint_prompt(monkeypatch, extra_instruction: str) -> str:
         HumanMessage(content="What are the next steps in the process?"),
     ]
 
-    generate_closing_hint_turn(content, role, history)
+    generate_closing_hint_line(content, role, history)
 
     return prompts[0]
 
