@@ -89,9 +89,19 @@ def test_answering_the_student_never_replaces_the_question_or_the_invitation():
     for level_order in (1, 2, 3):
         prompt = _prompt(level_order)
 
-        rule = prompt[prompt.index("ANSWER THE STUDENT FIRST") :]
-        assert "Then ALWAYS finish the line with this turn's" in rule
-        assert "leaves the student with\n  nothing to say" in rule
+        rule = " ".join(prompt[prompt.index("ANSWER THE STUDENT FIRST") :].split())
+        assert "unless you are resolving the scene, ALWAYS" in rule
+        assert "leaves the student with nothing to say" in rule
+
+
+def test_the_line_that_resolves_the_scene_asks_nothing():
+    for level_order in (1, 2, 3):
+        prompt = " ".join(_prompt(level_order).split())
+
+        assert 'The only exception is the line that resolves the scene (see "scene_resolved"' in prompt
+        resolved_rule = prompt[prompt.index('- "scene_resolved"') :]
+        assert "close the interaction naturally, with NO question" in resolved_rule
+        assert "the session ends right after it" in resolved_rule
 
 
 def test_an_invitation_to_go_on_counts_as_the_turns_question():
