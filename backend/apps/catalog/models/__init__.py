@@ -1,6 +1,6 @@
 from apps.catalog.models.archetype import Archetype
 from apps.catalog.models.criterion import Criterion
-from apps.catalog.models.level import HintPolicy, Level, LevelDefaultWeight
+from apps.catalog.models.level import Level, LevelDefaultWeight
 from apps.catalog.models.persona import Persona
 from apps.catalog.models.scenario import Scenario
 from apps.catalog.models.scenario_level_hint import ScenarioLevelHint
@@ -11,7 +11,6 @@ from apps.catalog.models.track import Track
 __all__ = [
     "Archetype",
     "Criterion",
-    "HintPolicy",
     "Level",
     "LevelDefaultWeight",
     "Persona",
