@@ -116,6 +116,34 @@ def test_evaluate_and_record_attempt_updates_the_same_attempt(django_user_model,
     assert Attempt.objects.filter(user=user).count() == 1
 
 
+def test_recording_keeps_what_changed_in_the_attempt_during_the_session(
+    django_user_model, monkeypatch
+):
+    user = django_user_model.objects.create(username="aluno")
+    scenario = Scenario.objects.get(slug="negociar-prazo")
+    content, _memory, attempt = session_runner.resolve_execution(
+        scenario, Level.objects.get(order=3), user
+    )
+    Attempt.objects.filter(pk=attempt.pk).update(hints_enabled=True, hints_used=2)
+    outcome = EvaluationOutcome(
+        confirmed_criteria=set(),
+        judged_dimensions=[JudgedDimension(dimension="fluency", value=10, weight=15)],
+        feedback="Ok.",
+        memory_summary="Pediu mais prazo.",
+        review_items=[],
+    )
+    monkeypatch.setattr(session_runner, "evaluate", lambda content, messages: outcome)
+
+    session_runner.evaluate_and_record_attempt(
+        attempt, content, {"messages": [HumanMessage(content="Turn one.")]}
+    )
+
+    saved = Attempt.objects.get(pk=attempt.pk)
+    assert saved.completed_at is not None
+    assert saved.hints_enabled is True
+    assert saved.hints_used == 2
+
+
 def test_recording_a_completed_attempt_again_does_not_reevaluate(django_user_model, monkeypatch):
     """Uma segunda gravação da mesma tentativa devolve o resultado da primeira, sem
     chamar o avaliador de novo nem duplicar notas e critérios."""

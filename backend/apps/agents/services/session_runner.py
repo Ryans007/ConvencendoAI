@@ -25,6 +25,9 @@ def resolve_execution(scenario: Scenario, level: Level, user) -> tuple[ScenarioC
     return content, memory, attempt
 
 
+_RESULT_FIELDS = ["final_score", "passed", "memory_summary", "feedback", "completed_at"]
+
+
 def evaluate_and_record_attempt(
     attempt: Attempt, content: ScenarioContent, final_state: dict
 ) -> Attempt:
@@ -38,6 +41,9 @@ def evaluate_and_record_attempt(
     Idempotente: para uma tentativa já concluída, devolve a tentativa como está, sem
     chamar o avaliador de novo. A gravação é atômica, para que uma tentativa nunca fique
     marcada como concluída com notas ou critérios pela metade.
+
+    Grava só os campos de resultado: o objeto recebido foi carregado no início da sessão,
+    e gravá-lo inteiro apagaria o que mudou na tentativa durante ela, como as dicas usadas.
     """
     if Attempt.objects.filter(pk=attempt.pk, completed_at__isnull=False).exists():
         attempt.refresh_from_db()
@@ -80,7 +86,7 @@ def evaluate_and_record_attempt(
     attempt.completed_at = timezone.now()
 
     with transaction.atomic():
-        attempt.save()
+        attempt.save(update_fields=_RESULT_FIELDS)
 
         for breakdown in breakdowns:
             breakdown.attempt = attempt
