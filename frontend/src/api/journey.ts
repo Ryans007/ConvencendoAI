@@ -1,5 +1,13 @@
 import { get } from "./client";
 
+/** Resumo da última tentativa concluída de um nível, aprovada ou não. */
+export interface LastAttempt {
+  id: number;
+  final_score: number;
+  passed: boolean;
+  completed_at: string;
+}
+
 export interface LevelState {
   order: number;
   name: string;
@@ -7,6 +15,7 @@ export interface LevelState {
   approved: boolean;
   available: boolean;
   cooldown_remaining_seconds: number | null;
+  last_attempt: LastAttempt | null;
 }
 
 export interface ScenarioState {
