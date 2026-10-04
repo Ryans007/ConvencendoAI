@@ -34,6 +34,7 @@ _JOURNEY_EXAMPLE = [
                         "approved": False,
                         "available": True,
                         "cooldown_remaining_seconds": None,
+                        "last_attempt": None,
                     },
                     {
                         "order": 3,
@@ -42,6 +43,12 @@ _JOURNEY_EXAMPLE = [
                         "approved": True,
                         "available": True,
                         "cooldown_remaining_seconds": None,
+                        "last_attempt": {
+                            "id": 42,
+                            "final_score": 90,
+                            "passed": True,
+                            "completed_at": "2026-09-29T14:32:10Z",
+                        },
                     },
                 ],
             }

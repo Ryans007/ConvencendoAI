@@ -1,6 +1,15 @@
 from rest_framework import serializers
 
 
+class LastAttemptSerializer(serializers.Serializer):
+    """Resumo da última tentativa concluída de um nível, para a jornada do aluno."""
+
+    id = serializers.IntegerField(help_text="Identificador da tentativa, que abre o relatório.")
+    final_score = serializers.IntegerField(help_text="Nota final da tentativa, de 0 a 100.")
+    passed = serializers.BooleanField(help_text="A tentativa atingiu a nota mínima.")
+    completed_at = serializers.DateTimeField(help_text="Quando a tentativa foi concluída.")
+
+
 class LevelStateSerializer(serializers.Serializer):
     """Estado calculado de um nível dentro de um cenário, para a jornada do aluno."""
 
@@ -17,6 +26,13 @@ class LevelStateSerializer(serializers.Serializer):
     )
     cooldown_remaining_seconds = serializers.SerializerMethodField(
         help_text="Segundos até liberar de novo, ou nulo se já está disponível."
+    )
+    last_attempt = LastAttemptSerializer(
+        allow_null=True,
+        help_text=(
+            "Tentativa concluída mais recente neste cenário e nível, aprovada ou não, ou "
+            "nulo se o aluno nunca concluiu uma."
+        ),
     )
 
     def get_cooldown_remaining_seconds(self, obj) -> int | None:

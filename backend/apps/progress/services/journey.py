@@ -10,11 +10,17 @@ from apps.progress.models import Attempt
 
 @dataclass
 class LevelState:
-    """Estado calculado de um nível dentro de um cenário, para um aluno."""
+    """Estado calculado de um nível dentro de um cenário, para um aluno.
+
+    `last_attempt` é a tentativa concluída mais recente do aluno naquele cenário e nível,
+    aprovada ou não, ou `None` se ele nunca concluiu uma: uma sessão abandonada no meio
+    não tem conclusão e não conta.
+    """
 
     level: Level
     approved: bool
     cooldown_remaining: timedelta | None
+    last_attempt: Attempt | None
 
     @property
     def available(self) -> bool:
@@ -86,22 +92,30 @@ def build_journey(user) -> list[TrackState]:
                     (scenario.id, level.id), []
                 )
                 approved = any(attempt.passed for attempt in scenario_level_attempts)
-                last_completed = max(
+                last_attempt = max(
                     (
-                        attempt.completed_at
+                        attempt
                         for attempt in scenario_level_attempts
                         if attempt.completed_at is not None
                     ),
+                    key=lambda attempt: (attempt.completed_at, attempt.id),
                     default=None,
                 )
                 remaining = None
-                if last_completed is not None:
-                    release_at = last_completed + timedelta(hours=scenario.cooldown_hours)
+                if last_attempt is not None:
+                    release_at = last_attempt.completed_at + timedelta(
+                        hours=scenario.cooldown_hours
+                    )
                     delta = release_at - now
                     if delta > timedelta(0):
                         remaining = delta
                 level_states.append(
-                    LevelState(level=level, approved=approved, cooldown_remaining=remaining)
+                    LevelState(
+                        level=level,
+                        approved=approved,
+                        cooldown_remaining=remaining,
+                        last_attempt=last_attempt,
+                    )
                 )
 
             scenario_states.append(

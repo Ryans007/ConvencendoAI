@@ -72,3 +72,29 @@ def test_two_authenticated_users_see_different_journeys(django_user_model):
 
     assert scenario_a["completed"] is True
     assert scenario_b["completed"] is False
+
+
+def test_journey_level_carries_the_last_attempt_or_null(django_user_model):
+    user = django_user_model.objects.create_user(username="aluno", password="Xk9#mQ2vLp8Z")
+    scenario = Scenario.objects.get(slug="entrevista-de-emprego")
+    attempt = Attempt.objects.create(
+        user=user,
+        scenario=scenario,
+        level=Level.objects.get(order=1),
+        final_score=64,
+        passed=False,
+        completed_at=timezone.now(),
+    )
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+    response = client.get("/api/journey/")
+
+    track = next(t for t in response.data if t["slug"] == scenario.track.slug)
+    scenario_state = next(s for s in track["scenario_states"] if s["slug"] == scenario.slug)
+    by_order = {state["order"]: state for state in scenario_state["level_states"]}
+    last = by_order[1]["last_attempt"]
+    assert set(last) == {"id", "final_score", "passed", "completed_at"}
+    assert (last["id"], last["final_score"], last["passed"]) == (attempt.id, 64, False)
+    assert by_order[2]["last_attempt"] is None
+    assert by_order[3]["last_attempt"] is None
