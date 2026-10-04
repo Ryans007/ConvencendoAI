@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 import time
 from urllib.parse import parse_qs
@@ -17,11 +18,18 @@ from apps.agents.graph.builder import build_scenario_graph
 from apps.agents.graph.listen import listen_live
 from apps.agents.services.session_runner import evaluate_and_record_attempt, resolve_execution
 from apps.catalog.models import Level, Scenario
-from apps.llm.services.factory import ModelNotConfigured, log_active_models
+from apps.llm.services.factory import log_active_models
+from apps.voice.services.failures import (
+    FAILURE_DESCRIPTIONS,
+    SessionErrorCode,
+    classify_failure,
+)
 from apps.voice.services.stt import transcribe
 from apps.voice.services.tts import synthesize
 
 _SPEAKER_PREFIX = re.compile(r"^\[([^\]]+)\]\s*(.*)$", re.DOTALL)
+
+logger = logging.getLogger(__name__)
 
 
 def _split_speaker(content: str) -> tuple[str, str]:
@@ -110,7 +118,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         try:
             text = await sync_to_async(transcribe)(bytes_data)
         except Exception as exc:
-            await self._fail(f"Falha na transcrição: {exc}")
+            await self._fail_with_error(exc)
             return
         print(f"[timing] stt: {time.monotonic() - started_at:.2f}s")
 
@@ -136,8 +144,8 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
                 state = await self.graph.ainvoke(initial_state, config=self.thread_config)
             else:
                 state = await self.graph.ainvoke(Command(resume=resume), config=self.thread_config)
-        except ModelNotConfigured as exc:
-            await self._fail(str(exc))
+        except Exception as exc:
+            await self._fail_with_error(exc)
             return
 
         spoken = await self._speak_new_messages(state, started_at)
@@ -170,7 +178,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             try:
                 audio = await sync_to_async(synthesize)(text, voice)
             except Exception as exc:
-                await self._fail(f"Falha na síntese de voz: {exc}")
+                await self._fail_with_error(exc)
                 return False
             print(f"[timing] tts ({name}): {time.monotonic() - synthesis_started_at:.2f}s")
             await self.send(bytes_data=audio)
@@ -188,9 +196,13 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         """
         self.scene_over = True
         await self.send(text_data=json.dumps({"type": "evaluating"}))
-        attempt = await sync_to_async(evaluate_and_record_attempt)(
-            self.attempt, self.content, state
-        )
+        try:
+            attempt = await sync_to_async(evaluate_and_record_attempt)(
+                self.attempt, self.content, state
+            )
+        except Exception as exc:
+            await self._fail_with_error(exc, SessionErrorCode.REPORT_FAILED)
+            return
         await self.send(
             text_data=json.dumps(
                 {
@@ -203,10 +215,29 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         )
         await self.close()
 
-    async def _fail(self, message: str) -> None:
+    async def _fail(self, message: str, *, code: SessionErrorCode | None = None) -> None:
+        """Encerra a sessão com um aviso de erro; `code` só vai quando a falha é de uma etapa."""
         self.scene_over = True
-        await self.send(text_data=json.dumps({"type": "error", "message": message}))
+        payload = {"type": "error", "message": message}
+        if code is not None:
+            payload["code"] = code.value
+        await self.send(text_data=json.dumps(payload))
         await self.close()
+
+    async def _fail_with_error(
+        self, exc: BaseException, code: SessionErrorCode | None = None
+    ) -> None:
+        """Encerra a sessão por uma falha de etapa (fala, transcrição, voz ou avaliação).
+
+        A exceção completa, com a pilha, vai para o registro do servidor, e o cliente recebe
+        só o código e uma descrição fixa: a mensagem do provedor traz o nome do modelo e os
+        números de uso, e a conexão não pode simplesmente cair sem explicação. `code`
+        explícito vale quando a fase já diz o que falhou (a avaliação); sem ele, o código
+        sai da classificação da exceção.
+        """
+        code = code or classify_failure(exc)
+        logger.error("Sessão encerrada por falha (%s)", code.value, exc_info=exc)
+        await self._fail(FAILURE_DESCRIPTIONS[code], code=code)
 
     @staticmethod
     def _resolve_execution(user_id, scenario_slug: str, level_order: int):
