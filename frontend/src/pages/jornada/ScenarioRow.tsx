@@ -1,6 +1,7 @@
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import type { LevelState, ScenarioState } from "../../api/journey";
+import { reportAccess } from "./reportAccess";
 import { formatCooldown } from "./scenarioAction";
 
 interface ScenarioRowProps {
@@ -33,7 +34,7 @@ function LevelButton({ scenarioSlug, trackTitle, clickable, level }: LevelButton
       onClick={() =>
         navigate(`/cenario/${scenarioSlug}/${level.order}`, { state: { trackTitle } })
       }
-      className={`flex flex-1 flex-col items-start gap-1 rounded-[10px] border px-3 py-2.5 text-left ${
+      className={`flex w-full flex-col items-start gap-1 rounded-[10px] border px-3 py-2.5 text-left ${
         clickable
           ? "cursor-pointer border-brand-line bg-brand-soft hover:border-brand-line-strong"
           : "cursor-default border-line bg-surface-muted"
@@ -46,6 +47,42 @@ function LevelButton({ scenarioSlug, trackTitle, clickable, level }: LevelButton
         {label}
       </span>
     </button>
+  );
+}
+
+interface LevelCellProps {
+  trackTitle: string;
+  scenario: ScenarioState;
+  level: LevelState;
+}
+
+/**
+ * Um nivel do cenario: o botao que abre o briefing e, abaixo dele, o acesso ao ultimo
+ * relatorio. O acesso fica fora do botao (link dentro de botao nao e HTML valido) e nao
+ * herda o `disabled` dele, entao continua acionavel enquanto o nivel esta em cooldown.
+ */
+function LevelCell({ trackTitle, scenario, level }: LevelCellProps) {
+  const report = reportAccess(trackTitle, scenario, level);
+
+  return (
+    <div className="flex flex-1 flex-col gap-1.5">
+      <LevelButton
+        scenarioSlug={scenario.slug}
+        trackTitle={trackTitle}
+        clickable={level.available}
+        level={level}
+      />
+      {report && (
+        <Link
+          to={report.to}
+          state={report.state}
+          aria-label={report.ariaLabel}
+          className="px-1 text-aux font-medium text-brand-strong hover:underline"
+        >
+          Ver último relatório
+        </Link>
+      )}
+    </div>
   );
 }
 
@@ -76,11 +113,10 @@ export function ScenarioRow({ trackTitle, scenario }: ScenarioRowProps) {
       ) : (
         <div className="flex gap-2">
           {scenario.level_states.map((level) => (
-            <LevelButton
+            <LevelCell
               key={level.order}
-              scenarioSlug={scenario.slug}
               trackTitle={trackTitle}
-              clickable={level.available}
+              scenario={scenario}
               level={level}
             />
           ))}
