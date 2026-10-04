@@ -45,6 +45,21 @@ def test_report_of_own_completed_attempt(django_user_model):
     assert response.data["score_breakdowns"][0]["weight"] == 30
     assert response.data["criteria"][0]["code"] == "c1"
     assert response.data["criteria"][0]["met"] is True
+    assert response.data["hints_enabled"] is False
+    assert response.data["hints_used"] == 0
+
+
+def test_report_carries_the_hints_the_student_used(django_user_model):
+    user = django_user_model.objects.create_user(username="aluno", password="Xk9#mQ2vLp8Z")
+    attempt = _completed_attempt(user)
+    Attempt.objects.filter(pk=attempt.pk).update(hints_enabled=True, hints_used=3)
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+    response = client.get(f"/api/attempts/{attempt.pk}/")
+
+    assert response.data["hints_enabled"] is True
+    assert response.data["hints_used"] == 3
 
 
 def test_report_of_another_users_attempt_is_not_found(django_user_model):

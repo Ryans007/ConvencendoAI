@@ -95,6 +95,10 @@ class AttemptReportSerializer(serializers.Serializer):
     passed = serializers.BooleanField(help_text="Se a nota atingiu o mínimo de aprovação.")
     feedback = serializers.CharField(help_text="2-3 frases do avaliador sobre o desempenho.")
     completed_at = serializers.DateTimeField()
+    hints_enabled = serializers.BooleanField(
+        help_text="O aluno começou a sessão com as dicas ligadas."
+    )
+    hints_used = serializers.IntegerField(help_text="Quantas dicas o aluno pediu na sessão.")
     score_breakdowns = ScoreBreakdownSerializer(many=True)
     criteria = AttemptCriterionSerializer(many=True)
 
