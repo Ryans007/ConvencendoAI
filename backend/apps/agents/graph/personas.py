@@ -107,6 +107,12 @@ def make_persona_node(content: ScenarioContent, memory: str):
       disse e fecha a rodada: passar a vez deixaria a resposta ao aluno no meio da rodada,
       com a pergunta vindo de um personagem que ele não chamou. A marca também é
       desligada depois da fala, em todos os caminhos de saída.
+    - Quando a persona resolve a cena (`scene_resolved`), a sessão termina logo depois da
+      fala, então uma pergunta nela ficaria sem resposta. O prompt completo manda perguntar
+      em toda rodada e manda fechar a interação, e o modelo obedece às duas: marca a cena
+      como resolvida e pergunta mesmo assim. Por isso, se a última fala da rodada tem
+      pergunta, ela é trocada pelo fechamento do limite de turnos, que usa um prompt próprio
+      que proíbe pergunta.
     """
     keys = content.role_keys()
     max_turns = content.max_turns
@@ -172,6 +178,7 @@ def make_persona_node(content: ScenarioContent, memory: str):
         )
 
         lines = [AIMessage(content=f"[{role.name}] {text}")]
+        speaker = role
         pending_hint = turn.hint
         resolved = turn.scene_resolved
 
@@ -188,6 +195,7 @@ def make_persona_node(content: ScenarioContent, memory: str):
             )
             _speak(other, other_text)
             lines.append(AIMessage(content=f"[{other.name}] {other_text}"))
+            speaker = other
             pending_hint = other_turn.hint or pending_hint
             resolved = resolved or other_turn.scene_resolved
             print(
@@ -198,6 +206,16 @@ def make_persona_node(content: ScenarioContent, memory: str):
                 next_key = other_pass_to
         else:
             next_key = next_key if next_key in keys else key
+
+        if resolved and "?" in lines[-1].content:
+            print(
+                f"[routing] cena resolvida com pergunta na fala de {speaker.name}; "
+                "trocando por fechamento"
+            )
+            closing = generate_closing_line(content, speaker, history + lines[:-1])
+            _speak(speaker, closing)
+            lines[-1] = AIMessage(content=f"[{speaker.name}] {closing}")
+            pending_hint = ""
 
         _show_hint(content, pending_hint, struggling)
         print(f"[routing] next round current_speaker={next_key}")
