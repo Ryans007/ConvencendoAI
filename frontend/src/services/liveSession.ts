@@ -24,6 +24,7 @@ export interface LiveSessionState {
   phase: LiveSessionPhase;
   turnCount: number;
   errorMessage: string | null;
+  errorCode: string | null;
   result: LiveSessionResult | null;
   noSpeechNotice: boolean;
 }
@@ -36,12 +37,14 @@ interface ControlMessage {
   final_score?: number;
   passed?: boolean;
   message?: string;
+  code?: string;
 }
 
 interface PendingOutcome {
   phase: "ended" | "error";
   result?: LiveSessionResult;
   errorMessage?: string;
+  errorCode?: string;
 }
 
 /**
@@ -60,6 +63,7 @@ export class LiveSession {
     phase: "connecting",
     turnCount: 0,
     errorMessage: null,
+    errorCode: null,
     result: null,
     noSpeechNotice: false,
   };
@@ -118,7 +122,11 @@ export class LiveSession {
           },
         };
       } else if (payload.type === "error") {
-        this.pendingOutcome = { phase: "error", errorMessage: payload.message ?? "Falha na sessao." };
+        this.pendingOutcome = {
+          phase: "error",
+          errorMessage: payload.message ?? "Falha na sessao.",
+          errorCode: payload.code,
+        };
       }
       this.settleIfIdle();
       return;
@@ -177,7 +185,11 @@ export class LiveSession {
       if (outcome.phase === "ended") {
         this.setState({ phase: "ended", result: outcome.result ?? null });
       } else {
-        this.setState({ phase: "error", errorMessage: outcome.errorMessage ?? null });
+        this.setState({
+          phase: "error",
+          errorMessage: outcome.errorMessage ?? null,
+          errorCode: outcome.errorCode ?? null,
+        });
       }
       return;
     }

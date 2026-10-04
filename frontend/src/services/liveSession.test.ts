@@ -221,4 +221,34 @@ describe("services/liveSession", () => {
     expect(states.at(-1)?.phase).toBe("error");
     expect(states.at(-1)?.errorMessage).toBe("Falha na transcricao.");
   });
+
+  it("o codigo do erro chega ao estado quando o servidor o manda", () => {
+    const session = new LiveSession("negociar-prazo", 3);
+    const socket = FakeWebSocket.instances[0];
+    const states = collectStates(session);
+    socket.dispatch("open", {});
+
+    socket.dispatch("message", {
+      data: JSON.stringify({
+        type: "error",
+        message: "O provedor de IA atingiu o limite de uso.",
+        code: "provider_rate_limited",
+      }),
+    });
+
+    expect(states.at(-1)?.phase).toBe("error");
+    expect(states.at(-1)?.errorCode).toBe("provider_rate_limited");
+  });
+
+  it("um erro sem codigo deixa o codigo nulo", () => {
+    const session = new LiveSession("negociar-prazo", 3);
+    const socket = FakeWebSocket.instances[0];
+    const states = collectStates(session);
+    socket.dispatch("open", {});
+
+    socket.dispatch("message", { data: JSON.stringify({ type: "error", message: "Token invalido." }) });
+
+    expect(states.at(-1)?.phase).toBe("error");
+    expect(states.at(-1)?.errorCode).toBeNull();
+  });
 });

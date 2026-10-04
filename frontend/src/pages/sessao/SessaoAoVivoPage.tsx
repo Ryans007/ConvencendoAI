@@ -4,11 +4,10 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { AvatarPlaceholder } from "../../components/AvatarPlaceholder";
 import { LogoutLink } from "../../components/LogoutLink";
 import { useLiveSession } from "../../hooks/useLiveSession";
+import { sessionErrorMessage } from "../../services/sessionErrors";
 import type { ReportContext } from "../relatorio/reportContext";
 
 const ENDED_TRANSITION_MS = 1400;
-const GENERIC_ERROR_MESSAGE =
-  "Algo deu errado durante a sessão. Volte para a jornada e tente de novo.";
 
 /**
  * Tela de sessao ao vivo: o aluno fala com as personas em tempo real, um turno por vez.
@@ -26,8 +25,17 @@ export default function SessaoAoVivoPage() {
   const reportContext = navState?.reportContext;
 
   const session = useLiveSession(scenarioSlug, level);
-  const { phase, turnCount, errorMessage, result, noSpeechNotice, startRecording, stopRecording, leaveEarly } =
-    session;
+  const {
+    phase,
+    turnCount,
+    errorMessage,
+    errorCode,
+    result,
+    noSpeechNotice,
+    startRecording,
+    stopRecording,
+    leaveEarly,
+  } = session;
 
   useEffect(() => {
     if (phase !== "ended" || !result) {
@@ -132,7 +140,9 @@ export default function SessaoAoVivoPage() {
       {(phase === "connection-lost" || phase === "error") && (
         <div className="flex flex-1 flex-col items-center justify-center gap-6 px-8 text-center">
           <span className="text-scenario font-medium text-warn-strong">
-            {phase === "connection-lost" ? "A conexão caiu antes da sessão terminar." : GENERIC_ERROR_MESSAGE}
+            {phase === "connection-lost"
+              ? "A conexão caiu antes da sessão terminar."
+              : sessionErrorMessage(errorCode)}
           </span>
           <button
             type="button"
