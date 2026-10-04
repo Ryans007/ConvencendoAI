@@ -45,6 +45,17 @@ class RoutingDecision(BaseModel):
     )
 
 
+class SuggestedAnswer(BaseModel):
+    """Saída estruturada do tutor: a resposta que o aluno poderia dar, em português."""
+
+    text: str = Field(
+        default="",
+        description=(
+            "The answer the student could give, written in Portuguese, in the first person"
+        ),
+    )
+
+
 class ClosingLine(BaseModel):
     """Saída estruturada da fala de fechamento, quando os turnos se esgotam."""
 
