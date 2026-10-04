@@ -15,6 +15,7 @@ class FakeWebSocket {
   readyState = FakeWebSocket.CONNECTING;
   binaryType = "blob";
   readonly url: string;
+  readonly sent: unknown[] = [];
   private readonly listeners: Record<string, Array<(event: unknown) => void>> = {};
 
   constructor(url: string) {
@@ -26,7 +27,9 @@ class FakeWebSocket {
     (this.listeners[type] ??= []).push(listener);
   }
 
-  send(): void {}
+  send(data: unknown): void {
+    this.sent.push(data);
+  }
 
   close(): void {
     this.readyState = FakeWebSocket.CLOSED;
@@ -250,5 +253,112 @@ describe("services/liveSession", () => {
 
     expect(states.at(-1)?.phase).toBe("error");
     expect(states.at(-1)?.errorCode).toBeNull();
+  });
+});
+
+class FakeMediaRecorder {
+  state: "inactive" | "recording" = "inactive";
+  readonly mimeType = "audio/webm";
+  ondataavailable: ((event: { data: Blob }) => void) | null = null;
+  onstop: (() => void) | null = null;
+
+  start(): void {
+    this.state = "recording";
+  }
+
+  stop(): void {
+    this.state = "inactive";
+    this.ondataavailable?.({ data: new Blob(["fala"]) });
+    this.onstop?.();
+  }
+}
+
+const HINT_REQUEST = JSON.stringify({ type: "hint_request" });
+
+function studentTurn(hintsEnabled: boolean) {
+  const session = new LiveSession("negociar-prazo", 3, hintsEnabled);
+  const socket = FakeWebSocket.instances[0];
+  const states = collectStates(session);
+  socket.dispatch("open", {});
+  socket.dispatch("message", { data: new ArrayBuffer(4) });
+  FakeAudio.instances[0].triggerEnded();
+  return { session, socket, states };
+}
+
+describe("LiveSession com dicas", () => {
+  it("so liga as dicas na URL quando o aluno escolheu no briefing", () => {
+    new LiveSession("negociar-prazo", 3, true);
+    new LiveSession("negociar-prazo", 3);
+
+    expect(FakeWebSocket.instances[0].url).toContain("&hints=1");
+    expect(FakeWebSocket.instances[1].url).not.toContain("hints");
+  });
+
+  it("pede a dica uma vez por vez e mostra a dica recebida", () => {
+    const { session, socket, states } = studentTurn(true);
+    expect(states.at(-1)?.phase).toBe("student-turn");
+
+    session.requestHint();
+    session.requestHint();
+
+    expect(socket.sent).toEqual([HINT_REQUEST]);
+    expect(states.at(-1)?.hint).toEqual({ status: "loading", text: null });
+
+    socket.dispatch("message", { data: JSON.stringify({ type: "hint", text: "Sim, trabalhei em equipe." }) });
+    session.requestHint();
+
+    expect(states.at(-1)?.hint).toEqual({ status: "shown", text: "Sim, trabalhei em equipe." });
+    expect(socket.sent).toEqual([HINT_REQUEST]);
+  });
+
+  it("sem as dicas ligadas, pedir uma dica nao envia nada", () => {
+    const { session, socket, states } = studentTurn(false);
+
+    session.requestHint();
+
+    expect(socket.sent).toEqual([]);
+    expect(states.at(-1)?.hint.status).toBe("idle");
+  });
+
+  it("fora da vez do aluno, pedir uma dica nao envia nada", () => {
+    const session = new LiveSession("negociar-prazo", 3, true);
+    const socket = FakeWebSocket.instances[0];
+    socket.dispatch("open", {});
+
+    session.requestHint();
+
+    expect(socket.sent).toEqual([]);
+  });
+
+  it("uma dica indisponivel e informada e pode ser pedida de novo", () => {
+    const { session, socket, states } = studentTurn(true);
+
+    session.requestHint();
+    socket.dispatch("message", { data: JSON.stringify({ type: "hint_unavailable" }) });
+
+    expect(states.at(-1)?.hint).toEqual({ status: "unavailable", text: null });
+
+    session.requestHint();
+
+    expect(socket.sent).toEqual([HINT_REQUEST, HINT_REQUEST]);
+  });
+
+  it("a dica some quando o aluno envia a resposta", async () => {
+    vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
+    vi.stubGlobal("navigator", {
+      mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }) },
+    });
+    const { session, socket, states } = studentTurn(true);
+    session.requestHint();
+    socket.dispatch("message", { data: JSON.stringify({ type: "hint", text: "Sim." }) });
+
+    await session.startRecording();
+    expect(states.at(-1)?.hint.status).toBe("shown");
+    session.stopRecording();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(states.at(-1)?.phase).toBe("persona-speaking");
+    expect(states.at(-1)?.hint).toEqual({ status: "idle", text: null });
+    expect(socket.sent.at(-1)).toBeInstanceOf(ArrayBuffer);
   });
 });
