@@ -3,49 +3,6 @@
 Funcionalidades combinadas e ainda não implementadas. Bugs não entram aqui: cada bug vira
 uma issue no GitHub.
 
-## Ver o último relatório de cada nível
-
-**Situação atual.** O relatório de toda tentativa concluída já fica salvo no banco: nota
-final, sub-nota de cada dimensão, resultado de cada critério e feedback (`Attempt`,
-`ScoreBreakdown` e `AttemptCriterion`), e a API o devolve em `GET /api/attempts/<id>/`.
-Mas o aluno só chega a ele no fim da sessão, porque a jornada não informa qual foi a
-última tentativa de cada nível. Fechou a tela do relatório, não tem mais como voltar a
-ele.
-
-**O que se quer.** Na jornada, cada nível já tentado mostra o acesso ao relatório da
-última tentativa concluída naquele nível, aprovada ou reprovada.
-
-```gherkin
-Cenário: aluno revê o relatório de um nível já tentado
-  Dado que o aluno concluiu uma tentativa no nível 1 da entrevista
-  Quando ele abrir a jornada
-  Então o nível 1 da entrevista mostra o acesso ao último relatório
-  E ao abrir, ele vê a nota, as sub-notas, os critérios e o feedback daquela tentativa
-
-Cenário: vale a tentativa mais recente, aprovada ou não
-  Dado que o aluno foi aprovado no nível 1 e depois tentou de novo e foi reprovado
-  Quando ele abrir o último relatório do nível 1
-  Então ele vê o relatório da tentativa reprovada, a mais recente
-
-Cenário: nível nunca tentado
-  Dado que o aluno nunca concluiu uma tentativa no nível 2
-  Quando ele abrir a jornada
-  Então o nível 2 não mostra acesso a relatório
-
-Cenário: relatório de outro aluno (já garantido hoje, a preservar)
-  Dado o id de uma tentativa de outro aluno
-  Quando o aluno tentar abrir esse relatório
-  Então a API responde "não encontrado", como se a tentativa não existisse
-```
-
-**Caminho provável.**
-- A jornada (`GET /api/journey/`) passa a devolver, em cada nível, a última tentativa
-  concluída: id, nota, aprovação e data.
-- A tela da jornada ganha o acesso ao relatório, que abre a tela de relatório já
-  existente.
-
-Nenhum dado novo precisa ser gravado.
-
 ## Mostrar a dica da persona na tela da sessão por voz
 
 **Situação atual.** Em toda rodada a persona gera uma dica em português, curta, que diz
