@@ -1,4 +1,5 @@
 import httpx
+import langchain_openai.chat_models.base as langchain_base
 import openai
 import pytest
 
@@ -35,6 +36,18 @@ def test_rate_limit_is_its_own_code():
 )
 def test_provider_that_is_down_or_unconfigured_is_unavailable(exc):
     assert classify_failure(exc) is SessionErrorCode.PROVIDER_UNAVAILABLE
+
+
+def test_the_langchain_wrappers_that_the_provider_actually_raises_are_classified_too():
+    rate_limited = langchain_base.OpenAIRateLimitError(
+        "detalhe técnico do provedor", response=httpx.Response(429, request=_REQUEST), body=None
+    )
+    unreachable = langchain_base.OpenAIConnectionError(request=_REQUEST)
+    timed_out = langchain_base.OpenAITimeoutError(request=_REQUEST)
+
+    assert classify_failure(rate_limited) is SessionErrorCode.PROVIDER_RATE_LIMITED
+    assert classify_failure(unreachable) is SessionErrorCode.PROVIDER_UNAVAILABLE
+    assert classify_failure(timed_out) is SessionErrorCode.PROVIDER_UNAVAILABLE
 
 
 @pytest.mark.parametrize("exc", [ValueError("bug"), KeyError("x"), RuntimeError("boom")])
