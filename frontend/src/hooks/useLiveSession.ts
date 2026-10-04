@@ -12,6 +12,7 @@ const INITIAL_STATE: LiveSessionState = {
   phase: "connecting",
   turnCount: 0,
   errorMessage: null,
+  errorCode: null,
   result: null,
   noSpeechNotice: false,
 };
