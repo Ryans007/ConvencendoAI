@@ -10,6 +10,7 @@ from apps.progress.constants import is_passing_score
 from apps.progress.models import Attempt, AttemptCriterion, ScoreBreakdown
 from apps.progress.services.memory import track_memory
 from apps.progress.services.scoring import final_score, objective_score
+from apps.review.services.recording import known_rules_for, record_review_items
 
 
 def resolve_execution(scenario: Scenario, level: Level, user) -> tuple[ScenarioContent, str, Attempt]:
@@ -44,13 +45,17 @@ def evaluate_and_record_attempt(
 
     Grava só os campos de resultado: o objeto recebido foi carregado no início da sessão,
     e gravá-lo inteiro apagaria o que mudou na tentativa durante ela, como as dicas usadas.
+
+    Os erros de linguagem apontados pelo avaliador viram itens de revisão do aluno na
+    mesma transação: o avaliador recebe as regras que o aluno já tem para dizer quando um
+    erro se repete.
     """
     if Attempt.objects.filter(pk=attempt.pk, completed_at__isnull=False).exists():
         attempt.refresh_from_db()
         return attempt
 
     messages = list(final_state.get("messages") or [])
-    outcome = evaluate(content, messages)
+    outcome = evaluate(content, messages, known_rules=known_rules_for(attempt.user))
 
     attempt_criteria = [
         AttemptCriterion(
@@ -95,6 +100,13 @@ def evaluate_and_record_attempt(
         for criterion in attempt_criteria:
             criterion.attempt = attempt
         AttemptCriterion.objects.bulk_create(attempt_criteria)
+
+        record_review_items(
+            attempt.user,
+            attempt,
+            outcome.review_items,
+            timezone.localdate(attempt.completed_at),
+        )
 
     return attempt
 

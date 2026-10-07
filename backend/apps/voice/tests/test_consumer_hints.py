@@ -71,7 +71,7 @@ def _prepare(monkeypatch, *turns, tutor=None):
 def _capture_evaluation(monkeypatch) -> list:
     evaluated = []
 
-    def fake_evaluate(content, messages):
+    def fake_evaluate(content, messages, known_rules=()):
         evaluated.append(list(messages))
         return EvaluationOutcome(
             confirmed_criteria=set(),

@@ -167,7 +167,7 @@ def test_evaluation_failure_after_the_scene_is_reported_as_report_failed(
     user, token = _student(django_user_model)
     _prepare(monkeypatch, [_OPENING, _RESOLVING])
 
-    def failing_evaluate(content, messages):
+    def failing_evaluate(content, messages, known_rules=()):
         raise _rate_limit()
 
     monkeypatch.setattr("apps.agents.services.session_runner.evaluate", failing_evaluate)
