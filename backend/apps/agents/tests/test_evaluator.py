@@ -37,7 +37,11 @@ def test_evaluate_clamps_scores_and_filters_invalid_criteria(monkeypatch):
         },
         feedback=" Great job overall. ",
         memory_summary=" Works as a backend developer. ",
-        review_items=[ReviewItem(item="preposition", produced="interest in", correct="interested in")],
+        review_items=[
+            ReviewItem(
+                rule="adjective + preposition", produced="interest in", correct="interested in"
+            )
+        ],
     )
     monkeypatch.setattr(
         evaluator, "get_structured_llm", lambda purpose, schema: _FakeStructuredLLM(fake_result)
@@ -162,3 +166,85 @@ def test_without_hints_the_prompt_has_no_hint_section(monkeypatch):
 
     assert "SUGGESTED ANSWERS" not in prompt
     assert "after a suggested answer" not in prompt
+
+
+_SESSION = [
+    AIMessage(content="[Tom] When did you finish it?"),
+    HumanMessage(content="I have finished it last week."),
+]
+
+
+def _evaluate_with(monkeypatch, review_items, known_rules=()):
+    prompts = []
+
+    class _RecordingLLM:
+        def invoke(self, received):
+            prompts.append(received[0].content)
+            return EvaluationResult(review_items=review_items)
+
+    monkeypatch.setattr(evaluator, "get_structured_llm", lambda purpose, schema: _RecordingLLM())
+    outcome = evaluator.evaluate(_content(), _SESSION, known_rules)
+    return outcome, prompts[0]
+
+
+def test_the_prompt_lists_the_known_rules_with_their_ids(monkeypatch):
+    known = [evaluator.KnownRule(id="r7", rule="past simple with a finished time expression")]
+
+    _, prompt = _evaluate_with(monkeypatch, [], known)
+
+    assert "KNOWN MISTAKES OF THIS STUDENT" in prompt
+    assert "- r7: past simple with a finished time expression" in prompt
+
+
+def test_without_known_rules_the_prompt_says_none_yet(monkeypatch):
+    _, prompt = _evaluate_with(monkeypatch, [])
+
+    assert "(none yet)" in prompt
+
+
+def test_the_prompt_asks_for_rules_of_words_or_structure_and_never_sounds(monkeypatch):
+    _, prompt = _evaluate_with(monkeypatch, [])
+
+    assert "about WORDS or\n  STRUCTURE only" in prompt
+    assert "Never pronunciation or sounds" in prompt
+    assert "the SAME\n    rule, even with different words" in prompt
+
+
+def test_a_repeat_of_a_known_rule_is_kept(monkeypatch):
+    known = [evaluator.KnownRule(id="r7", rule="past simple with a finished time expression")]
+    item = ReviewItem(
+        rule="past simple with finished time",
+        produced="I have finished it last week",
+        correct="I finished it last week",
+        repeats="r7",
+    )
+
+    outcome, _ = _evaluate_with(monkeypatch, [item], known)
+
+    assert outcome.review_items[0].repeats == "r7"
+
+
+def test_a_repeat_of_an_unknown_rule_becomes_a_new_item(monkeypatch):
+    known = [evaluator.KnownRule(id="r7", rule="past simple with a finished time expression")]
+    item = ReviewItem(
+        rule="third person -s", produced="She don't", correct="She doesn't", repeats="r99"
+    )
+
+    outcome, _ = _evaluate_with(monkeypatch, [item], known)
+
+    assert outcome.review_items[0].repeats == ""
+
+
+def test_incomplete_items_are_dropped_and_at_most_four_pass(monkeypatch):
+    complete = [
+        ReviewItem(rule=f"rule {n}", produced=f"wrong {n}", correct=f"right {n}") for n in range(6)
+    ]
+    incomplete = [
+        ReviewItem(rule="", produced="x", correct="y"),
+        ReviewItem(rule="rule", produced=" ", correct="y"),
+        ReviewItem(rule="rule", produced="x", correct=""),
+    ]
+
+    outcome, _ = _evaluate_with(monkeypatch, incomplete + complete)
+
+    assert [item.rule for item in outcome.review_items] == ["rule 0", "rule 1", "rule 2", "rule 3"]

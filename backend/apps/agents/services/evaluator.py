@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from langchain_core.messages import BaseMessage, HumanMessage
@@ -94,8 +95,30 @@ Also write:
 - "memory_summary": 3-4 very short factual notes in English about this
   student, to be remembered in a future conversation (role, project mentioned,
   commitments made, recurring language difficulty). Third person, no grades.
-- "review_items": up to 4 concrete language items the student got wrong (word,
-  structure or sound), each with the form they produced and the correct form."""
+- "review_items": up to 4 concrete mistakes the student made, about WORDS or
+  STRUCTURE only. Never pronunciation or sounds: you only have the transcript, not
+  the audio. For each one:
+  - "rule": the general rule broken, short, in English (for example "past simple
+    with a finished time expression"), never the sentence itself;
+  - "produced": what the student said; "correct": the correct form;
+  - "repeats": the id of a KNOWN MISTAKE below when this mistake breaks the SAME
+    rule, even with different words (for example "I have worked there yesterday"
+    and "I have finished it last week" are the same rule); otherwise "".
+
+KNOWN MISTAKES OF THIS STUDENT (rules from earlier sessions, with their ids)
+{known_rules}"""
+
+
+MAX_REVIEW_ITEMS = 4
+_NO_KNOWN_RULES = "(none yet)"
+
+
+@dataclass(frozen=True)
+class KnownRule:
+    """Uma regra que o aluno já tem para revisar, com o identificador que o avaliador cita."""
+
+    id: str
+    rule: str
 
 
 @dataclass(frozen=True)
@@ -122,7 +145,11 @@ class EvaluationOutcome:
     review_items: list[ReviewItem]
 
 
-def evaluate(content: ScenarioContent, messages: list[BaseMessage]) -> EvaluationOutcome:
+def evaluate(
+    content: ScenarioContent,
+    messages: list[BaseMessage],
+    known_rules: Sequence[KnownRule] = (),
+) -> EvaluationOutcome:
     """Avalia a execução de um cenário: julga as dimensões linguísticas e confirma
     os critérios de aceite satisfeitos, a partir da transcrição inteira.
 
@@ -133,6 +160,12 @@ def evaluate(content: ScenarioContent, messages: list[BaseMessage]) -> Evaluatio
     As falas que o aluno deu depois de ver uma dica saem marcadas na transcrição, e só
     quando há alguma o prompt explica a marca: ela pesa apenas na autonomia, porque dizer
     em inglês a sugestão em português continua sendo o inglês do próprio aluno.
+
+    Os erros de revisão vêm com a regra por trás de cada um, e `known_rules` são as regras
+    que o aluno já tem: o avaliador diz quando um erro novo é a mesma regra de uma delas,
+    porque é a regra, e não o trecho, que se revisa. Um `repeats` que não está entre as
+    conhecidas é ignorado, um erro sem regra ou sem as duas formas é descartado, e passam
+    no máximo 4.
     """
     criteria_status = "\n".join(f"- {c.code}: {c.text}" for c in content.criteria)
     dimensions_text = "\n".join(
@@ -153,6 +186,8 @@ def evaluate(content: ScenarioContent, messages: list[BaseMessage]) -> Evaluatio
         hints_note=_HINTS_NOTE if any(answered_after_hint(m) for m in messages) else "",
         dimensions=dimensions_text,
         guidance=guidance_text,
+        known_rules="\n".join(f"- {known.id}: {known.rule}" for known in known_rules)
+        or _NO_KNOWN_RULES,
     )
 
     llm = get_structured_llm(ModelPurpose.JUDGE, EvaluationResult)
@@ -176,5 +211,25 @@ def evaluate(content: ScenarioContent, messages: list[BaseMessage]) -> Evaluatio
         judged_dimensions=judged_dimensions,
         feedback=result.feedback.strip(),
         memory_summary=result.memory_summary.strip(),
-        review_items=result.review_items,
+        review_items=_usable_review_items(result.review_items, known_rules),
     )
+
+
+def _usable_review_items(
+    items: list[ReviewItem], known_rules: Sequence[KnownRule]
+) -> list[ReviewItem]:
+    """Os erros que podem virar item de revisão, com `repeats` só apontando regra conhecida."""
+    known_ids = {known.id for known in known_rules}
+    usable = [
+        item.model_copy(
+            update={
+                "rule": item.rule.strip(),
+                "produced": item.produced.strip(),
+                "correct": item.correct.strip(),
+                "repeats": item.repeats if item.repeats in known_ids else "",
+            }
+        )
+        for item in items
+        if item.rule.strip() and item.produced.strip() and item.correct.strip()
+    ]
+    return usable[:MAX_REVIEW_ITEMS]
