@@ -26,11 +26,19 @@ _JOURNEY_EXAMPLE = [
                 "order": 1,
                 "completed": True,
                 "unlocked": True,
+                "cast": [
+                    {"name": "Rachel", "scene_function": "recrutadora de RH"},
+                    {"name": "Tom", "scene_function": "tech lead do time de backend"},
+                ],
                 "level_states": [
                     {
                         "order": 1,
                         "name": "Ouvir",
                         "expected_cefr": "A1-A2",
+                        "expected_production": (
+                            "Compreensão auditiva: responde perguntas fechadas com sim, "
+                            "não ou uma escolha simples."
+                        ),
                         "approved": False,
                         "available": True,
                         "cooldown_remaining_seconds": None,
@@ -40,6 +48,10 @@ _JOURNEY_EXAMPLE = [
                         "order": 3,
                         "name": "Conversa livre",
                         "expected_cefr": "A2-B1",
+                        "expected_production": (
+                            "Produção livre: conversa consolidada, sem restrição de "
+                            "formato de resposta."
+                        ),
                         "approved": True,
                         "available": True,
                         "cooldown_remaining_seconds": None,

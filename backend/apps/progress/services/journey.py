@@ -2,9 +2,10 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import timedelta
 
+from django.db.models import Prefetch
 from django.utils import timezone
 
-from apps.catalog.models import Level, Scenario, Track
+from apps.catalog.models import Level, Scenario, ScenarioRole, Track
 from apps.progress.models import Attempt
 
 
@@ -29,12 +30,16 @@ class LevelState:
 
 @dataclass
 class ScenarioState:
-    """Estado calculado de um cenário, para um aluno."""
+    """Estado calculado de um cenário, para um aluno.
+
+    `cast` é o elenco do cenário na ordem em que os personagens entram na cena.
+    """
 
     scenario: Scenario
     completed: bool
     unlocked: bool
     level_states: list[LevelState]
+    cast: list[ScenarioRole]
 
 
 @dataclass
@@ -56,7 +61,13 @@ def build_journey(user) -> list[TrackState]:
     tentativas do aluno são carregadas de uma vez, e o estado de cada nível, cenário
     e trilha é calculado em memória a partir delas.
     """
-    tracks = list(Track.objects.order_by("order").prefetch_related("scenarios"))
+    roles = ScenarioRole.objects.select_related("persona").order_by("opening_order")
+    scenarios_with_cast = Scenario.objects.prefetch_related(Prefetch("roles", queryset=roles))
+    tracks = list(
+        Track.objects.order_by("order").prefetch_related(
+            Prefetch("scenarios", queryset=scenarios_with_cast)
+        )
+    )
     levels = list(Level.objects.order_by("order"))
     attempts = list(Attempt.objects.filter(user=user).select_related("level"))
     now = timezone.now()
@@ -124,6 +135,7 @@ def build_journey(user) -> list[TrackState]:
                     completed=completed,
                     unlocked=unlocked,
                     level_states=level_states,
+                    cast=list(scenario.roles.all()),
                 )
             )
             previous_completed = completed

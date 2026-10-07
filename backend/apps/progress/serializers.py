@@ -24,6 +24,10 @@ class LevelStateSerializer(serializers.Serializer):
     available = serializers.BooleanField(
         help_text="Não está em cooldown — pode ser tentado agora, aprovado ou não antes."
     )
+    expected_production = serializers.CharField(
+        source="level.expected_production",
+        help_text="O que se espera do aluno neste nível, em linguagem para o aluno.",
+    )
     cooldown_remaining_seconds = serializers.SerializerMethodField(
         help_text="Segundos até liberar de novo, ou nulo se já está disponível."
     )
@@ -41,6 +45,15 @@ class LevelStateSerializer(serializers.Serializer):
         return int(obj.cooldown_remaining.total_seconds())
 
 
+class CastMemberSerializer(serializers.Serializer):
+    """Personagem do elenco de um cenário, como a jornada o exibe."""
+
+    name = serializers.CharField(source="persona.name", help_text="Nome do personagem.")
+    scene_function = serializers.CharField(
+        help_text="Função do personagem na cena (ex.: 'recrutadora de RH')."
+    )
+
+
 class ScenarioStateSerializer(serializers.Serializer):
     """Estado calculado de um cenário, para a jornada do aluno."""
 
@@ -52,6 +65,9 @@ class ScenarioStateSerializer(serializers.Serializer):
     )
     unlocked = serializers.BooleanField(
         help_text="A trilha está liberada e o cenário anterior, se houver, já está concluído."
+    )
+    cast = CastMemberSerializer(
+        many=True, help_text="Elenco do cenário, na ordem em que os personagens entram na cena."
     )
     level_states = LevelStateSerializer(many=True)
 
