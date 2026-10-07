@@ -7,6 +7,7 @@ import DiagnosticoPage from "./pages/diagnostico/DiagnosticoPage";
 import EntradaPage from "./pages/entrada/EntradaPage";
 import JornadaPage from "./pages/jornada/JornadaPage";
 import RelatorioPage from "./pages/relatorio/RelatorioPage";
+import RevisaoPage from "./pages/revisao/RevisaoPage";
 import SessaoAoVivoPage from "./pages/sessao/SessaoAoVivoPage";
 
 /** Raiz do app: roteamento entre as telas do fluxo do aluno. */
@@ -22,6 +23,7 @@ export default function App() {
             <Route path="/jornada" element={<JornadaPage />} />
             <Route path="/cenario/:scenarioSlug/:levelOrder" element={<CenarioPage />} />
             <Route path="/relatorio/:attemptId" element={<RelatorioPage />} />
+            <Route path="/revisao" element={<RevisaoPage />} />
           </Route>
           <Route path="/sessao/:scenarioSlug/:levelOrder" element={<SessaoAoVivoPage />} />
         </Route>
