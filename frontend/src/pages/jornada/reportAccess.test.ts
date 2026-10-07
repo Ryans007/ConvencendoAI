@@ -54,7 +54,7 @@ describe("reportAccess", () => {
     const access = reportAccess("Carreira em TI", scenario, levelState(42));
 
     expect(access?.ariaLabel).toBe(
-      "Ver último relatório: Entrevista de emprego na TechCorp, Ouvir",
+      "Abrir último relatório: Entrevista de emprego na TechCorp, Ouvir",
     );
   });
 });
