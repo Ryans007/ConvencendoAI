@@ -98,3 +98,34 @@ def test_journey_level_carries_the_last_attempt_or_null(django_user_model):
     assert (last["id"], last["final_score"], last["passed"]) == (attempt.id, 64, False)
     assert by_order[2]["last_attempt"] is None
     assert by_order[3]["last_attempt"] is None
+
+
+def test_journey_scenario_carries_the_cast_in_scene_order(django_user_model):
+    user = django_user_model.objects.create_user(username="aluno", password="Xk9#mQ2vLp8Z")
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    response = client.get("/api/journey/")
+
+    scenario = Scenario.objects.get(slug="entrevista-de-emprego")
+    track = next(t for t in response.data if t["slug"] == scenario.track.slug)
+    scenario_state = next(s for s in track["scenario_states"] if s["slug"] == scenario.slug)
+    expected = [
+        {"name": role.persona.name, "scene_function": role.scene_function}
+        for role in scenario.roles.select_related("persona").order_by("opening_order")
+    ]
+    assert expected
+    assert [dict(member) for member in scenario_state["cast"]] == expected
+
+
+def test_journey_level_carries_the_expected_production(django_user_model):
+    user = django_user_model.objects.create_user(username="aluno", password="Xk9#mQ2vLp8Z")
+    client = APIClient()
+    client.force_authenticate(user=user)
+
+    response = client.get("/api/journey/")
+
+    scenario_state = response.data[0]["scenario_states"][0]
+    by_order = {state["order"]: state for state in scenario_state["level_states"]}
+    for order, level_state in by_order.items():
+        assert level_state["expected_production"] == Level.objects.get(order=order).expected_production

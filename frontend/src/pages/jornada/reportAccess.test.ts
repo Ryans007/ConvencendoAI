@@ -8,6 +8,7 @@ function levelState(lastAttemptId: number | null): LevelState {
     order: 1,
     name: "Ouvir",
     expected_cefr: "A1-A2",
+    expected_production: "Compreensão auditiva.",
     approved: false,
     available: false,
     cooldown_remaining_seconds: 7200,
@@ -24,6 +25,7 @@ const scenario: ScenarioState = {
   order: 1,
   completed: false,
   unlocked: true,
+  cast: [],
   level_states: [],
 };
 
@@ -52,7 +54,7 @@ describe("reportAccess", () => {
     const access = reportAccess("Carreira em TI", scenario, levelState(42));
 
     expect(access?.ariaLabel).toBe(
-      "Ver último relatório: Entrevista de emprego na TechCorp, Ouvir",
+      "Abrir último relatório: Entrevista de emprego na TechCorp, Ouvir",
     );
   });
 });

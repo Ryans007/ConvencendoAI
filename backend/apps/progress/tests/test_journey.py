@@ -5,7 +5,7 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from apps.catalog.models import Level, Scenario, Track
+from apps.catalog.models import Archetype, Level, Persona, Scenario, ScenarioRole, Track
 from apps.progress.models import Attempt
 from apps.progress.services import LevelState, build_journey
 
@@ -13,6 +13,19 @@ from apps.progress.services import LevelState, build_journey
 @pytest.fixture
 def levels(db) -> list[Level]:
     return list(Level.objects.filter(order__in=(1, 2, 3)))
+
+
+def _role(scenario: Scenario, persona: Persona, order: int, scene_function: str) -> ScenarioRole:
+    return ScenarioRole.objects.create(
+        scenario=scenario,
+        persona=persona,
+        archetype=Archetype.objects.first(),
+        scene_function=scene_function,
+        traits="traço",
+        resistance="resistência",
+        concession="concessão",
+        opening_order=order,
+    )
 
 
 def _scenario(track: Track, slug: str, order: int) -> Scenario:
@@ -32,11 +45,13 @@ def test_leitura_da_jornada_nao_cresce_com_o_numero_de_cenarios(
     django_user_model, levels: list[Level]
 ) -> None:
     """A quantidade de consultas para montar a jornada inteira não cresce com o
-    número de trilhas e cenários existentes.
+    número de trilhas, cenários e personagens existentes.
     """
     user = django_user_model.objects.create(username="aluno")
+    persona_a = Persona.objects.create(name="Ana", voice="nova")
+    persona_b = Persona.objects.create(name="Beto", voice="onyx")
     track_a = Track.objects.create(slug="a", title="A", order=900, student_role="dev backend")
-    _scenario(track_a, "a1", 1)
+    _role(_scenario(track_a, "a1", 1), persona_a, 1, "chefe")
     _scenario(track_a, "a2", 2)
 
     with CaptureQueriesContext(connection) as small:
@@ -44,7 +59,9 @@ def test_leitura_da_jornada_nao_cresce_com_o_numero_de_cenarios(
 
     track_b = Track.objects.create(slug="b", title="B", order=901, student_role="hóspede")
     for i in range(10):
-        _scenario(track_b, f"b{i}", i + 1)
+        scenario = _scenario(track_b, f"b{i}", i + 1)
+        _role(scenario, persona_a, 1, "chefe")
+        _role(scenario, persona_b, 2, "colega")
 
     with CaptureQueriesContext(connection) as big:
         build_journey(user)
@@ -155,3 +172,38 @@ def test_cooldown_continua_vindo_da_ultima_tentativa_concluida(django_user_model
     assert remaining is not None
     assert timedelta(hours=9, minutes=50) < remaining <= timedelta(hours=10)
     assert _level_state(user, 2).cooldown_remaining is None
+
+
+def _scenario_state(user, scenario_slug: str):
+    for track_state in build_journey(user):
+        for scenario_state in track_state.scenario_states:
+            if scenario_state.scenario.slug == scenario_slug:
+                return scenario_state
+    raise AssertionError(f"cenário {scenario_slug} fora da jornada")
+
+
+@pytest.mark.django_db
+def test_o_elenco_vem_na_ordem_em_que_os_personagens_entram_na_cena(django_user_model) -> None:
+    user = django_user_model.objects.create(username="aluno")
+    track = Track.objects.create(slug="t", title="T", order=900, student_role="dev")
+    scenario = _scenario(track, "cena", 1)
+    late = Persona.objects.create(name="Tardia", voice="nova")
+    early = Persona.objects.create(name="Cedo", voice="onyx")
+    _role(scenario, late, 2, "gerente")
+    _role(scenario, early, 1, "recrutador")
+
+    cast = _scenario_state(user, "cena").cast
+
+    assert [(role.persona.name, role.scene_function) for role in cast] == [
+        ("Cedo", "recrutador"),
+        ("Tardia", "gerente"),
+    ]
+
+
+@pytest.mark.django_db
+def test_cenario_sem_personagens_traz_elenco_vazio(django_user_model) -> None:
+    user = django_user_model.objects.create(username="aluno")
+    track = Track.objects.create(slug="t", title="T", order=900, student_role="dev")
+    _scenario(track, "vazia", 1)
+
+    assert _scenario_state(user, "vazia").cast == []

@@ -1,41 +1,38 @@
-import { Logo } from "../../components/Logo";
-import { LogoutLink } from "../../components/LogoutLink";
 import { useJourney } from "../../hooks/useJourney";
+import { useReviewSummary } from "../../hooks/useReviewSummary";
+import { ReviewShortcutBar } from "./ReviewShortcutBar";
 import { TrackSection } from "./TrackSection";
 
-/** Tela de jornada: todas as trilhas, cenarios e niveis do aluno autenticado. */
+/** Tela de jornada: todas as trilhas, cenários e níveis do aluno autenticado. */
 export default function JornadaPage() {
   const { data: tracks, isLoading, isError } = useJourney();
-
-  const activeTrack = tracks?.find((track) => track.unlocked && !track.completed) ?? tracks?.[0];
+  const { data: review } = useReviewSummary();
+  const due = review?.due ?? 0;
 
   return (
-    <div className="min-h-screen bg-app">
-      <header className="sticky top-0 z-10 flex items-center justify-between gap-6 border-b border-line bg-surface/90 px-8 py-4 backdrop-blur">
-        <div className="flex flex-1 items-center gap-2.5">
-          <Logo size={24} />
-          <span className="text-scenario font-semibold">ConvencendoAI</span>
-        </div>
-        <div className="text-page-title font-semibold tracking-tight">Sua jornada</div>
-        <div className="flex flex-1 items-center justify-end gap-4">
-          {activeTrack && <span className="text-aux text-ink-muted">{activeTrack.student_role}</span>}
-          <LogoutLink />
-        </div>
-      </header>
+    <main className="relative overflow-hidden">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute left-1/2 top-[-120px] h-[420px] w-[820px] -translate-x-1/2 bg-[radial-gradient(ellipse_at_center,rgb(0_214_143/0.18),rgb(0_214_143/0)_68%)]"
+      />
 
-      <main className="mx-auto max-w-[760px] px-8 py-10">
+      <div className={`relative mx-auto max-w-[760px] px-5 pt-8 lg:px-8 lg:pt-10 ${due > 0 ? "pb-28" : "pb-10"}`}>
+        <h1 className="mb-8 text-page-title font-semibold tracking-tight">Sua jornada</h1>
+
         {isLoading && <p className="text-scenario text-ink-muted">Carregando sua jornada...</p>}
 
         {isError && (
           <p className="text-scenario text-warn-strong">
-            Nao foi possivel carregar sua jornada agora. Tente novamente em instantes.
+            Não foi possível carregar sua jornada agora. Tente novamente em instantes.
           </p>
         )}
 
         {tracks?.map((track) => (
           <TrackSection key={track.slug} track={track} />
         ))}
-      </main>
-    </div>
+      </div>
+
+      {due > 0 && <ReviewShortcutBar due={due} />}
+    </main>
   );
 }

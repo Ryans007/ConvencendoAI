@@ -12,10 +12,17 @@ export interface LevelState {
   order: number;
   name: string;
   expected_cefr: string;
+  expected_production: string;
   approved: boolean;
   available: boolean;
   cooldown_remaining_seconds: number | null;
   last_attempt: LastAttempt | null;
+}
+
+/** Personagem do elenco de um cenário, na ordem em que entra na cena. */
+export interface CastMember {
+  name: string;
+  scene_function: string;
 }
 
 export interface ScenarioState {
@@ -24,6 +31,7 @@ export interface ScenarioState {
   order: number;
   completed: boolean;
   unlocked: boolean;
+  cast: CastMember[];
   level_states: LevelState[];
 }
 

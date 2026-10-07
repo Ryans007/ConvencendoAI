@@ -2,6 +2,7 @@
 CLAUDE.md
 /.claude
 /openspec
+/design
 
 # Ambiente
 .env
