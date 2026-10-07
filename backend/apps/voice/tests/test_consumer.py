@@ -64,7 +64,7 @@ def test_live_session_opens_transcribes_a_turn_and_ends(django_user_model, monke
         review_items=[],
     )
     monkeypatch.setattr(
-        "apps.agents.services.session_runner.evaluate", lambda content, messages: fake_outcome
+        "apps.agents.services.session_runner.evaluate", lambda content, messages, known_rules=(): fake_outcome
     )
 
     async def run() -> None:
@@ -131,7 +131,7 @@ def test_audio_sent_during_evaluation_is_ignored(django_user_model, monkeypatch)
         review_items=[],
     )
 
-    def fake_evaluate(content, messages):
+    def fake_evaluate(content, messages, known_rules=()):
         evaluated.append(messages)
         return outcome
 

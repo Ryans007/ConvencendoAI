@@ -63,17 +63,31 @@ class ClosingLine(BaseModel):
 
 
 class ReviewItem(BaseModel):
-    """Um item de erro de linguagem extraído pelo avaliador ao fim da execução.
+    """Um erro de linguagem apontado pelo avaliador ao fim da execução.
 
-    Nunca é persistido — ver `EvaluationResult.review_items` — então um campo que o
-    modelo deixou de preencher vira string vazia, nunca uma exceção.
+    `rule` é a regra por trás do erro, e não o trecho: é ela que junta, num item de revisão
+    só, erros iguais ditos com palavras diferentes em sessões diferentes. `repeats` traz o
+    identificador de uma regra que o aluno já tem quando o erro é a mesma regra, ou vazio.
+    Todo campo tem default: um campo que o modelo deixou de preencher vira string vazia,
+    nunca uma exceção.
     """
 
-    item: str = Field(
-        default="", description="The language item being reviewed (word, structure or sound)"
+    rule: str = Field(
+        default="",
+        description=(
+            "The general rule the student broke, short, in English "
+            "(e.g. 'past simple with a finished time expression'), not the sentence"
+        ),
     )
     produced: str = Field(default="", description="The form the student actually produced")
     correct: str = Field(default="", description="The correct form")
+    repeats: str = Field(
+        default="",
+        description=(
+            "The id of a KNOWN MISTAKE when this mistake breaks the same rule, "
+            "otherwise empty"
+        ),
+    )
 
 
 class EvaluationResult(BaseModel):
