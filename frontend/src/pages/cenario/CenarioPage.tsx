@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { AvatarPlaceholder } from "../../components/AvatarPlaceholder";
-import { LogoutLink } from "../../components/LogoutLink";
 import { useScenarioBriefing } from "../../hooks/useScenarioBriefing";
 import type { ReportContext } from "../relatorio/reportContext";
 
@@ -23,8 +22,8 @@ export default function CenarioPage() {
   const { data: briefing, isLoading, isError } = useScenarioBriefing(scenarioSlug, level);
 
   return (
-    <div className="min-h-screen bg-app px-8 py-10">
-      <div className="mx-auto flex max-w-[760px] items-center justify-between">
+    <div className="px-5 py-8 lg:px-8 lg:py-10">
+      <div className="mx-auto max-w-[760px]">
         <button
           type="button"
           onClick={() => navigate("/jornada")}
@@ -33,7 +32,6 @@ export default function CenarioPage() {
           <span>&larr;</span>
           <span>Voltar para a jornada</span>
         </button>
-        <LogoutLink />
       </div>
 
       <div className="mx-auto mt-10 max-w-[760px]">

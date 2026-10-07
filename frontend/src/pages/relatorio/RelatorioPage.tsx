@@ -21,7 +21,7 @@ export default function RelatorioPage() {
     : [];
 
   return (
-    <div className="min-h-screen bg-app px-8 py-12">
+    <div className="px-5 py-8 lg:px-8 lg:py-12">
       <div className="mx-auto max-w-[760px]">
         {isLoading && <p className="text-scenario text-ink-muted">Carregando o relatório...</p>}
 

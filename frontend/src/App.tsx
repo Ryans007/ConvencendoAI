@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
+import { AppShell } from "./components/layout/AppShell";
 import { RequireAuth } from "./components/RequireAuth";
 import CenarioPage from "./pages/cenario/CenarioPage";
 import DiagnosticoPage from "./pages/diagnostico/DiagnosticoPage";
@@ -17,10 +18,12 @@ export default function App() {
         <Route path="/diagnostico" element={<DiagnosticoPage />} />
 
         <Route element={<RequireAuth />}>
-          <Route path="/jornada" element={<JornadaPage />} />
-          <Route path="/cenario/:scenarioSlug/:levelOrder" element={<CenarioPage />} />
+          <Route element={<AppShell />}>
+            <Route path="/jornada" element={<JornadaPage />} />
+            <Route path="/cenario/:scenarioSlug/:levelOrder" element={<CenarioPage />} />
+            <Route path="/relatorio/:attemptId" element={<RelatorioPage />} />
+          </Route>
           <Route path="/sessao/:scenarioSlug/:levelOrder" element={<SessaoAoVivoPage />} />
-          <Route path="/relatorio/:attemptId" element={<RelatorioPage />} />
         </Route>
 
         <Route path="/" element={<Navigate to="/jornada" replace />} />
