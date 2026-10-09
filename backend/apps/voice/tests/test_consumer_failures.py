@@ -220,3 +220,67 @@ def test_voice_synthesis_failure_carries_the_code_too(django_user_model, monkeyp
         await communicator.disconnect()
 
     async_to_sync(run)()
+
+
+def _invalid_media_file() -> openai.BadRequestError:
+    response = httpx.Response(400, request=_REQUEST)
+    body = {
+        "message": "could not process file - is it a valid media file?",
+        "type": "invalid_request_error",
+        "code": "invalid_media_file",
+    }
+    return openai.BadRequestError(body["message"], response=response, body=body)
+
+
+def test_an_audio_the_provider_cannot_read_asks_the_student_to_speak_again(
+    django_user_model, monkeypatch
+):
+    user, token = _student(django_user_model)
+    answers = iter([_invalid_media_file(), "I need one more week."])
+
+    def transcribe_then_recover(audio):
+        answer = next(answers)
+        if isinstance(answer, BaseException):
+            raise answer
+        return answer
+
+    _prepare(monkeypatch, [_OPENING, _RESOLVING], transcribe=transcribe_then_recover)
+
+    async def run() -> None:
+        communicator = await _connect(token)
+        assert await communicator.receive_from() == b"fake-wav-bytes"
+
+        await communicator.send_to(bytes_data=b"tap")
+        assert json.loads(await communicator.receive_from()) == {"type": "no_speech"}
+        await sync_to_async(_attempt_stayed_open)(user)
+
+        await communicator.send_to(bytes_data=b"real-speech")
+        assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.disconnect()
+
+    async_to_sync(run)()
+
+
+def test_a_bad_request_that_is_not_about_the_audio_still_ends_the_session(
+    django_user_model, monkeypatch
+):
+    _, token = _student(django_user_model)
+    response = httpx.Response(400, request=_REQUEST)
+    other = openai.BadRequestError(
+        "detalhe", response=response, body={"message": "detalhe", "code": "model_not_found"}
+    )
+
+    def failing_transcribe(audio):
+        raise other
+
+    _prepare(monkeypatch, [_OPENING], transcribe=failing_transcribe)
+
+    async def run() -> None:
+        communicator = await _connect(token)
+        assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.send_to(bytes_data=b"student-turn")
+
+        await _expect_error(communicator, "provider_unavailable", forbidden_text="model_not_found")
+        await communicator.disconnect()
+
+    async_to_sync(run)()
