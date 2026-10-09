@@ -205,3 +205,41 @@ def test_a_failure_while_recording_the_items_undoes_the_attempt(student, monkeyp
     saved = Attempt.objects.get(pk=attempt.pk)
     assert saved.completed_at is None
     assert saved.score_breakdowns.count() == 0
+
+
+def test_a_repeated_rule_brings_an_archived_item_back(student):
+    item = ReviewItem.objects.create(
+        user=student,
+        rule=PAST_SIMPLE,
+        box=2,
+        due_on=date(2026, 10, 20),
+        archived_at=timezone.now(),
+    )
+    attempt = _attempt(student)
+
+    record_review_items(
+        student,
+        attempt,
+        [
+            _mistake(
+                PAST_SIMPLE,
+                "I have finished the API last week",
+                "I finished the API last week",
+                repeats=known_rule_id(item),
+            )
+        ],
+        TODAY,
+    )
+
+    item.refresh_from_db()
+    assert item.archived_at is None
+    assert (item.box, item.due_on) == (0, date(2026, 10, 8))
+    assert item.occurrences.count() == 1
+
+
+def test_the_evaluator_still_receives_the_archived_rules(student):
+    ReviewItem.objects.create(
+        user=student, rule=PAST_SIMPLE, box=0, due_on=TODAY, archived_at=timezone.now()
+    )
+
+    assert [known.rule for known in known_rules_for(student)] == [PAST_SIMPLE]

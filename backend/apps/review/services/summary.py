@@ -3,7 +3,7 @@ from datetime import date
 
 from django.db.models import Count, Min, Q
 
-from apps.review.models import ReviewItem
+from apps.review.services.queries import active_items
 
 
 @dataclass(frozen=True)
@@ -17,11 +17,12 @@ class ReviewSummary:
 def review_summary(user, today: date) -> ReviewSummary:
     """Resume a revisão do aluno numa consulta só, comparando as datas no momento da leitura.
 
-    Vencido é o item que vence hoje ou já passou da data. O vencimento é calculado aqui, e
-    não por uma tarefa agendada que marque os itens, pela mesma razão do cooldown: o sistema
-    não tem fila nem job, e uma comparação de datas na leitura basta.
+    Vencido é o item ativo que vence hoje ou já passou da data; o arquivado não conta. O
+    vencimento é calculado aqui, e não por uma tarefa agendada que marque os itens, pela
+    mesma razão do cooldown: o sistema não tem fila nem job, e uma comparação de datas na
+    leitura basta.
     """
-    totals = ReviewItem.objects.filter(user=user).aggregate(
+    totals = active_items(user).aggregate(
         due=Count("id", filter=Q(due_on__lte=today)),
         next_due_on=Min("due_on", filter=Q(due_on__gt=today)),
     )

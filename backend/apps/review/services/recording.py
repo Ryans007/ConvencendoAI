@@ -32,7 +32,9 @@ def record_review_items(
 
     Um erro que repete uma regra que o aluno já tem vira uma nova ocorrência daquele item e
     o faz voltar à primeira caixa, inclusive se estava dominado: errar de novo mostra que a
-    regra não está firme. Um erro de regra nova cria um item. Dois erros da mesma regra nova
+    regra não está firme, e também se o aluno o tinha arquivado com "Não disse isso": o
+    arquivamento dizia que ele não falou aquilo, e agora o avaliador ouviu de novo. Um erro
+    de regra nova cria um item. Dois erros da mesma regra nova
     na mesma sessão viram um item só, comparando a regra sem diferença de caixa e de espaços.
     Chamado dentro da transação que grava a tentativa: ou tudo é gravado, ou nada.
     """
@@ -52,8 +54,8 @@ def record_review_items(
                 )
                 created_in_session[key] = item
         else:
-            item.box, item.due_on = box, due_on
-            item.save(update_fields=["box", "due_on", "updated_at"])
+            item.box, item.due_on, item.archived_at = box, due_on, None
+            item.save(update_fields=["box", "due_on", "archived_at", "updated_at"])
 
         ReviewOccurrence.objects.create(
             item=item, attempt=attempt, produced=mistake.produced, correct=mistake.correct
