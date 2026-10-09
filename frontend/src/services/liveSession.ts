@@ -1,4 +1,4 @@
-import { AudioRecorder } from "./audioRecorder";
+import { AudioRecorder, MIN_RECORDING_MS } from "./audioRecorder";
 import { getAccessToken } from "./session";
 
 const DEFAULT_WS_BASE_URL = "ws://localhost:8010/ws";
@@ -247,10 +247,14 @@ export class LiveSession {
   }
 
   async startRecording(): Promise<void> {
-    if (this.state.phase !== "student-turn") {
+    if (this.state.phase !== "student-turn" || this.microphone.active) {
       return;
     }
-    await this.microphone.start();
+    const started = await this.microphone.start();
+    if (!started) {
+      this.setState({ noSpeechNotice: true });
+      return;
+    }
     this.setState({ phase: "recording", noSpeechNotice: false });
   }
 
@@ -261,6 +265,10 @@ export class LiveSession {
   private async sendRecording(): Promise<void> {
     const recording = await this.microphone.stop();
     if (!recording) {
+      return;
+    }
+    if (recording.durationMs < MIN_RECORDING_MS) {
+      this.setState({ phase: "student-turn", noSpeechNotice: true });
       return;
     }
     const buffer = await recording.blob.arrayBuffer();

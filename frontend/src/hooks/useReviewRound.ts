@@ -3,10 +3,9 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
 import { ApiError } from "../api/client";
 import { discardItem, fetchAnswerAudio, sendAnswer, type RoundItem } from "../api/reviewRound";
-import { AudioRecorder } from "../services/audioRecorder";
+import { AudioRecorder, MIN_RECORDING_MS } from "../services/audioRecorder";
 import { INITIAL_ROUND_STATE, roundReducer, type RoundState } from "../services/reviewRound";
 
-const MIN_RECORDING_MS = 350;
 const RECORDABLE_PHASES = ["idle", "not_heard", "mic_denied"];
 const CONFLICT = 409;
 

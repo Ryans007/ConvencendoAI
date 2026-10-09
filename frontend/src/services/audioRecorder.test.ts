@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AudioRecorder } from "./audioRecorder";
+import { AudioRecorder, MIN_RECORDING_MS } from "./audioRecorder";
 
 class FakeMediaRecorder {
   state: "inactive" | "recording" = "inactive";
@@ -93,5 +93,137 @@ describe("AudioRecorder", () => {
     const recording = await recorder.stop();
 
     expect(await recording?.blob.text()).toBe("fala");
+  });
+
+  it("a duração mínima que vale como fala é de 350 ms", () => {
+    expect(MIN_RECORDING_MS).toBe(350);
+  });
+
+  it("fica ocupado enquanto grava e livre depois de parar", async () => {
+    const recorder = new AudioRecorder();
+    expect(recorder.active).toBe(false);
+
+    await recorder.start();
+    expect(recorder.active).toBe(true);
+
+    await recorder.stop();
+    expect(recorder.active).toBe(false);
+  });
+
+  it("um segundo start enquanto grava é ignorado e não abre outro microfone", async () => {
+    const getUserMedia = vi.fn(async () => ({ getTracks: () => [{ stop: stopTrack }] }));
+    vi.stubGlobal("navigator", { mediaDevices: { getUserMedia } });
+    const recorder = new AudioRecorder();
+
+    const first = await recorder.start();
+    const second = await recorder.start();
+    await recorder.stop();
+
+    expect([first, second]).toEqual([true, false]);
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    expect(stopTrack).toHaveBeenCalledTimes(1);
+  });
+
+  it("dois start seguidos, sem esperar, abrem um só microfone", async () => {
+    const getUserMedia = vi.fn(async () => ({ getTracks: () => [{ stop: stopTrack }] }));
+    vi.stubGlobal("navigator", { mediaDevices: { getUserMedia } });
+    const recorder = new AudioRecorder();
+
+    const results = await Promise.all([recorder.start(), recorder.start()]);
+    await recorder.stop();
+
+    expect(results).toEqual([true, false]);
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+  });
+
+  it("parar antes de o microfone abrir cancela a gravação e solta o microfone", async () => {
+    let openMicrophone: (stream: unknown) => void = () => {};
+    vi.stubGlobal("navigator", {
+      mediaDevices: {
+        getUserMedia: () =>
+          new Promise((resolve) => {
+            openMicrophone = resolve;
+          }),
+      },
+    });
+    const recorder = new AudioRecorder();
+
+    const starting = recorder.start();
+    const stopped = await recorder.stop();
+    openMicrophone({ getTracks: () => [{ stop: stopTrack }] });
+
+    expect(stopped).toBeNull();
+    expect(await starting).toBe(false);
+    expect(stopTrack).toHaveBeenCalledTimes(1);
+    expect(recorder.active).toBe(false);
+  });
+
+  it("depois de um cancelamento, o aluno consegue gravar normalmente", async () => {
+    let openMicrophone: (stream: unknown) => void = () => {};
+    const getUserMedia = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            openMicrophone = resolve;
+          }),
+      )
+      .mockImplementation(async () => ({ getTracks: () => [{ stop: stopTrack }] }));
+    vi.stubGlobal("navigator", { mediaDevices: { getUserMedia } });
+    const recorder = new AudioRecorder();
+    const cancelled = recorder.start();
+    await recorder.stop();
+    openMicrophone({ getTracks: () => [{ stop: stopTrack }] });
+    await cancelled;
+
+    expect(await recorder.start()).toBe(true);
+    vi.advanceTimersByTime(500);
+    expect((await recorder.stop())?.durationMs).toBe(500);
+  });
+
+  it("soltar o gravador enquanto o microfone abre também cancela", async () => {
+    let openMicrophone: (stream: unknown) => void = () => {};
+    vi.stubGlobal("navigator", {
+      mediaDevices: {
+        getUserMedia: () =>
+          new Promise((resolve) => {
+            openMicrophone = resolve;
+          }),
+      },
+    });
+    const recorder = new AudioRecorder();
+
+    const starting = recorder.start();
+    recorder.release();
+    openMicrophone({ getTracks: () => [{ stop: stopTrack }] });
+
+    expect(await starting).toBe(false);
+    expect(stopTrack).toHaveBeenCalledTimes(1);
+  });
+
+  it("se o aluno nega o microfone, o gravador falha e continua livre para tentar de novo", async () => {
+    const getUserMedia = vi
+      .fn()
+      .mockRejectedValueOnce(new DOMException("negado", "NotAllowedError"))
+      .mockImplementation(async () => ({ getTracks: () => [{ stop: stopTrack }] }));
+    vi.stubGlobal("navigator", { mediaDevices: { getUserMedia } });
+    const recorder = new AudioRecorder();
+
+    await expect(recorder.start()).rejects.toThrow("negado");
+
+    expect(recorder.active).toBe(false);
+    expect(await recorder.start()).toBe(true);
+  });
+
+  it("se o navegador não consegue criar o gravador, o microfone é solto", async () => {
+    vi.stubGlobal("MediaRecorder", function BrokenMediaRecorder() {
+      throw new Error("sem suporte");
+    });
+    const recorder = new AudioRecorder();
+
+    await expect(recorder.start()).rejects.toThrow("sem suporte");
+
+    expect(stopTrack).toHaveBeenCalledTimes(1);
+    expect(recorder.active).toBe(false);
   });
 });

@@ -352,13 +352,91 @@ describe("LiveSession com dicas", () => {
     session.requestHint();
     socket.dispatch("message", { data: JSON.stringify({ type: "hint", text: "Sim." }) });
 
+    vi.useFakeTimers({ toFake: ["Date"] });
     await session.startRecording();
     expect(states.at(-1)?.hint.status).toBe("shown");
+    vi.advanceTimersByTime(800);
     session.stopRecording();
     await new Promise((resolve) => setTimeout(resolve, 0));
+    vi.useRealTimers();
 
     expect(states.at(-1)?.phase).toBe("persona-speaking");
     expect(states.at(-1)?.hint).toEqual({ status: "idle", text: null });
     expect(socket.sent.at(-1)).toBeInstanceOf(ArrayBuffer);
+  });
+});
+
+
+describe("LiveSession gravando a fala do aluno", () => {
+  function microphone() {
+    const stopTrack = vi.fn();
+    const getUserMedia = vi.fn(async () => ({ getTracks: () => [{ stop: stopTrack }] }));
+    vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
+    vi.stubGlobal("navigator", { mediaDevices: { getUserMedia } });
+    return { stopTrack, getUserMedia };
+  }
+
+  it("uma gravação curta demais não é enviada, e o aluno é avisado de que não foi ouvido", async () => {
+    microphone();
+    const { session, socket, states } = studentTurn(false);
+
+    await session.startRecording();
+    session.stopRecording();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(socket.sent.some((message) => message instanceof ArrayBuffer)).toBe(false);
+    expect(states.at(-1)?.phase).toBe("student-turn");
+    expect(states.at(-1)?.noSpeechNotice).toBe(true);
+  });
+
+  it("depois do aviso, o aluno pode gravar de novo e a fala longa é enviada", async () => {
+    microphone();
+    const { session, socket, states } = studentTurn(false);
+    await session.startRecording();
+    session.stopRecording();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    vi.useFakeTimers({ toFake: ["Date"] });
+    await session.startRecording();
+    expect(states.at(-1)?.noSpeechNotice).toBe(false);
+    vi.advanceTimersByTime(800);
+    session.stopRecording();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    vi.useRealTimers();
+
+    expect(socket.sent.at(-1)).toBeInstanceOf(ArrayBuffer);
+    expect(states.at(-1)?.phase).toBe("persona-speaking");
+  });
+
+  it("soltar o botão antes de o microfone abrir não começa a gravar e avisa o aluno", async () => {
+    const { stopTrack } = microphone();
+    let openMicrophone: (stream: unknown) => void = () => {};
+    navigator.mediaDevices.getUserMedia = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          openMicrophone = resolve as (stream: unknown) => void;
+        }),
+    ) as never;
+    const { session, states } = studentTurn(false);
+
+    const starting = session.startRecording();
+    session.stopRecording();
+    openMicrophone({ getTracks: () => [{ stop: stopTrack }] });
+    await starting;
+
+    expect(states.at(-1)?.phase).toBe("student-turn");
+    expect(states.at(-1)?.noSpeechNotice).toBe(true);
+    expect(stopTrack).toHaveBeenCalledTimes(1);
+  });
+
+  it("dois toques seguidos abrem um só microfone", async () => {
+    const { getUserMedia } = microphone();
+    const { session } = studentTurn(false);
+
+    const first = session.startRecording();
+    const second = session.startRecording();
+    await Promise.all([first, second]);
+
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
   });
 });

@@ -27,6 +27,7 @@ from apps.voice.services.failures import (
     FAILURE_DESCRIPTIONS,
     SessionErrorCode,
     classify_failure,
+    is_invalid_audio,
 )
 from apps.voice.services.stt import transcribe
 from apps.voice.services.tts import synthesize
@@ -117,7 +118,9 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
 
         Falha do provedor de STT encerra a sessão com erro explícito, sem fallback
         silencioso. Transcrição vazia não avança nem encerra: o cliente recebe
-        `no_speech` e a vez continua do aluno. A transcrição só aparece no console do
+        `no_speech` e a vez continua do aluno. O mesmo vale para um áudio que o provedor
+        recusa por não ser um arquivo válido, como o de um toque curto demais: é um problema
+        da gravação, e não do provedor. A transcrição só aparece no console do
         servidor — o cliente nunca a recebe, por decisão de produto (sessão ao vivo sem
         transcrição na tela).
 
@@ -141,6 +144,10 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         try:
             text = await sync_to_async(transcribe)(bytes_data)
         except Exception as exc:
+            if is_invalid_audio(exc):
+                print("[stt] audio invalido (gravacao curta demais); o aluno fala de novo")
+                await self.send(text_data=json.dumps({"type": "no_speech"}))
+                return
             await self._fail_with_error(exc)
             return
         print(f"[timing] stt: {time.monotonic() - started_at:.2f}s")
