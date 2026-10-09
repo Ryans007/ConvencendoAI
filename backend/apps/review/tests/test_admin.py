@@ -2,10 +2,17 @@ from datetime import date
 
 import pytest
 from django.urls import reverse
+from django.utils import timezone
 
 from apps.catalog.models import Level, Scenario
 from apps.progress.models import Attempt
-from apps.review.models import ReviewItem, ReviewOccurrence
+from apps.review.models import (
+    ReviewAnswer,
+    ReviewItem,
+    ReviewOccurrence,
+    ReviewResult,
+    ReviewResultKind,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -63,3 +70,54 @@ def test_items_cannot_be_added_changed_or_deleted(admin_client, django_user_mode
     ).status_code == 403
     item.refresh_from_db()
     assert item.box == 5
+
+
+def test_the_item_page_shows_the_review_answers_and_results(admin_client, django_user_model):
+    item = _item(django_user_model)
+    result = ReviewResult.objects.create(
+        item=item,
+        outcome=ReviewResultKind.SECOND_TRY,
+        box_before=3,
+        box_after=3,
+        due_on_after=date(2026, 12, 6),
+    )
+    ReviewAnswer.objects.create(
+        item=item,
+        result=result,
+        step=1,
+        attempt=2,
+        heard="I worked there yesterday",
+        correct=True,
+        feedback="Certo, o tempo já terminou.",
+        correction="",
+        revealed_correct="I worked there yesterday.",
+    )
+
+    response = admin_client.get(reverse("admin:review_reviewitem_change", args=[item.pk]))
+
+    page = response.content.decode()
+    assert "Certo, o tempo já terminou." in page
+    assert "Acertou na segunda tentativa" in page
+
+
+def test_the_list_flags_and_filters_archived_items(admin_client, django_user_model):
+    item = _item(django_user_model)
+    item.archived_at = timezone.now()
+    item.save()
+
+    response = admin_client.get(reverse("admin:review_reviewitem_changelist"))
+
+    assert response.status_code == 200
+    assert "arquivado" in response.content.decode().lower()
+    filtered = admin_client.get(reverse("admin:review_reviewitem_changelist") + "?archived_at__isempty=1")
+    assert "aluno_revisado" not in filtered.content.decode()
+
+
+def test_answers_and_results_cannot_be_edited_from_the_item_page(admin_client, django_user_model):
+    item = _item(django_user_model)
+
+    response = admin_client.get(reverse("admin:review_reviewitem_change", args=[item.pk]))
+
+    page = response.content.decode()
+    assert 'name="answers-MAX_NUM_FORMS" value="0"' in page
+    assert 'name="results-MAX_NUM_FORMS" value="0"' in page
