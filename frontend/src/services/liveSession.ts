@@ -1,3 +1,4 @@
+import { AudioRecorder } from "./audioRecorder";
 import { getAccessToken } from "./session";
 
 const DEFAULT_WS_BASE_URL = "ws://localhost:8010/ws";
@@ -86,9 +87,7 @@ export class LiveSession {
   private evaluationStarted = false;
   private endedByStudent = false;
 
-  private mediaStream: MediaStream | null = null;
-  private recorder: MediaRecorder | null = null;
-  private recordedChunks: Blob[] = [];
+  private readonly microphone = new AudioRecorder();
 
   private readonly hintsEnabled: boolean;
 
@@ -251,31 +250,22 @@ export class LiveSession {
     if (this.state.phase !== "student-turn") {
       return;
     }
-    this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    this.recordedChunks = [];
-    this.recorder = new MediaRecorder(this.mediaStream);
-    this.recorder.ondataavailable = (event) => this.recordedChunks.push(event.data);
-    this.recorder.onstop = () => this.sendRecording();
-    this.recorder.start();
+    await this.microphone.start();
     this.setState({ phase: "recording", noSpeechNotice: false });
   }
 
   stopRecording(): void {
-    if (this.recorder && this.recorder.state !== "inactive") {
-      this.recorder.stop();
-    }
+    void this.sendRecording();
   }
 
-  private sendRecording(): void {
-    const mimeType = this.recorder?.mimeType ?? "audio/webm";
-    const blob = new Blob(this.recordedChunks, { type: mimeType });
-    this.mediaStream?.getTracks().forEach((track) => track.stop());
-    this.mediaStream = null;
-
-    blob.arrayBuffer().then((buffer) => {
-      this.socket.send(buffer);
-      this.setState({ phase: "persona-speaking", hint: NO_HINT });
-    });
+  private async sendRecording(): Promise<void> {
+    const recording = await this.microphone.stop();
+    if (!recording) {
+      return;
+    }
+    const buffer = await recording.blob.arrayBuffer();
+    this.socket.send(buffer);
+    this.setState({ phase: "persona-speaking", hint: NO_HINT });
   }
 
   /**
@@ -304,7 +294,7 @@ export class LiveSession {
   /** Libera a conexao e o microfone ao desmontar a tela. */
   dispose(): void {
     this.endedByStudent = true;
-    this.mediaStream?.getTracks().forEach((track) => track.stop());
+    this.microphone.release();
     if (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING) {
       this.socket.close();
     }
