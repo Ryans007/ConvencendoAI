@@ -173,3 +173,107 @@ def test_english_text_outside_the_quotes_is_still_refused(fake_llm):
 
     assert verdict.feedback == HINT
     assert len(llm.prompts) == 2
+
+
+def test_the_note_already_shown_goes_into_the_prompt_with_the_request_not_to_repeat_it(fake_llm):
+    llm = fake_llm(ReviewVerdict(correct=True, feedback=HIT))
+
+    judge_review_answer(
+        rule=RULE,
+        said=SAID,
+        correct=CORRECT,
+        note="Repare no tempo da frase.",
+        step=1,
+        attempt=1,
+        heard="I worked there yesterday",
+    )
+
+    prompt = llm.prompts[0]
+    assert "ALREADY SHOWN TO THE STUDENT" in prompt
+    assert '"Repare no tempo da frase."' in prompt
+    assert "Do not repeat it" in prompt
+
+
+def test_without_a_note_the_prompt_has_no_such_block(fake_llm):
+    llm = fake_llm(ReviewVerdict(correct=True, feedback=HIT))
+
+    _judge()
+
+    assert "ALREADY SHOWN TO THE STUDENT" not in llm.prompts[0]
+
+
+def test_a_blank_note_adds_no_block(fake_llm):
+    llm = fake_llm(ReviewVerdict(correct=True, feedback=HIT))
+
+    judge_review_answer(
+        rule=RULE, said=SAID, correct=CORRECT, note="   ", step=1, attempt=1, heard="x"
+    )
+
+    assert "ALREADY SHOWN" not in llm.prompts[0]
+
+
+def test_the_first_miss_of_an_item_with_a_note_points_to_the_context_on_the_card(fake_llm):
+    llm = fake_llm(_wrong(HINT))
+
+    verdict = judge_review_answer(
+        rule=RULE,
+        said=SAID,
+        correct=CORRECT,
+        note="Repare no tempo da frase.",
+        step=1,
+        attempt=1,
+        heard="I have worked there yesterday",
+    )
+
+    assert verdict.feedback == "Ainda não. Releia o contexto acima e tente de novo."
+    assert verdict.correct is False
+    assert verdict.correction == CORRECT
+    assert len(llm.prompts) == 1
+
+
+def test_the_first_miss_with_a_note_does_not_retry_for_a_hint_that_will_be_replaced(fake_llm):
+    llm = fake_llm(_wrong("Look at the time word, it is finished."))
+
+    verdict = judge_review_answer(
+        rule=RULE, said=SAID, correct=CORRECT, note="Uma nota.", step=1, attempt=1, heard="x"
+    )
+
+    assert verdict.feedback.startswith("Ainda não")
+    assert len(llm.prompts) == 1
+
+
+def test_the_first_miss_without_a_note_keeps_the_teachers_hint(fake_llm):
+    fake_llm(_wrong(HINT))
+
+    verdict = _judge(attempt=1)
+
+    assert verdict.feedback == HINT
+
+
+def test_the_last_miss_with_a_note_keeps_the_teachers_explanation(fake_llm):
+    fake_llm(_wrong(GIVES_ANSWER))
+
+    verdict = judge_review_answer(
+        rule=RULE, said=SAID, correct=CORRECT, note="Uma nota.", step=1, attempt=2, heard="x"
+    )
+
+    assert verdict.feedback == GIVES_ANSWER
+
+
+def test_a_correct_answer_with_a_note_keeps_the_teachers_confirmation(fake_llm):
+    fake_llm(ReviewVerdict(correct=True, feedback=HIT))
+
+    verdict = judge_review_answer(
+        rule=RULE, said=SAID, correct=CORRECT, note="Uma nota.", step=1, attempt=1, heard="x"
+    )
+
+    assert verdict.feedback == HIT
+
+
+def test_an_empty_verdict_with_a_note_is_still_a_failure(fake_llm):
+    fake_llm(*[ReviewVerdict()] * review_teacher.MAX_TRIES)
+
+    with pytest.raises(ReviewJudgmentFailed):
+        judge_review_answer(
+            rule=RULE, said=SAID, correct=CORRECT, note="Uma nota.", step=1, attempt=1, heard="x"
+        )

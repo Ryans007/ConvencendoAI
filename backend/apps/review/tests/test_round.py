@@ -171,3 +171,44 @@ def test_the_number_of_queries_does_not_grow_with_the_items(client, student):
         client.get("/api/review/round/")
 
     assert len(big.captured_queries) == len(small.captured_queries)
+
+
+def test_the_item_carries_the_note_of_its_latest_occurrence(client, student):
+    item = _item(student)
+    occurrence = item.occurrences.get()
+    occurrence.note = "Repare no tempo da frase: ele já terminou."
+    occurrence.save()
+
+    assert _round(client)["results"][0]["note"] == "Repare no tempo da frase: ele já terminou."
+
+
+def test_an_old_item_without_a_note_comes_back_with_an_empty_note(client, student):
+    _item(student)
+
+    result = _round(client)["results"][0]
+
+    assert result["note"] == ""
+    assert result["said"] == "disse regra"
+
+
+def test_the_note_comes_with_the_first_attempt(client, student):
+    item = _item(student)
+    occurrence = item.occurrences.get()
+    occurrence.note = "Uma nota."
+    occurrence.save()
+
+    result = _round(client)["results"][0]
+
+    assert (result["step"], result["attempt"], result["note"]) == (1, 1, "Uma nota.")
+
+
+def test_the_newest_occurrence_decides_which_note_is_shown(client, student):
+    item = _item(student)
+    older = item.occurrences.get()
+    older.note = "Nota antiga."
+    older.save()
+    ReviewOccurrence.objects.create(
+        item=item, attempt=older.attempt, produced="novo", correct="certo", note="Nota nova."
+    )
+
+    assert _round(client)["results"][0]["note"] == "Nota nova."

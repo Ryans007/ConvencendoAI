@@ -16,6 +16,7 @@ function item(id: number, overrides: Partial<RoundItem> = {}): RoundItem {
   return {
     id,
     said: `disse ${id}`,
+    note: "",
     scenario_title: "Entrevista",
     occurred_at: "2026-10-04T14:00:00Z",
     interval_days: 3,

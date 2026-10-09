@@ -30,8 +30,10 @@ def _attempt(user) -> Attempt:
     )
 
 
-def _mistake(rule, produced, correct, repeats="") -> ReportedMistake:
-    return ReportedMistake(rule=rule, produced=produced, correct=correct, repeats=repeats)
+def _mistake(rule, produced, correct, repeats="", note="") -> ReportedMistake:
+    return ReportedMistake(
+        rule=rule, produced=produced, correct=correct, repeats=repeats, note=note
+    )
 
 
 @pytest.fixture
@@ -243,3 +245,56 @@ def test_the_evaluator_still_receives_the_archived_rules(student):
     )
 
     assert [known.rule for known in known_rules_for(student)] == [PAST_SIMPLE]
+
+
+def test_the_occurrence_keeps_the_whole_sentence_and_the_portuguese_note(student):
+    attempt = _attempt(student)
+
+    record_review_items(
+        student,
+        attempt,
+        [
+            _mistake(
+                "verb choice",
+                "I want to report it today, please",
+                "I want to repair it today, please",
+                note="Aqui o verbo é o de consertar, e não o de relatar.",
+            )
+        ],
+        TODAY,
+    )
+
+    occurrence = ReviewOccurrence.objects.get(item__user=student)
+    assert occurrence.produced == "I want to report it today, please"
+    assert occurrence.correct == "I want to repair it today, please"
+    assert occurrence.note == "Aqui o verbo é o de consertar, e não o de relatar."
+
+
+def test_a_mistake_without_a_note_is_recorded_with_an_empty_note(student):
+    record_review_items(
+        student,
+        _attempt(student),
+        [_mistake(PAST_SIMPLE, "I have worked there yesterday", "I worked there yesterday")],
+        TODAY,
+    )
+
+    assert ReviewOccurrence.objects.get(item__user=student).note == ""
+
+
+def test_the_newest_occurrence_brings_its_own_note(student):
+    item = ReviewItem.objects.create(user=student, rule=PAST_SIMPLE, box=3, due_on=TODAY)
+    first = _attempt(student)
+    record_review_items(
+        student,
+        first,
+        [_mistake("x", "old", "older", repeats=known_rule_id(item), note="Nota antiga.")],
+        TODAY,
+    )
+    record_review_items(
+        student,
+        _attempt(student),
+        [_mistake("x", "new", "newer", repeats=known_rule_id(item), note="Nota nova.")],
+        TODAY,
+    )
+
+    assert item.occurrences.first().note == "Nota nova."

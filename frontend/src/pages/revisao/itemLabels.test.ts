@@ -9,6 +9,7 @@ function item(overrides: Partial<RoundItem> = {}): RoundItem {
   return {
     id: 1,
     said: "x",
+    note: "",
     scenario_title: "Entrevista de emprego",
     occurred_at: new Date(2026, 9, 5, 23, 50).toISOString(),
     interval_days: 3,

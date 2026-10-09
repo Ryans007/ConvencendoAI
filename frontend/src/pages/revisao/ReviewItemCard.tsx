@@ -22,8 +22,9 @@ const STEP_TITLES = {
 } as const;
 
 /**
- * Cartão do item da rodada: o que o aluno disse e de onde veio, o pedido da etapa e, embaixo,
- * a área que muda com a fase (gravar, analisar, resultado). O "Não disse isso" fica no cartão,
+ * Cartão do item da rodada: o que o aluno disse e de onde veio, a nota que dá o contexto
+ * desde a primeira tentativa (quando o item tem uma), o pedido da etapa e, embaixo, a área
+ * que muda com a fase (gravar, analisar, resultado). O "Não disse isso" fica no cartão,
  * porque descarta o item inteiro e não só a resposta da vez.
  */
 export function ReviewItemCard({
@@ -64,6 +65,12 @@ export function ReviewItemCard({
             {item.said}
           </span>
         </div>
+
+        {item.note && (
+          <p className="text-score leading-relaxed text-ink-muted">
+            <span className="font-semibold text-ink/80">Contexto:</span> {item.note}
+          </p>
+        )}
 
         {discardable && !confirmingDiscard && (
           <button

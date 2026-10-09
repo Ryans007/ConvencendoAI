@@ -78,8 +78,23 @@ class ReviewOccurrence(models.Model):
         related_name="review_occurrences",
         verbose_name="tentativa",
     )
-    produced = models.TextField(verbose_name="o aluno disse")
-    correct = models.TextField(verbose_name="forma correta")
+    produced = models.TextField(
+        verbose_name="o aluno disse",
+        help_text="A frase inteira que o aluno disse, com o erro dentro dela.",
+    )
+    correct = models.TextField(
+        verbose_name="forma correta",
+        help_text="A mesma frase corrigida, mantendo o que o aluno quis dizer.",
+    )
+    note = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="nota",
+        help_text=(
+            "Frase curta, em português, que diz o que observar na frase sem escrever o "
+            "inglês correto. Vazia nos itens criados antes de a nota existir."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="registrada em")
 
     class Meta:
