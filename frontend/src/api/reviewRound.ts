@@ -7,6 +7,7 @@ export type Attempt = 1 | 2;
 export interface RoundItem {
   id: number;
   said: string;
+  note: string;
   scenario_title: string;
   occurred_at: string;
   interval_days: number;
