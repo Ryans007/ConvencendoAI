@@ -37,6 +37,15 @@ class ReviewItem(models.Model):
         verbose_name="volta em",
         help_text="Dia em que o item fica vencido e entra na revisão.",
     )
+    archived_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="arquivado em",
+        help_text=(
+            "Quando o aluno marcou 'Não disse isso'. O item arquivado sai das rodadas e da "
+            "contagem de vencidos, mas continua aqui para auditoria."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="criado em")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="atualizado em")
 

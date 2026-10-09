@@ -6,7 +6,7 @@ import { REVIEW_INTERVAL_LABELS, reviewStart } from "./reviewStart";
 /**
  * Tela inicial da Revisão: quantos itens esperam o aluno e quando volta o próximo.
  *
- * A rodada em si ainda não existe, então "Começar rodada" aparece desabilitado.
+ * "Começar rodada" abre a rodada, que vive em `/revisao/rodada`.
  */
 export default function RevisaoPage() {
   const { data: summary, isLoading, isError } = useReviewSummary();
@@ -37,16 +37,12 @@ export default function RevisaoPage() {
                 <h2 className="text-[20px] font-semibold tracking-tight">{start.title}</h2>
                 <p className="text-score text-ink-muted">Cada rodada tem até 5 itens, uns 3 a 4 minutos.</p>
               </div>
-              <button
-                type="button"
-                disabled
-                className="flex cursor-not-allowed items-center gap-2.5 rounded-pill bg-line-strong px-6 py-3 text-[15px] font-semibold text-ink-muted"
+              <Link
+                to="/revisao/rodada"
+                className="rounded-pill bg-brand px-6 py-3 text-[15px] font-semibold text-white shadow-[0_6px_20px_rgb(0_214_143/0.28)] hover:bg-brand-strong"
               >
                 Começar rodada
-                <span className="rounded-pill bg-surface px-2 py-0.5 text-[11px] font-medium text-ink-muted">
-                  em breve
-                </span>
-              </button>
+              </Link>
             </section>
 
             <section className="flex flex-col gap-3 px-1">

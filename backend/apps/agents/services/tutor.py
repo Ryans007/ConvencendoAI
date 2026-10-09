@@ -1,7 +1,6 @@
-import re
-
 from langchain_core.messages import HumanMessage
 
+from apps.agents.services.language import looks_english
 from apps.agents.services.scenario_content import ScenarioContent
 from apps.agents.services.schemas import SuggestedAnswer
 from apps.agents.services.transcript import transcript_text
@@ -50,30 +49,6 @@ RULES
   reuse their own facts (project, role, tools) when they fit.
 - Never mention criteria, evaluation, score, passing, or what the student must do.
 - Write only the answer, nothing before or after it."""
-
-
-_ENGLISH_MARKERS = frozenset(
-    "the i we is are was were be been have has had need needs could would will which my "
-    "our it its this that these those to of and for with by from at what can".split()
-)
-_PORTUGUESE_MARKERS = frozenset(
-    "o a os as de do da dos das que e é em no na um uma para com não sim eu nós meu minha "
-    "foi era porque mais isso esse essa por se já".split()
-)
-_WORD = re.compile(r"[a-zà-ú]+")
-
-
-def looks_english(text: str) -> bool:
-    """A sugestão parece escrita em inglês, e não em português?
-
-    Conta palavras típicas de cada língua e decide pela que aparece mais. Nomes de
-    tecnologias e de produtos não entram em nenhuma das duas listas, então uma sugestão em
-    português cheia de nomes técnicos continua sendo português.
-    """
-    words = _WORD.findall(text.lower())
-    english = sum(word in _ENGLISH_MARKERS for word in words)
-    portuguese = sum(word in _PORTUGUESE_MARKERS for word in words)
-    return english > portuguese
 
 
 def suggest_answer(content: ScenarioContent, history: list) -> str:

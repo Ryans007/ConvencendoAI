@@ -56,6 +56,32 @@ class SuggestedAnswer(BaseModel):
     )
 
 
+class ReviewVerdict(BaseModel):
+    """Saída estruturada do professor da revisão: o veredito de uma resposta falada.
+
+    Os defaults descrevem uma resposta vazia, não um veredito: o serviço trata um feedback
+    vazio como falha do provedor, e nunca como o aluno ter errado.
+    """
+
+    correct: bool = Field(
+        default=False,
+        description="True when the student's sentence satisfies the exercise of this step",
+    )
+    feedback: str = Field(
+        default="",
+        description=(
+            "Short feedback for the student, in Brazilian Portuguese, at most two sentences"
+        ),
+    )
+    correction: str = Field(
+        default="",
+        description=(
+            "The student's sentence rewritten correctly in English, keeping what the "
+            "student meant; empty when the sentence was correct"
+        ),
+    )
+
+
 class ClosingLine(BaseModel):
     """Saída estruturada da fala de fechamento, quando os turnos se esgotam."""
 

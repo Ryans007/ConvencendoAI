@@ -90,3 +90,23 @@ def test_the_api_requires_authentication():
     response = APIClient().get("/api/review/summary/")
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+def test_archived_items_do_not_count_as_due_or_as_the_next_one(student):
+    ReviewItem.objects.create(
+        user=student, rule="a", box=0, due_on=TODAY, archived_at=timezone.now()
+    )
+    ReviewItem.objects.create(
+        user=student,
+        rule="b",
+        box=0,
+        due_on=TODAY + timedelta(days=2),
+        archived_at=timezone.now(),
+    )
+    _item(student, TODAY - timedelta(days=1))
+    _item(student, TODAY + timedelta(days=4))
+
+    summary = review_summary(student, TODAY)
+
+    assert summary.due == 1
+    assert summary.next_due_on == TODAY + timedelta(days=4)
