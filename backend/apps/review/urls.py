@@ -1,6 +1,7 @@
 from django.urls import path
 
 from apps.review.views import (
+    ReviewAnswerAudioView,
     ReviewAnswerView,
     ReviewItemDiscardView,
     ReviewRoundView,
@@ -19,5 +20,10 @@ urlpatterns = [
         "review/items/<int:item_id>/discard/",
         ReviewItemDiscardView.as_view(),
         name="review-item-discard",
+    ),
+    path(
+        "review/answers/<int:answer_id>/audio/",
+        ReviewAnswerAudioView.as_view(),
+        name="review-answer-audio",
     ),
 ]

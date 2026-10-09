@@ -27,6 +27,15 @@ class AgentModelConfig(models.Model):
     router_model = models.ForeignKey(
         LLMModel, on_delete=models.PROTECT, related_name="+", null=True, blank=True
     )
+    review_voice = models.CharField(
+        max_length=40,
+        default="hannah",
+        verbose_name="voz da revisão",
+        help_text=(
+            "Voz do botão 'Ouvir' da revisão. É um nome de voz do modelo de síntese de "
+            "voz configurado acima, como 'hannah' ou 'troy'."
+        ),
+    )
 
     def save(self, *args, **kwargs) -> None:
         self.pk = 1
