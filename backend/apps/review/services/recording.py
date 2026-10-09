@@ -58,7 +58,11 @@ def record_review_items(
             item.save(update_fields=["box", "due_on", "archived_at", "updated_at"])
 
         ReviewOccurrence.objects.create(
-            item=item, attempt=attempt, produced=mistake.produced, correct=mistake.correct
+            item=item,
+            attempt=attempt,
+            produced=mistake.produced,
+            correct=mistake.correct,
+            note=mistake.note,
         )
         if item not in touched:
             touched.append(item)

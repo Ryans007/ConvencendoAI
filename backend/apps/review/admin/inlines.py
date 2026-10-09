@@ -23,7 +23,7 @@ class ReviewOccurrenceInline(ReadOnlyInline):
     """As vezes em que o aluno errou na regra, com a tentativa de origem."""
 
     model = ReviewOccurrence
-    fields = ["produced", "correct", "attempt", "created_at"]
+    fields = ["produced", "correct", "note", "attempt", "created_at"]
     readonly_fields = fields
 
 

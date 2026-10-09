@@ -121,3 +121,14 @@ def test_answers_and_results_cannot_be_edited_from_the_item_page(admin_client, d
     page = response.content.decode()
     assert 'name="answers-MAX_NUM_FORMS" value="0"' in page
     assert 'name="results-MAX_NUM_FORMS" value="0"' in page
+
+
+def test_the_item_page_shows_the_note_of_each_occurrence(admin_client, django_user_model):
+    item = _item(django_user_model)
+    occurrence = item.occurrences.get()
+    occurrence.note = "Aqui o verbo é o de consertar, e não o de relatar."
+    occurrence.save()
+
+    response = admin_client.get(reverse("admin:review_reviewitem_change", args=[item.pk]))
+
+    assert "Aqui o verbo é o de consertar" in response.content.decode()
