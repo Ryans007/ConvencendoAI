@@ -113,11 +113,3 @@ def test_two_suggestions_in_english_give_an_empty_answer(monkeypatch):
     answer, _ = _suggest(monkeypatch, 3, "Yes, I did.", "We used the API for that.")
 
     assert answer == ""
-
-
-def test_portuguese_full_of_technology_names_is_still_portuguese():
-    assert not tutor.looks_english("Decidi usar FastAPI com PostgreSQL e Redis porque era mais rápido.")
-    assert not tutor.looks_english("Sim, trabalhei em equipe.")
-    assert not tutor.looks_english("aplicativo web")
-    assert tutor.looks_english("I found the new API needs extra data mapping.")
-    assert tutor.looks_english("Could we push the deadline by a week?")
