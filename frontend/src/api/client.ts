@@ -21,6 +21,8 @@ interface RequestOptions {
   signal?: AbortSignal;
   /** Chamada de autenticacao (login, registro, renovacao): nunca leva o header nem tenta renovar. */
   skipAuth?: boolean;
+  /** Como ler o corpo da resposta: JSON (padrao) ou binario, como o audio da revisao. */
+  responseType?: "json" | "blob";
 }
 
 async function parseErrorBody(response: Response): Promise<unknown> {
@@ -44,8 +46,11 @@ async function request<T>(
   options: RequestOptions,
   retrying = false,
 ): Promise<T> {
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (body !== undefined) {
+  const isForm = body instanceof FormData;
+  const headers: Record<string, string> = {
+    Accept: options.responseType === "blob" ? "*/*" : "application/json",
+  };
+  if (body !== undefined && !isForm) {
     headers["Content-Type"] = "application/json";
   }
   if (!options.skipAuth) {
@@ -60,7 +65,7 @@ async function request<T>(
     response = await fetch(`${baseUrl}${path}`, {
       method,
       headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: isForm ? body : body !== undefined ? JSON.stringify(body) : undefined,
       signal: options.signal,
     });
   } catch (cause) {
@@ -85,6 +90,9 @@ async function request<T>(
   if (response.status === 204 || response.status === 205) {
     return undefined as T;
   }
+  if (options.responseType === "blob") {
+    return (await response.blob()) as T;
+  }
   return (await response.json()) as T;
 }
 
@@ -96,4 +104,17 @@ export function get<T>(path: string, options: RequestOptions = {}): Promise<T> {
 /** Executa um POST e devolve o corpo desserializado. */
 export function post<T>(path: string, body: unknown, options: RequestOptions = {}): Promise<T> {
   return request<T>("POST", path, body, options);
+}
+
+/**
+ * Envia um formulario multipart, como a gravacao de voz da revisao, e devolve o corpo
+ * desserializado. O navegador define o `Content-Type` com o limite das partes.
+ */
+export function postForm<T>(path: string, form: FormData, options: RequestOptions = {}): Promise<T> {
+  return request<T>("POST", path, form, options);
+}
+
+/** Executa um GET e devolve o corpo como binario, como o audio da forma correta. */
+export function getBlob(path: string, options: RequestOptions = {}): Promise<Blob> {
+  return request<Blob>("GET", path, undefined, { ...options, responseType: "blob" });
 }
