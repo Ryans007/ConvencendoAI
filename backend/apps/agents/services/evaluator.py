@@ -1,3 +1,4 @@
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -100,10 +101,32 @@ Also write:
   the audio. For each one:
   - "rule": the general rule broken, short, in English (for example "past simple
     with a finished time expression"), never the sentence itself;
-  - "produced": what the student said; "correct": the correct form;
+  - "produced": the WHOLE sentence the student said, with the mistake inside it,
+    never just the wrong word or fragment;
+  - "correct": that same whole sentence, corrected. Keep what the student meant:
+    never change the request, the topic or the facts. If the mistake cannot be
+    corrected without guessing something else the student wanted, do not report it;
+  - "note": ONE short sentence in Brazilian Portuguese that tells the student what
+    to look at in that sentence, describing the idea in Portuguese. It must NEVER
+    contain the correct English word, phrase or structure. Good: "Aqui o verbo é o de
+    consertar, e não o de relatar." Bad: "Use 'repair', não 'report'." (it gives the
+    answer away). When the wrong word sounds like the right one, say so: "Essas duas
+    palavras soam parecidas; atenção ao verbo que expressa querer.";
   - "repeats": the id of a KNOWN MISTAKE below when this mistake breaks the SAME
     rule, even with different words (for example "I have worked there yesterday"
     and "I have finished it last week" are the same rule); otherwise "".
+  Choosing the mistakes:
+  - The transcript is what automatic speech recognition heard, and it is the only
+    evidence you have. A wrong word in it is the student's mistake even when it may
+    have been a mispronunciation: "I won a floor" is a mistake when the student
+    clearly meant "want". Report it only when the word the student meant is clear
+    from the situation; if you would be guessing, skip it.
+  - Report only mistakes of wording or grammar that have a clear correct form.
+    Never report rudeness, register, what the student decided to say, or a
+    sentence that simply makes no sense.
+  - If there are more than 4, prefer grammar structure mistakes that a learner
+    tends to repeat (a preposition after a verb, word order, agreement, tense) over
+    one-off vocabulary slips.
 
 KNOWN MISTAKES OF THIS STUDENT (rules from earlier sessions, with their ids)
 {known_rules}"""
@@ -215,10 +238,63 @@ def evaluate(
     )
 
 
+_WORD = re.compile(r"[a-z]+(?:'[a-z]+)*", re.IGNORECASE)
+_MIN_FIX_WORD_LENGTH = 4
+_MAX_INFLECTION_DIFFERENCE = 3
+_MASK = "___"
+
+
+def _same_word_family(word: str, fix_word: str) -> bool:
+    """Uma palavra é a palavra que conserta o erro, ou uma variação dela (repair, repaired).
+
+    Vale quando uma é o começo da outra e o comprimento difere pouco: assim "repaired" na nota
+    casa com "repair" na correção, sem casar com uma palavra comprida qualquer que só comece
+    igual.
+    """
+    shorter, longer = sorted((word, fix_word), key=len)
+    return (
+        len(shorter) >= _MIN_FIX_WORD_LENGTH
+        and longer.startswith(shorter)
+        and len(longer) - len(shorter) <= _MAX_INFLECTION_DIFFERENCE
+    )
+
+
+def _masked_note(item: ReviewItem) -> str:
+    """A nota do item, com as palavras que entregam a resposta trocadas por "___".
+
+    A nota existe para dar o contexto sem dar o inglês correto, e a instrução do prompt sozinha
+    não garante isso: medido com o modelo real, metade das notas trazia algo como "use
+    'repair'". As palavras que consertam o erro são as da forma corrigida que não estão na frase
+    do aluno; cada uma delas, ou variação dela, com 4 letras ou mais, vira "___" na nota. O
+    contexto que sobra ("___ para consertar, não 'report'") continua útil, e a resposta não
+    chega ao aluno. Palavras curtas ("to", "for") ficam de fora porque aparecem em qualquer
+    texto em português que cita uma preposição.
+    """
+    note = item.note.strip()
+    if not note:
+        return ""
+    produced_words = {word.lower() for word in _WORD.findall(item.produced)}
+    fix_words = {
+        word.lower()
+        for word in _WORD.findall(item.correct)
+        if word.lower() not in produced_words and len(word) >= _MIN_FIX_WORD_LENGTH
+    }
+
+    def mask(match: re.Match) -> str:
+        word = match.group(0).lower()
+        return _MASK if any(_same_word_family(word, fix) for fix in fix_words) else match.group(0)
+
+    return _WORD.sub(mask, note)
+
+
 def _usable_review_items(
     items: list[ReviewItem], known_rules: Sequence[KnownRule]
 ) -> list[ReviewItem]:
-    """Os erros que podem virar item de revisão, com `repeats` só apontando regra conhecida."""
+    """Os erros que podem virar item de revisão, com `repeats` só apontando regra conhecida.
+
+    Um item sem a frase, sem a forma correta ou sem a regra não serve para revisar e é
+    descartado. Já um item sem nota continua valendo, só sem o contexto extra.
+    """
     known_ids = {known.id for known in known_rules}
     usable = [
         item.model_copy(
@@ -226,6 +302,7 @@ def _usable_review_items(
                 "rule": item.rule.strip(),
                 "produced": item.produced.strip(),
                 "correct": item.correct.strip(),
+                "note": _masked_note(item),
                 "repeats": item.repeats if item.repeats in known_ids else "",
             }
         )

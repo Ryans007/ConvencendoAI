@@ -248,3 +248,167 @@ def test_incomplete_items_are_dropped_and_at_most_four_pass(monkeypatch):
     outcome, _ = _evaluate_with(monkeypatch, incomplete + complete)
 
     assert [item.rule for item in outcome.review_items] == ["rule 0", "rule 1", "rule 2", "rule 3"]
+
+
+def test_the_prompt_asks_for_the_whole_sentence_and_a_correction_that_keeps_the_meaning(
+    monkeypatch,
+):
+    _, prompt = _evaluate_with(monkeypatch, [])
+
+    assert "the WHOLE sentence the student said" in prompt
+    assert "never just the wrong word or fragment" in prompt
+    assert "never change the request, the topic or the facts" in prompt
+
+
+def test_the_prompt_asks_for_a_portuguese_note_that_never_writes_the_correct_words(monkeypatch):
+    _, prompt = _evaluate_with(monkeypatch, [])
+
+    assert '"note": ONE short sentence in Brazilian Portuguese' in prompt
+    flat = " ".join(prompt.split())
+    assert "must NEVER contain the correct English word, phrase or structure" in flat
+
+
+def test_the_prompt_treats_a_wrong_word_in_the_transcript_as_the_students_mistake(monkeypatch):
+    _, prompt = _evaluate_with(monkeypatch, [])
+    flat = " ".join(prompt.split())
+
+    assert "automatic speech recognition heard" in flat
+    assert "the only evidence you have" in flat
+    assert "even when it may have been a mispronunciation" in flat
+    assert "if you would be guessing, skip it" in flat
+
+
+def test_the_prompt_asks_the_note_to_say_when_two_words_sound_alike(monkeypatch):
+    _, prompt = _evaluate_with(monkeypatch, [])
+    flat = " ".join(prompt.split())
+
+    assert "When the wrong word sounds like the right one, say so" in flat
+    assert "Bad:" in flat and "gives the answer away" in flat
+
+
+def test_the_prompt_says_what_is_not_a_mistake_and_prefers_structure(monkeypatch):
+    _, prompt = _evaluate_with(monkeypatch, [])
+
+    assert "Never report rudeness, register" in prompt
+    assert "prefer grammar structure mistakes" in prompt
+
+
+def _item_with_note(note: str, produced: str, correct: str) -> ReviewItem:
+    return ReviewItem(rule="rule", produced=produced, correct=correct, note=note)
+
+
+def test_a_safe_note_is_kept(monkeypatch):
+    item = _item_with_note(
+        "Aqui o verbo é o de consertar, e não o de relatar.",
+        "I want to report it today, please",
+        "I want to repair it today, please",
+    )
+
+    outcome, _ = _evaluate_with(monkeypatch, [item])
+
+    assert outcome.review_items[0].note == "Aqui o verbo é o de consertar, e não o de relatar."
+
+
+def _note_of(monkeypatch, note: str, produced: str, correct: str) -> str:
+    outcome, _ = _evaluate_with(monkeypatch, [_item_with_note(note, produced, correct)])
+    return outcome.review_items[0].note
+
+
+def test_the_word_that_fixes_the_mistake_is_masked_and_the_rest_of_the_note_stays(monkeypatch):
+    note = _note_of(
+        monkeypatch,
+        "Use repair, que significa consertar.",
+        "I want to report it today, please",
+        "I want to repair it today, please",
+    )
+
+    assert note == "Use ___, que significa consertar."
+
+
+def test_a_fixing_word_between_quotes_is_masked(monkeypatch):
+    note = _note_of(
+        monkeypatch,
+        "Use 'repair', não 'report'.",
+        "I want to report it today, please",
+        "I want to repair it today, please",
+    )
+
+    assert note == "Use '___', não 'report'."
+
+
+def test_an_inflection_of_the_fixing_word_is_masked_too(monkeypatch):
+    note = _note_of(
+        monkeypatch,
+        "O verbo certo é repair, aqui no passado seria repaired.",
+        "I want to report it today, please",
+        "I want it repaired today, please",
+    )
+
+    assert note == "O verbo certo é ___, aqui no passado seria ___."
+
+
+def test_the_mask_ignores_case_and_keeps_the_rest_of_the_note(monkeypatch):
+    note = _note_of(monkeypatch, "Troque por Repair.", "I report it", "I repair it")
+
+    assert note == "Troque por ___."
+
+
+def test_a_word_that_only_starts_the_same_way_is_not_masked(monkeypatch):
+    note = _note_of(
+        monkeypatch,
+        "Repare no verbo da frase.",
+        "I report it",
+        "I repair it",
+    )
+
+    assert note == "Repare no verbo da frase."
+
+
+def test_a_long_unrelated_word_with_the_same_start_is_not_masked(monkeypatch):
+    note = _note_of(
+        monkeypatch,
+        "Parâmetros diferentes pedem outra palavra.",
+        "I use the para value",
+        "I use the parameter value",
+    )
+
+    assert "___" not in note
+
+
+def test_short_fixing_words_are_not_masked(monkeypatch):
+    note = _note_of(
+        monkeypatch,
+        "Depois de listen, falta a preposição que liga ao objeto: to.",
+        "You don't listen me",
+        "You don't listen to me",
+    )
+
+    assert note == "Depois de listen, falta a preposição que liga ao objeto: to."
+
+
+def test_the_item_keeps_its_sentences_when_the_note_is_masked(monkeypatch):
+    item = _item_with_note(
+        "Use repair.", "I want to report it today", "I want to repair it today"
+    )
+
+    outcome, _ = _evaluate_with(monkeypatch, [item])
+
+    assert outcome.review_items[0].produced == "I want to report it today"
+    assert outcome.review_items[0].correct == "I want to repair it today"
+
+
+def test_an_item_without_a_note_is_still_valid(monkeypatch):
+    item = ReviewItem(rule="rule", produced="She don't like it", correct="She doesn't like it")
+
+    outcome, _ = _evaluate_with(monkeypatch, [item])
+
+    assert len(outcome.review_items) == 1
+    assert outcome.review_items[0].note == ""
+
+
+def test_an_item_with_only_a_note_is_still_dropped(monkeypatch):
+    item = ReviewItem(rule="rule", produced=" ", correct="x", note="Uma nota sozinha.")
+
+    outcome, _ = _evaluate_with(monkeypatch, [item])
+
+    assert outcome.review_items == []

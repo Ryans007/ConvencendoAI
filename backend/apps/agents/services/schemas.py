@@ -92,8 +92,10 @@ class ReviewItem(BaseModel):
     """Um erro de linguagem apontado pelo avaliador ao fim da execução.
 
     `rule` é a regra por trás do erro, e não o trecho: é ela que junta, num item de revisão
-    só, erros iguais ditos com palavras diferentes em sessões diferentes. `repeats` traz o
-    identificador de uma regra que o aluno já tem quando o erro é a mesma regra, ou vazio.
+    só, erros iguais ditos com palavras diferentes em sessões diferentes. `produced` e
+    `correct` são a frase inteira, com e sem o erro, e `note` é a nota em português que dá o
+    contexto sem dar a resposta. `repeats` traz o identificador de uma regra que o aluno já
+    tem quando o erro é a mesma regra, ou vazio.
     Todo campo tem default: um campo que o modelo deixou de preencher vira string vazia,
     nunca uma exceção.
     """
@@ -105,8 +107,21 @@ class ReviewItem(BaseModel):
             "(e.g. 'past simple with a finished time expression'), not the sentence"
         ),
     )
-    produced: str = Field(default="", description="The form the student actually produced")
-    correct: str = Field(default="", description="The correct form")
+    produced: str = Field(
+        default="",
+        description="The WHOLE sentence the student said, with the mistake inside it",
+    )
+    correct: str = Field(
+        default="",
+        description="The same whole sentence corrected, keeping what the student meant",
+    )
+    note: str = Field(
+        default="",
+        description=(
+            "One short sentence in Brazilian Portuguese telling the student what to look at "
+            "in that sentence, never writing the correct English words"
+        ),
+    )
     repeats: str = Field(
         default="",
         description=(
