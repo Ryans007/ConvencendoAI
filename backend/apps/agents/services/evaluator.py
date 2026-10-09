@@ -168,6 +168,27 @@ class EvaluationOutcome:
     review_items: list[ReviewItem]
 
 
+class IncompleteEvaluation(Exception):
+    """O avaliador não devolveu nota para alguma dimensão julgada, nem na retentativa."""
+
+
+def _judge_with_scores(llm, prompt: str) -> EvaluationResult:
+    """Chama o avaliador e garante que toda dimensão julgada veio com nota.
+
+    Uma nota ausente não pode virar 0: reprovaria o aluno por uma falha do modelo, sem
+    ninguém perceber. Por isso a chamada é repetida uma vez e, se ainda faltar nota,
+    levanta `IncompleteEvaluation` — a tentativa continua aberta e pode ser avaliada de
+    novo, porque quem grava o resultado é idempotente.
+    """
+    missing: list[str] = []
+    for _ in range(2):
+        result = llm.invoke([HumanMessage(content=prompt)])
+        missing = [d.value for d in JUDGED_DIMENSIONS if getattr(result.sub_scores, d.value) is None]
+        if not missing:
+            return result
+    raise IncompleteEvaluation(f"avaliador sem nota para: {', '.join(missing)}")
+
+
 def evaluate(
     content: ScenarioContent,
     messages: list[BaseMessage],
@@ -214,7 +235,7 @@ def evaluate(
     )
 
     llm = get_structured_llm(ModelPurpose.JUDGE, EvaluationResult)
-    result = llm.invoke([HumanMessage(content=prompt)])
+    result = _judge_with_scores(llm, prompt)
 
     valid_codes = {c.code for c in content.criteria}
     confirmed = {code for code in result.confirmed_criteria if code in valid_codes}
@@ -222,7 +243,7 @@ def evaluate(
     judged_dimensions = [
         JudgedDimension(
             dimension=dimension,
-            value=int(max(0, min(weight, round(result.sub_scores.get(dimension, 0))))),
+            value=int(max(0, min(weight, round(getattr(result.sub_scores, dimension.value))))),
             weight=weight,
         )
         for dimension in JUDGED_DIMENSIONS

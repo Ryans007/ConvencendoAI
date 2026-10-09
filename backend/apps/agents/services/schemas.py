@@ -131,14 +131,35 @@ class ReviewItem(BaseModel):
     )
 
 
+class DimensionScores(BaseModel):
+    """Nota de cada dimensão julgada, uma propriedade nomeada por dimensão.
+
+    Um dicionário de chaves abertas não serve aqui: no modo estrito de JSON schema o
+    modelo só é obrigado a preencher propriedades que o schema nomeia, e devolvia o
+    dicionário vazio. Os nomes dos campos são os valores de `RubricDimension`. Um campo
+    sem nota fica `None`, para o avaliador distinguir "o modelo não julgou" de uma nota 0.
+    """
+
+    fluency: float | None = Field(default=None, description="Score from 0 up to the stated maximum")
+    vocabulary: float | None = Field(
+        default=None, description="Score from 0 up to the stated maximum"
+    )
+    grammar: float | None = Field(default=None, description="Score from 0 up to the stated maximum")
+    pragmatics: float | None = Field(
+        default=None, description="Score from 0 up to the stated maximum"
+    )
+    autonomy: float | None = Field(default=None, description="Score from 0 up to the stated maximum")
+
+
 class EvaluationResult(BaseModel):
     """Saída estruturada do avaliador ao fim da execução de um cenário."""
 
     confirmed_criteria: list[str] = Field(
         default_factory=list, description="Ids of every acceptance criterion genuinely satisfied"
     )
-    sub_scores: dict[str, float] = Field(
-        default_factory=dict, description="Score per judged dimension, up to its stated maximum"
+    sub_scores: DimensionScores = Field(
+        default_factory=DimensionScores,
+        description="Score per judged dimension, up to its stated maximum",
     )
     feedback: str = Field(default="", description="2-3 sentences addressed to the student")
     memory_summary: str = Field(

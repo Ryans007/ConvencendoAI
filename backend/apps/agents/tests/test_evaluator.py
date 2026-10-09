@@ -2,7 +2,7 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
 from apps.agents.services import evaluator
-from apps.agents.services.schemas import EvaluationResult, ReviewItem
+from apps.agents.services.schemas import DimensionScores, EvaluationResult, ReviewItem
 from apps.agents.services.scenario_content import load_scenario_content
 from apps.catalog.models import Level, Scenario
 
@@ -17,6 +17,12 @@ class _FakeStructuredLLM:
         return self._result
 
 
+def _full_scores(value: float = 5) -> DimensionScores:
+    return DimensionScores(
+        fluency=value, vocabulary=value, grammar=value, pragmatics=value, autonomy=value
+    )
+
+
 def _content():
     scenario = Scenario.objects.get(slug="negociar-prazo")
     level = Level.objects.get(order=3)
@@ -27,14 +33,9 @@ def test_evaluate_clamps_scores_and_filters_invalid_criteria(monkeypatch):
     content = _content()
     fake_result = EvaluationResult(
         confirmed_criteria=["c1", "c2", "not-a-real-criterion"],
-        sub_scores={
-            "fluency": 999,
-            "vocabulary": -5,
-            "grammar": 10,
-            "pragmatics": 3.6,
-            "autonomy": 100,
-            "pronunciation": 50,
-        },
+        sub_scores=DimensionScores(
+            fluency=999, vocabulary=-5, grammar=10, pragmatics=3.6, autonomy=100
+        ),
         feedback=" Great job overall. ",
         memory_summary=" Works as a backend developer. ",
         review_items=[
@@ -69,7 +70,7 @@ def test_evaluate_clamps_scores_and_filters_invalid_criteria(monkeypatch):
 
 def test_evaluate_never_judges_objective_or_pronunciation(monkeypatch):
     content = _content()
-    fake_result = EvaluationResult(confirmed_criteria=[], sub_scores={})
+    fake_result = EvaluationResult(confirmed_criteria=[], sub_scores=_full_scores())
     monkeypatch.setattr(
         evaluator, "get_structured_llm", lambda purpose, schema: _FakeStructuredLLM(fake_result)
     )
@@ -89,7 +90,7 @@ def _captured_evaluation_prompt(monkeypatch, level_order: int) -> str:
     class _RecordingLLM:
         def invoke(self, messages):
             prompts.append(messages[0].content)
-            return EvaluationResult()
+            return EvaluationResult(sub_scores=_full_scores())
 
     monkeypatch.setattr(evaluator, "get_structured_llm", lambda purpose, schema: _RecordingLLM())
     evaluator.evaluate(
@@ -133,7 +134,7 @@ def _prompt_for(monkeypatch, messages) -> str:
     class _RecordingLLM:
         def invoke(self, received):
             prompts.append(received[0].content)
-            return EvaluationResult()
+            return EvaluationResult(sub_scores=_full_scores())
 
     monkeypatch.setattr(evaluator, "get_structured_llm", lambda purpose, schema: _RecordingLLM())
     evaluator.evaluate(content, messages)
@@ -180,7 +181,7 @@ def _evaluate_with(monkeypatch, review_items, known_rules=()):
     class _RecordingLLM:
         def invoke(self, received):
             prompts.append(received[0].content)
-            return EvaluationResult(review_items=review_items)
+            return EvaluationResult(sub_scores=_full_scores(), review_items=review_items)
 
     monkeypatch.setattr(evaluator, "get_structured_llm", lambda purpose, schema: _RecordingLLM())
     outcome = evaluator.evaluate(_content(), _SESSION, known_rules)
@@ -412,3 +413,45 @@ def test_an_item_with_only_a_note_is_still_dropped(monkeypatch):
     outcome, _ = _evaluate_with(monkeypatch, [item])
 
     assert outcome.review_items == []
+
+
+class _SequenceLLM:
+    def __init__(self, results):
+        self._results = list(results)
+        self.calls = 0
+
+    def invoke(self, messages):
+        self.calls += 1
+        return self._results.pop(0)
+
+
+def test_a_judge_that_returns_no_scores_is_asked_again_and_the_second_answer_is_used(monkeypatch):
+    llm = _SequenceLLM([EvaluationResult(), EvaluationResult(sub_scores=_full_scores(4))])
+    monkeypatch.setattr(evaluator, "get_structured_llm", lambda purpose, schema: llm)
+
+    outcome = evaluator.evaluate(_content(), [])
+
+    assert llm.calls == 2
+    assert {d.value for d in outcome.judged_dimensions} == {4}
+
+
+def test_a_judge_that_never_returns_scores_fails_instead_of_grading_zero(monkeypatch):
+    llm = _SequenceLLM([EvaluationResult(), EvaluationResult()])
+    monkeypatch.setattr(evaluator, "get_structured_llm", lambda purpose, schema: llm)
+
+    with pytest.raises(evaluator.IncompleteEvaluation):
+        evaluator.evaluate(_content(), [])
+
+    assert llm.calls == 2
+
+
+def test_a_dimension_the_judge_scored_zero_is_kept_as_zero(monkeypatch):
+    scores = _full_scores(4)
+    scores.grammar = 0
+    llm = _SequenceLLM([EvaluationResult(sub_scores=scores)])
+    monkeypatch.setattr(evaluator, "get_structured_llm", lambda purpose, schema: llm)
+
+    outcome = evaluator.evaluate(_content(), [])
+
+    assert llm.calls == 1
+    assert {d.dimension: d.value for d in outcome.judged_dimensions}["grammar"] == 0
