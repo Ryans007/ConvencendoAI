@@ -26,6 +26,7 @@ class ReviewRoundPagination(PageNumberPagination):
                     {
                         "id": 12,
                         "said": "I have worked there yesterday",
+                        "note": "Repare no tempo da frase: ele já terminou.",
                         "scenario_title": "Entrevista de emprego na TechCorp",
                         "occurred_at": "2026-10-04T14:32:10Z",
                         "interval_days": 3,
@@ -37,6 +38,7 @@ class ReviewRoundPagination(PageNumberPagination):
                     {
                         "id": 15,
                         "said": "She explained me the process",
+                        "note": "",
                         "scenario_title": "Entrevista de emprego na TechCorp",
                         "occurred_at": "2026-10-04T14:32:10Z",
                         "interval_days": 1,

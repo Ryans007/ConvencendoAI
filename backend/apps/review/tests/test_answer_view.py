@@ -360,3 +360,24 @@ def test_answering_requires_authentication(student):
     )
 
     assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+def test_the_teacher_receives_the_note_the_card_already_showed(client, student, teacher):
+    item = _item(student)
+    occurrence = item.occurrences.get()
+    occurrence.note = "Repare no tempo da frase."
+    occurrence.save()
+    teacher.verdicts = [MISS]
+
+    _send(client, item)
+
+    assert teacher.calls[0]["note"] == "Repare no tempo da frase."
+
+
+def test_an_item_without_a_note_reaches_the_teacher_with_an_empty_note(client, student, teacher):
+    item = _item(student)
+    teacher.verdicts = [HIT]
+
+    _send(client, item)
+
+    assert teacher.calls[0]["note"] == ""

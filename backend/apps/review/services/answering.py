@@ -84,6 +84,7 @@ def _judge(
             rule=item.rule,
             said=occurrence.produced,
             correct=occurrence.correct,
+            note=occurrence.note,
             step=progress.step,
             attempt=progress.attempt,
             heard=heard,

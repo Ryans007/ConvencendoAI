@@ -20,7 +20,7 @@ THE RULE THE STUDENT GOT WRONG IN A PREVIOUS CONVERSATION
 What the student said then: "{said}"
 The correct form: "{correct}"
 
-THE EXERCISE
+{note_block}THE EXERCISE
 {exercise}
 
 WHAT THE STUDENT SAID NOW (attempt {attempt} of 2): "{heard}"
@@ -32,6 +32,12 @@ HOW TO ANSWER
 {feedback_rules}
 - correction: when correct is false, the student's own sentence rewritten correctly in
   English, keeping what the student meant. Empty when correct is true."""
+
+_NOTE_BLOCK = """ALREADY SHOWN TO THE STUDENT
+Before answering, the student read this note about the mistake: "{note}"
+Do not repeat it. When you give a hint, look at the mistake from another angle.
+
+"""
 
 _EXERCISE_REPEAT = """Step 1. The student had to say the sentence again, corrected. Mark it
 correct when the sentence fixes the mistake of the rule above, even with different words,
@@ -57,6 +63,7 @@ _FEEDBACK_IF_WRONG_LAST = (
     "and what went wrong in the student's sentence."
 )
 
+_FIRST_MISS_WITH_NOTE = "Ainda não. Releia o contexto acima e tente de novo."
 _REPEATED_SENTENCE_FEEDBACK = (
     "Essa é a mesma frase da etapa anterior. Diga uma frase nova, de outro assunto, "
     "com a mesma estrutura."
@@ -92,7 +99,7 @@ def _normalize(text: str) -> str:
 
 
 def _build_prompt(
-    *, rule: str, said: str, correct: str, step: int, attempt: int, heard: str
+    *, rule: str, said: str, correct: str, note: str, step: int, attempt: int, heard: str
 ) -> str:
     first_miss = attempt == 1
     wrong_rule = _FEEDBACK_IF_WRONG_FIRST if first_miss else _FEEDBACK_IF_WRONG_LAST
@@ -100,6 +107,7 @@ def _build_prompt(
         rule=rule,
         said=said,
         correct=correct,
+        note_block=_NOTE_BLOCK.format(note=note.strip()) if note.strip() else "",
         exercise=_EXERCISE_NEW if step == STEP_NEW_SENTENCE else _EXERCISE_REPEAT,
         attempt=attempt,
         heard=heard,
@@ -123,7 +131,7 @@ def _generic_feedback(verdict: ReviewVerdict, attempt: int) -> str:
 
 
 def judge_review_answer(
-    *, rule: str, said: str, correct: str, step: int, attempt: int, heard: str
+    *, rule: str, said: str, correct: str, note: str = "", step: int, attempt: int, heard: str
 ) -> ReviewVerdict:
     """O professor julga uma resposta falada da revisão, em português, para o aluno.
 
@@ -136,6 +144,11 @@ def judge_review_answer(
     português. Uma saída vazia do provedor, que o cliente de LLM devolve como o schema sem
     preencher, vira `ReviewJudgmentFailed`: julgar o aluno errado por causa disso seria
     injusto.
+
+    A nota em português que o cartão já mostrou entra no prompt. No primeiro erro de um item
+    com nota, o feedback é uma frase fixa que remete a ela: medido com o modelo real, pedir à
+    IA um "outro ângulo" não funcionava (repetia a nota em 6 de 6, e com uma instrução mais
+    forte passou a escrever o inglês correto), e o contexto já está na tela.
     """
     if step == STEP_NEW_SENTENCE and _normalize(heard) == _normalize(correct):
         return ReviewVerdict(
@@ -143,12 +156,20 @@ def judge_review_answer(
         )
 
     prompt = _build_prompt(
-        rule=rule, said=said, correct=correct, step=step, attempt=attempt, heard=heard
+        rule=rule,
+        said=said,
+        correct=correct,
+        note=note,
+        step=step,
+        attempt=attempt,
+        heard=heard,
     )
     llm = get_structured_llm(ModelPurpose.JUDGE, ReviewVerdict)
     verdict = ReviewVerdict()
     for _ in range(MAX_TRIES):
         verdict = llm.invoke([HumanMessage(content=prompt)])
+        if verdict.feedback.strip() and note.strip() and attempt == 1 and not verdict.correct:
+            return verdict.model_copy(update={"feedback": _FIRST_MISS_WITH_NOTE})
         if _is_acceptable(verdict, attempt, correct):
             return verdict
         print(f"[review] feedback descartado: {verdict.feedback!r}")

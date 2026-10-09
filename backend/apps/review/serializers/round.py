@@ -16,6 +16,14 @@ class ReviewRoundItemSerializer(serializers.Serializer):
     said = serializers.CharField(
         source="latest_produced", help_text="O que o aluno disse na ocorrência mais recente."
     )
+    note = serializers.CharField(
+        source="latest_note",
+        allow_blank=True,
+        help_text=(
+            "Nota em português que dá o contexto do erro sem dar a resposta. Vazia nos itens "
+            "criados antes de a nota existir."
+        ),
+    )
     scenario_title = serializers.CharField(
         source="latest_scenario_title", help_text="Cenário em que o aluno cometeu o erro."
     )
