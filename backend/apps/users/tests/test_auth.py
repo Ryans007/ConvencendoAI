@@ -7,39 +7,6 @@ pytestmark = pytest.mark.django_db
 _STRONG_PASSWORD = "Xk9#mQ2vLp8Z"
 
 
-def test_register_creates_account_and_authenticates_immediately():
-    client = APIClient()
-
-    response = client.post(
-        "/api/auth/register/", {"username": "aluno", "password": _STRONG_PASSWORD}
-    )
-
-    assert response.status_code == status.HTTP_201_CREATED
-    assert "access" in response.data
-    assert "refresh" in response.data
-
-
-def test_register_rejects_duplicate_username(django_user_model):
-    django_user_model.objects.create_user(username="aluno", password=_STRONG_PASSWORD)
-    client = APIClient()
-
-    response = client.post(
-        "/api/auth/register/", {"username": "aluno", "password": _STRONG_PASSWORD}
-    )
-
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert django_user_model.objects.filter(username="aluno").count() == 1
-
-
-def test_register_rejects_weak_password(django_user_model):
-    client = APIClient()
-
-    response = client.post("/api/auth/register/", {"username": "aluno", "password": "password"})
-
-    assert response.status_code == status.HTTP_400_BAD_REQUEST
-    assert not django_user_model.objects.filter(username="aluno").exists()
-
-
 def test_login_with_correct_credentials(django_user_model):
     django_user_model.objects.create_user(username="aluno", password=_STRONG_PASSWORD)
     client = APIClient()

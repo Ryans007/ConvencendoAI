@@ -5,12 +5,15 @@ const REFRESH_STORAGE_KEY = "convencendoai.refreshToken";
 interface TokenPair {
   access: string;
   refresh: string;
+  /** So o login informa: verdadeiro quando o aluno entrou com a senha temporaria. */
+  must_change_password?: boolean;
 }
 
 type Listener = () => void;
 
 let accessToken: string | null = null;
 let refreshToken: string | null = readStoredRefreshToken();
+let passwordChangeRequired = false;
 const listeners = new Set<Listener>();
 
 function readStoredRefreshToken(): string | null {
@@ -51,13 +54,20 @@ function persistRefreshToken(token: string | null): void {
 function setTokens(pair: TokenPair | null): void {
   accessToken = pair?.access ?? null;
   refreshToken = pair?.refresh ?? null;
+  if (pair === null) {
+    passwordChangeRequired = false;
+  }
   persistRefreshToken(refreshToken);
+  notify();
+}
+
+function notify(): void {
   for (const listener of listeners) {
     listener();
   }
 }
 
-/** Assina mudancas de sessao (login, registro, renovacao, logout). Devolve o cancelamento. */
+/** Assina mudancas de sessao (login, troca de senha, renovacao, logout). Devolve o cancelamento. */
 export function subscribe(listener: Listener): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -73,19 +83,37 @@ export function isAuthenticated(): boolean {
   return accessToken !== null || refreshToken !== null;
 }
 
-/** Cria a conta e ja autentica, sem exigir login separado. */
-export async function register(username: string, password: string): Promise<void> {
-  const pair = await post<TokenPair>(
-    "/auth/register/",
-    { username, password },
-    { skipAuth: true },
-  );
+/** Se o aluno ainda precisa trocar a senha temporaria antes de usar o resto do app. */
+export function isPasswordChangeRequired(): boolean {
+  return passwordChangeRequired;
+}
+
+/**
+ * Marca a troca de senha como obrigatoria. O cliente da API chama isto ao receber o 403
+ * `password_change_required`, o que cobre quem recarregou a pagina: a renovacao do token
+ * nao informa a pendencia, so a primeira chamada protegida recusada.
+ */
+export function requirePasswordChange(): void {
+  if (!passwordChangeRequired) {
+    passwordChangeRequired = true;
+    notify();
+  }
+}
+
+/** Autentica com usuario e senha existentes; a resposta diz se a troca de senha e obrigatoria. */
+export async function login(username: string, password: string): Promise<void> {
+  const pair = await post<TokenPair>("/auth/token/", { username, password }, { skipAuth: true });
+  passwordChangeRequired = pair.must_change_password === true;
   setTokens(pair);
 }
 
-/** Autentica com usuario e senha existentes. */
-export async function login(username: string, password: string): Promise<void> {
-  const pair = await post<TokenPair>("/auth/token/", { username, password }, { skipAuth: true });
+/** Troca a senha, informando a atual, e segue com os tokens novos que a API devolve. */
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  const pair = await post<TokenPair>("/auth/password/", {
+    current_password: currentPassword,
+    new_password: newPassword,
+  });
+  passwordChangeRequired = false;
   setTokens(pair);
 }
 
@@ -113,6 +141,15 @@ export async function bootstrap(): Promise<void> {
   if (refreshToken) {
     await refresh();
   }
+}
+
+/**
+ * Descarta a sessao local sem chamar o backend. O cliente da API usa quando a renovacao
+ * funcionou mas o token novo continua recusado: o servidor nao aceita mais essa sessao,
+ * entao o aluno volta a Entrada em vez de ficar preso numa tela com erro.
+ */
+export function endSession(): void {
+  setTokens(null);
 }
 
 /** Bloqueia o token de renovacao no backend e descarta a sessao local, mesmo se a chamada falhar. */

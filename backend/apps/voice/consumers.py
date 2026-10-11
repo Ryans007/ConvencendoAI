@@ -79,6 +79,10 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             await self._fail("Token inválido ou expirado.")
             return
 
+        if user.must_change_password:
+            await self._fail("Defina uma senha nova antes de iniciar uma sessão.")
+            return
+
         try:
             content, memory, attempt = await sync_to_async(self._resolve_execution)(
                 user, scenario_slug, level_order

@@ -1,72 +1,90 @@
 from drf_spectacular.utils import OpenApiExample, OpenApiResponse, extend_schema
-from rest_framework import generics, permissions, status
+from rest_framework import permissions, status
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView
 
-from apps.users.serializers import LogoutSerializer, RegisterSerializer, TokenPairSerializer
+from apps.users.serializers import (
+    ChangePasswordSerializer,
+    LoginResponseSerializer,
+    LoginSerializer,
+    LogoutSerializer,
+    TokenPairSerializer,
+)
+from apps.users.services.password_change import change_password
 
 
-class RegisterView(generics.CreateAPIView):
-    """Cria uma conta nova com usuário e senha, e autentica na hora.
+class LoginView(TokenObtainPairView):
+    """Troca usuário e senha por um par de tokens e diz se a troca de senha é obrigatória.
 
-    Não exige um login separado depois: a resposta já traz o par de tokens (acesso e
-    renovação), pronto para autenticar os próximos pedidos. A senha é validada pelas
-    mesmas regras já aplicadas a contas criadas pelo admin (comprimento mínimo, não
-    inteiramente numérica, não parecida com o nome de usuário, não uma senha comum).
+    Quem entra com a senha temporária recebe os tokens normalmente, mas, até trocá-la, só a
+    troca de senha e o logout respondem; as outras rotas devolvem 403 `password_change_required`.
     """
 
-    serializer_class = RegisterSerializer
-    permission_classes = [permissions.AllowAny]
+    serializer_class = LoginSerializer
 
     @extend_schema(
+        responses={
+            200: LoginResponseSerializer,
+            401: OpenApiResponse(description="Usuário ou senha incorretos, ou acesso desativado."),
+        },
         examples=[
             OpenApiExample(
-                "Registro válido",
-                value={"username": "aluno_novo", "password": "SenhaForte123!"},
-                request_only=True,
-            ),
-            OpenApiExample(
-                "Conta criada",
+                "Entrou com a senha temporária",
                 value={
                     "access": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIi...",
                     "refresh": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoicmVmcmVzaCI...",
+                    "must_change_password": True,
                 },
                 response_only=True,
-                status_codes=["201"],
+                status_codes=["200"],
+            ),
+        ],
+    )
+    def post(self, request: Request, *args, **kwargs) -> Response:
+        return super().post(request, *args, **kwargs)
+
+
+class ChangePasswordView(APIView):
+    """Troca a senha do próprio aluno e devolve um par de tokens novo.
+
+    Funciona mesmo com a troca obrigatória pendente, porque é o único caminho para
+    resolvê-la. Os tokens emitidos antes da troca deixam de valer.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    @extend_schema(
+        request=ChangePasswordSerializer,
+        responses={
+            200: TokenPairSerializer,
+            400: OpenApiResponse(
+                description="Senha atual errada, senha nova igual à atual ou reprovada na "
+                "validação. O corpo traz o campo problemático como chave, com os motivos."
+            ),
+        },
+        examples=[
+            OpenApiExample(
+                "Troca da senha temporária",
+                value={"current_password": "Kx7mPq2Wd9Zt", "new_password": "MinhaSenhaNova#2026"},
+                request_only=True,
             ),
             OpenApiExample(
-                "Nome de usuário já existe",
-                value={"username": ["Um usuário com este nome de usuário já existe."]},
-                response_only=True,
-                status_codes=["400"],
-            ),
-            OpenApiExample(
-                "Senha reprovada na validação",
-                value={"password": ["Esta senha é muito comum."]},
+                "Senha nova igual à atual",
+                value={"new_password": ["A senha nova não pode ser igual à atual."]},
                 response_only=True,
                 status_codes=["400"],
             ),
         ],
-        responses={
-            201: TokenPairSerializer,
-            400: OpenApiResponse(
-                description="Nome de usuário já em uso, ou senha reprovada na validação. O corpo "
-                "traz o campo problemático como chave, com a lista de motivos."
-            ),
-        },
     )
-    def create(self, request: Request, *args, **kwargs) -> Response:
-        serializer = self.get_serializer(data=request.data)
+    def post(self, request: Request) -> Response:
+        serializer = ChangePasswordSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        user = serializer.save()
-        refresh = RefreshToken.for_user(user)
-        return Response(
-            {"access": str(refresh.access_token), "refresh": str(refresh)},
-            status=status.HTTP_201_CREATED,
-        )
+        refresh = change_password(request.user, serializer.validated_data["new_password"])
+        return Response({"access": str(refresh.access_token), "refresh": str(refresh)})
 
 
 class LogoutView(APIView):
@@ -74,8 +92,11 @@ class LogoutView(APIView):
 
     Depois de bloqueado, aquele token de renovação nunca mais emite um novo token de
     acesso — nem antes de expirar sozinho. O token deve pertencer a quem está fazendo o
-    pedido: um token de outro aluno, mesmo que válido, é recusado.
+    pedido: um token de outro aluno, mesmo que válido, é recusado. Funciona com a troca de
+    senha pendente, para o aluno poder sair sem trocar.
     """
+
+    permission_classes = [permissions.IsAuthenticated]
 
     @extend_schema(
         request=LogoutSerializer,
