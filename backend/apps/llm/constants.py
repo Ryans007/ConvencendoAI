@@ -1,6 +1,10 @@
 from django.db import models
 
 
+PROVIDER_TIMEOUT_SECONDS = 30
+PROVIDER_MAX_RETRIES = 1
+
+
 class ModelPurpose(models.TextChoices):
     """Os papéis de chat do núcleo conversacional que consomem um modelo de LLM."""
 
