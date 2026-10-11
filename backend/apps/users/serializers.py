@@ -42,6 +42,12 @@ class LoginResponseSerializer(TokenPairSerializer):
     )
 
 
+class CurrentUserSerializer(serializers.Serializer):
+    """Quem está autenticado: o nome de usuário que o menu do frontend mostra."""
+
+    username = serializers.CharField(help_text="O nome de usuário do aluno autenticado.")
+
+
 class LogoutSerializer(serializers.Serializer):
     """Corpo esperado pelo logout: o token de renovação a bloquear."""
 

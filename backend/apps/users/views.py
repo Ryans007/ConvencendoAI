@@ -9,6 +9,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 
 from apps.users.serializers import (
     ChangePasswordSerializer,
+    CurrentUserSerializer,
     LoginResponseSerializer,
     LoginSerializer,
     LogoutSerializer,
@@ -46,6 +47,23 @@ class LoginView(TokenObtainPairView):
     )
     def post(self, request: Request, *args, **kwargs) -> Response:
         return super().post(request, *args, **kwargs)
+
+
+class CurrentUserView(APIView):
+    """Devolve quem está autenticado, para o frontend mostrar o nome de usuário no menu.
+
+    Passa pela permissão padrão, então quem ainda não trocou a senha temporária recebe o
+    403 de troca obrigatória, como em qualquer outra rota protegida.
+    """
+
+    @extend_schema(
+        responses={200: CurrentUserSerializer},
+        examples=[
+            OpenApiExample("Aluno autenticado", value={"username": "maria"}, response_only=True),
+        ],
+    )
+    def get(self, request: Request) -> Response:
+        return Response(CurrentUserSerializer(request.user).data)
 
 
 class ChangePasswordView(APIView):
