@@ -98,15 +98,27 @@ export class LiveSession {
   private readonly hintsEnabled: boolean;
 
   constructor(scenarioSlug: string, levelOrder: number, hintsEnabled = false) {
-    const token = getAccessToken() ?? "";
-    const hintsParam = hintsEnabled ? "&hints=1" : "";
-    const url = `${wsBaseUrl}/voice/${scenarioSlug}/${levelOrder}/?token=${encodeURIComponent(token)}${hintsParam}`;
+    const hintsParam = hintsEnabled ? "?hints=1" : "";
+    const url = `${wsBaseUrl}/voice/${scenarioSlug}/${levelOrder}/${hintsParam}`;
     this.hintsEnabled = hintsEnabled;
     this.socket = new WebSocket(url);
     this.socket.binaryType = "arraybuffer";
-    this.socket.addEventListener("open", () => this.setState({ phase: "persona-speaking" }));
+    this.socket.addEventListener("open", () => {
+      this.authenticate();
+      this.setState({ phase: "persona-speaking" });
+    });
     this.socket.addEventListener("message", (event) => this.handleMessage(event));
     this.socket.addEventListener("close", () => this.handleClose());
+  }
+
+  /**
+   * Manda o token de acesso na primeira mensagem da conexao, e nunca na URL: o log de acesso do
+   * servidor grava a URL inteira, e o token ficaria la. O servidor so inicia a sessao depois
+   * desta mensagem e recusa qualquer audio que chegue antes. O token e lido agora, e nao na
+   * criacao da sessao, para valer o que a renovacao acabou de emitir.
+   */
+  private authenticate(): void {
+    this.socket.send(JSON.stringify({ type: "auth", token: getAccessToken() ?? "" }));
   }
 
   subscribe(listener: Listener): () => void {

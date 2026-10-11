@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 import json
 import logging
 import re
@@ -39,6 +41,8 @@ from apps.voice.services.failures import (
 from apps.voice.services.stt import transcribe
 from apps.voice.services.tts import synthesize
 
+_AUTH_TIMEOUT_SECONDS = 10
+_AUTH_MAX_CHARS = 4096
 _SPEAKER_PREFIX = re.compile(r"^\[([^\]]+)\]\s*(.*)$", re.DOTALL)
 
 logger = logging.getLogger(__name__)
@@ -55,32 +59,84 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
     """Sessão de voz ao vivo de um cenário: um turno por vez, controlado pelo aluno.
 
     Sem channel layer: cada conexão é privada, sem grupos nem broadcast. O aluno se
-    identifica pelo mesmo token de acesso JWT que a API HTTP usa (`?token=`), validado
-    com `JWTAuthentication` — sem `AuthMiddlewareStack` do Channels, que exigiria sessão
-    Django, mecanismo que este projeto não usa para a API.
+    identifica pelo mesmo token de acesso JWT que a API HTTP usa, mandado na primeira
+    mensagem da conexão e validado com `JWTAuthentication` — sem `AuthMiddlewareStack`
+    do Channels, que exigiria sessão Django, mecanismo que este projeto não usa na API.
     """
 
     async def connect(self) -> None:
-        """Autentica o aluno, abre a tentativa e faz a persona abrir a cena.
+        """Aceita a conexão e espera a mensagem de autenticação, sem iniciar nada ainda.
 
-        `?hints=1` na URL diz que o aluno ligou as dicas no briefing: só assim os pedidos
-        de dica são atendidos, e a tentativa registra a escolha.
+        O token não vem na URL, porque o log de acesso do servidor grava a URL inteira e o
+        token ficaria lá em texto. O handshake do WebSocket não leva credencial, então a
+        conexão é aceita e o aluno se identifica na primeira mensagem. Nada é gasto antes
+        disso: nem a reserva da sessão, nem a tentativa, nem uma chamada a modelo. Se a
+        mensagem não chega a tempo, a conexão é encerrada.
         """
         self.scene_over = False
+        self.started = False
         self.lease = None
+        self.user = None
+        self.attempt = None
         self.hints_enabled = False
         self.current_hint: str | None = None
         await self.accept()
+        self._auth_deadline = asyncio.create_task(self._close_if_not_authenticated())
 
+    async def _close_if_not_authenticated(self) -> None:
+        """Encerra a conexão que não mandou a autenticação no prazo, sem iniciar a execução."""
+        await asyncio.sleep(_AUTH_TIMEOUT_SECONDS)
+        if not self.started and not self.scene_over:
+            with contextlib.suppress(Exception):
+                await self._fail("A autenticação da sessão não chegou a tempo.")
+
+    def _cancel_auth_deadline(self) -> None:
+        deadline = getattr(self, "_auth_deadline", None)
+        if deadline is not None and deadline is not asyncio.current_task():
+            deadline.cancel()
+
+    async def _authenticate_first_message(
+        self, text_data: str | None, bytes_data: bytes | None
+    ) -> None:
+        """Lê a primeira mensagem, que precisa ser a de autenticação, e então inicia a sessão.
+
+        Antes da autenticação nada além dela é aceito: áudio, outro tipo de mensagem, um JSON
+        inválido ou uma mensagem grande demais encerram a conexão. O limite de tamanho existe
+        para o servidor não ler e processar um corpo qualquer de quem ainda não provou quem é.
+        """
+        self._cancel_auth_deadline()
+        if bytes_data is not None or text_data is None:
+            await self._fail("A primeira mensagem deve ser a de autenticação.")
+            return
+        if len(text_data) > _AUTH_MAX_CHARS:
+            await self._fail("A mensagem de autenticação é grande demais.")
+            return
+        try:
+            message = json.loads(text_data)
+        except json.JSONDecodeError:
+            await self._fail("A primeira mensagem deve ser a de autenticação.")
+            return
+        token = message.get("token") if isinstance(message, dict) else None
+        if not isinstance(message, dict) or message.get("type") != "auth" or not token:
+            await self._fail("A primeira mensagem deve ser a de autenticação com o token.")
+            return
+        if not isinstance(token, str):
+            await self._fail("A primeira mensagem deve ser a de autenticação com o token.")
+            return
+        self.started = True
+        await self._start_session(token)
+
+    async def _start_session(self, token: str) -> None:
+        """Autentica o aluno, confere a jornada e os limites, abre a tentativa e abre a cena.
+
+        `?hints=1` na URL diz que o aluno ligou as dicas no briefing: só assim os pedidos
+        de dica são atendidos, e a tentativa registra a escolha. É a única coisa que a URL
+        ainda leva, e não é sensível.
+        """
         scenario_slug = self.scope["url_route"]["kwargs"]["scenario_slug"]
         level_order = self.scope["url_route"]["kwargs"]["level_order"]
         query = parse_qs(self.scope["query_string"].decode())
-        token = (query.get("token") or [None])[0]
         hints_requested = (query.get("hints") or ["0"])[0] == "1"
-
-        if not token:
-            await self._fail("Parâmetro 'token' é obrigatório na URL.")
-            return
 
         try:
             user = await sync_to_async(self._authenticate)(token)
@@ -147,9 +203,12 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
     async def disconnect(self, code) -> None:
         """Libera a sessão reservada do aluno, por qualquer motivo que a conexão tenha terminado.
 
+        Cancela também o prazo da autenticação, se ele ainda estava correndo.
+
         Uma falha ao liberar vai para o log e não derruba o consumidor: a reserva vence sozinha
         depois do tempo máximo, então o pior caso é o aluno esperar, e não a conexão quebrar.
         """
+        self._cancel_auth_deadline()
         try:
             await sync_to_async(release_session_lease)(getattr(self, "lease", None))
         except Exception as exc:
@@ -160,7 +219,13 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         return usage_owner(user=self.user, attempt=self.attempt)
 
     async def receive(self, text_data: str | None = None, bytes_data: bytes | None = None) -> None:
-        """Atende uma mensagem do cliente com o uso dos modelos atribuído ao aluno e à sessão."""
+        """Atende uma mensagem do cliente com o uso dos modelos atribuído ao aluno e à sessão.
+
+        Enquanto a sessão não começou, a única mensagem aceita é a de autenticação.
+        """
+        if not self.started:
+            await self._authenticate_first_message(text_data, bytes_data)
+            return
         with self._usage_owner():
             await self._receive(text_data, bytes_data)
 

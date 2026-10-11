@@ -4,7 +4,6 @@ from datetime import timedelta
 import pytest
 from asgiref.sync import async_to_sync, sync_to_async
 from channels.routing import URLRouter
-from channels.testing import WebsocketCommunicator
 from django.utils import timezone
 from rest_framework_simplejwt.tokens import AccessToken
 
@@ -16,6 +15,7 @@ from apps.progress.models import Attempt
 from apps.usage.models import LiveSessionLease
 from apps.voice import consumers as voice_consumers
 from apps.voice.routing import websocket_urlpatterns
+from apps.voice.tests.session_client import SessionCommunicator
 
 pytestmark = pytest.mark.django_db
 
@@ -62,7 +62,7 @@ def _open(slug: str, level: int, token: str) -> tuple[dict | bytes, dict]:
     """A primeira mensagem da conexão e o estado do banco logo depois dela."""
 
     async def run() -> tuple[dict | bytes, dict]:
-        communicator = WebsocketCommunicator(
+        communicator = SessionCommunicator(
             URLRouter(websocket_urlpatterns), _url(slug, level, token)
         )
         connected, _ = await communicator.connect()

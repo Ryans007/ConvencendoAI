@@ -3,7 +3,6 @@ import json
 import pytest
 from asgiref.sync import async_to_sync, sync_to_async
 from channels.routing import URLRouter
-from channels.testing import WebsocketCommunicator
 from rest_framework_simplejwt.tokens import AccessToken
 
 from apps.agents.graph import personas as graph_personas
@@ -14,6 +13,7 @@ from apps.catalog.models import Level, Scenario
 from apps.progress.models import Attempt
 from apps.voice import consumers as voice_consumers
 from apps.voice.routing import websocket_urlpatterns
+from apps.voice.tests.session_client import SessionCommunicator
 
 pytestmark = pytest.mark.django_db
 
@@ -69,7 +69,7 @@ def test_live_session_opens_transcribes_a_turn_and_ends(django_user_model, monke
 
     async def run() -> None:
         application = URLRouter(websocket_urlpatterns)
-        communicator = WebsocketCommunicator(
+        communicator = SessionCommunicator(
             application, f"/ws/voice/{scenario.slug}/{level.order}/?token={token}"
         )
         connected, _ = await communicator.connect()
@@ -151,7 +151,7 @@ def test_audio_sent_during_evaluation_is_ignored(django_user_model, monkeypatch)
 
     async def run() -> None:
         application = URLRouter(websocket_urlpatterns)
-        communicator = WebsocketCommunicator(
+        communicator = SessionCommunicator(
             application, f"/ws/voice/negociar-prazo/3/?token={token}"
         )
         connected, _ = await communicator.connect()
@@ -193,7 +193,7 @@ def test_empty_transcription_asks_the_student_to_speak_again(django_user_model, 
 
     async def run() -> None:
         application = URLRouter(websocket_urlpatterns)
-        communicator = WebsocketCommunicator(
+        communicator = SessionCommunicator(
             application, f"/ws/voice/negociar-prazo/3/?token={token}"
         )
         connected, _ = await communicator.connect()
@@ -220,9 +220,10 @@ def test_live_session_fails_explicitly_without_token():
 
     async def run() -> None:
         application = URLRouter(websocket_urlpatterns)
-        communicator = WebsocketCommunicator(application, "/ws/voice/negociar-prazo/3/")
+        communicator = SessionCommunicator(application, "/ws/voice/negociar-prazo/3/")
         connected, _ = await communicator.connect()
         assert connected
+        await communicator.send_to(text_data=json.dumps({"type": "auth"}))
 
         control = await communicator.receive_from()
         payload = json.loads(control)
@@ -236,7 +237,7 @@ def test_live_session_fails_explicitly_without_token():
 def test_live_session_fails_explicitly_for_invalid_token():
     async def run() -> None:
         application = URLRouter(websocket_urlpatterns)
-        communicator = WebsocketCommunicator(
+        communicator = SessionCommunicator(
             application, "/ws/voice/negociar-prazo/3/?token=not-a-real-token"
         )
         connected, _ = await communicator.connect()
@@ -256,7 +257,7 @@ def _connection_error(token: str) -> tuple[dict, int]:
 
     async def run() -> tuple[dict, int]:
         application = URLRouter(websocket_urlpatterns)
-        communicator = WebsocketCommunicator(
+        communicator = SessionCommunicator(
             application, f"/ws/voice/negociar-prazo/3/?token={token}"
         )
         connected, _ = await communicator.connect()
