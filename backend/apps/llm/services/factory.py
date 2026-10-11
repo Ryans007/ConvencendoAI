@@ -34,13 +34,30 @@ class ModelNotConfigured(RuntimeError):
     """Nenhum modelo ativo está configurado para o papel pedido."""
 
 
+def _require_key(model: LLMModel) -> LLMModel:
+    """Recusa o modelo cujo provedor não tem a chave definida no ambiente do servidor.
+
+    A chave vive só na variável de ambiente que o provedor nomeia. Sem ela, o modelo é tratado
+    como não configurado, antes de montar qualquer cliente e de enviar qualquer pedido, e a
+    mensagem diz qual variável falta, nunca um valor. A sessão e a revisão já tratam
+    `ModelNotConfigured` como serviço de IA indisponível.
+    """
+    provider = model.provider
+    if not provider.has_api_key:
+        raise ModelNotConfigured(
+            f"Provedor '{provider.code}' sem chave: defina a variável de ambiente "
+            f"{provider.api_key_env}."
+        )
+    return model
+
+
 def _model_for(purpose: str, config: AgentModelConfig) -> LLMModel:
     model = getattr(config, _FIELD_BY_PURPOSE[purpose])
     if model is None or not model.is_active or not model.provider.is_active:
         raise ModelNotConfigured(
             f"Nenhum modelo ativo configurado para o papel '{purpose}'."
         )
-    return model
+    return _require_key(model)
 
 
 def get_llm(purpose: str) -> ChatOpenAI:
@@ -213,7 +230,7 @@ def _audio_model_for(purpose: str, config: AgentModelConfig) -> LLMModel:
         raise ModelNotConfigured(
             f"Nenhum modelo ativo configurado para o papel '{purpose}'."
         )
-    return model
+    return _require_key(model)
 
 
 def get_audio_client(purpose: str) -> AudioClient:
