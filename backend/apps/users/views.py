@@ -15,7 +15,11 @@ from apps.users.serializers import (
     LogoutSerializer,
     TokenPairSerializer,
 )
+from apps.users.services.client_ip import client_ip
+from apps.users.services.login_lockout import clear_login_failures, login_lock_remaining_seconds
 from apps.users.services.password_change import change_password
+
+LOGIN_LOCKED_CODE = "login_locked"
 
 
 class LoginView(TokenObtainPairView):
@@ -31,6 +35,11 @@ class LoginView(TokenObtainPairView):
         responses={
             200: LoginResponseSerializer,
             401: OpenApiResponse(description="Usuário ou senha incorretos, ou acesso desativado."),
+            429: OpenApiResponse(
+                description="Senhas erradas demais: o usuário ou o IP estão bloqueados. O corpo "
+                "traz `code` `login_locked` e `retry_after_seconds`, e o cabeçalho "
+                "`Retry-After` repete o tempo."
+            ),
         },
         examples=[
             OpenApiExample(
@@ -46,7 +55,27 @@ class LoginView(TokenObtainPairView):
         ],
     )
     def post(self, request: Request, *args, **kwargs) -> Response:
-        return super().post(request, *args, **kwargs)
+        """Faz o login, recusando com 429 quando o usuário ou o IP estão bloqueados.
+
+        A checagem vem antes do serializer, para a senha certa nada revelar durante o
+        bloqueio. Um login certo zera as senhas erradas do usuário.
+        """
+        username = str(request.data.get("username", "") or "") if hasattr(request.data, "get") else ""
+        remaining = login_lock_remaining_seconds(username, client_ip(request))
+        if remaining > 0:
+            return Response(
+                {
+                    "detail": "Muitas tentativas de login. Tente de novo mais tarde.",
+                    "code": LOGIN_LOCKED_CODE,
+                    "retry_after_seconds": remaining,
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+                headers={"Retry-After": str(remaining)},
+            )
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == status.HTTP_200_OK:
+            clear_login_failures(username)
+        return response
 
 
 class CurrentUserView(APIView):
