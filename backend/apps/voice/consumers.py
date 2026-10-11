@@ -6,14 +6,13 @@ from urllib.parse import parse_qs
 
 from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
-from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import F
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
-from rest_framework_simplejwt.exceptions import TokenError
-from rest_framework_simplejwt.tokens import AccessToken
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from apps.agents.graph.builder import build_scenario_graph
 from apps.agents.graph.listen import listen_live
@@ -49,8 +48,8 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
 
     Sem channel layer: cada conexão é privada, sem grupos nem broadcast. O aluno se
     identifica pelo mesmo token de acesso JWT que a API HTTP usa (`?token=`), validado
-    diretamente com `AccessToken` — sem `AuthMiddlewareStack` do Channels, que exigiria
-    sessão Django, mecanismo que este projeto não usa para a API.
+    com `JWTAuthentication` — sem `AuthMiddlewareStack` do Channels, que exigiria sessão
+    Django, mecanismo que este projeto não usa para a API.
     """
 
     async def connect(self) -> None:
@@ -75,14 +74,14 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             return
 
         try:
-            user_id = AccessToken(token)["user_id"]
-        except TokenError:
+            user = await sync_to_async(self._authenticate)(token)
+        except AuthenticationFailed:
             await self._fail("Token inválido ou expirado.")
             return
 
         try:
             content, memory, attempt = await sync_to_async(self._resolve_execution)(
-                user_id, scenario_slug, level_order
+                user, scenario_slug, level_order
             )
         except ObjectDoesNotExist as exc:
             await self._fail(str(exc))
@@ -310,8 +309,18 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         await self._fail(FAILURE_DESCRIPTIONS[code], code=code)
 
     @staticmethod
-    def _resolve_execution(user_id, scenario_slug: str, level_order: int):
-        user = get_user_model().objects.get(pk=user_id)
+    def _authenticate(raw_token: str):
+        """Devolve o aluno dono do token de acesso, pela mesma autenticação da API HTTP.
+
+        Ler só o `user_id` do token deixava um aluno desativado abrir a sessão até o token
+        expirar. Usar `JWTAuthentication` faz as duas portas de entrada seguirem a mesma regra:
+        recusa o token inválido ou expirado, o aluno que não existe mais e o desativado.
+        """
+        authentication = JWTAuthentication()
+        return authentication.get_user(authentication.get_validated_token(raw_token))
+
+    @staticmethod
+    def _resolve_execution(user, scenario_slug: str, level_order: int):
         scenario = Scenario.objects.get(slug=scenario_slug)
         level = Level.objects.get(order=level_order)
         return resolve_execution(scenario, level, user)
