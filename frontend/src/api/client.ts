@@ -1,6 +1,8 @@
-import { getAccessToken, refresh } from "../services/session";
+import { endSession, getAccessToken, refresh, requirePasswordChange } from "../services/session";
 
 const DEFAULT_BASE_URL = "http://localhost:8010/api";
+
+const PASSWORD_CHANGE_REQUIRED_CODE = "password_change_required";
 
 const baseUrl: string = import.meta.env.VITE_API_BASE_URL ?? DEFAULT_BASE_URL;
 
@@ -19,7 +21,7 @@ export class ApiError extends Error {
 
 interface RequestOptions {
   signal?: AbortSignal;
-  /** Chamada de autenticacao (login, registro, renovacao): nunca leva o header nem tenta renovar. */
+  /** Chamada de autenticacao (login, renovacao): nunca leva o header nem tenta renovar. */
   skipAuth?: boolean;
   /** Como ler o corpo da resposta: JSON (padrao) ou binario, como o audio da revisao. */
   responseType?: "json" | "blob";
@@ -31,6 +33,14 @@ async function parseErrorBody(response: Response): Promise<unknown> {
   } catch {
     return null;
   }
+}
+
+function isPasswordChangeRequired(body: unknown): boolean {
+  return (
+    typeof body === "object" &&
+    body !== null &&
+    (body as Record<string, unknown>).code === PASSWORD_CHANGE_REQUIRED_CODE
+  );
 }
 
 /**
@@ -81,9 +91,15 @@ async function request<T>(
       return request<T>(method, path, body, options, true);
     }
   }
+  if (response.status === 401 && !options.skipAuth && retrying) {
+    endSession();
+  }
 
   if (!response.ok) {
     const errorBody = await parseErrorBody(response);
+    if (response.status === 403 && isPasswordChangeRequired(errorBody)) {
+      requirePasswordChange();
+    }
     throw new ApiError(`A API respondeu ${response.status}.`, response.status, errorBody);
   }
 

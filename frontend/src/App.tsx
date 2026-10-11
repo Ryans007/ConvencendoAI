@@ -9,6 +9,7 @@ import JornadaPage from "./pages/jornada/JornadaPage";
 import RelatorioPage from "./pages/relatorio/RelatorioPage";
 import RevisaoPage from "./pages/revisao/RevisaoPage";
 import RodadaPage from "./pages/revisao/RodadaPage";
+import DefinirSenhaPage from "./pages/senha/DefinirSenhaPage";
 import SessaoAoVivoPage from "./pages/sessao/SessaoAoVivoPage";
 
 /** Raiz do app: roteamento entre as telas do fluxo do aluno. */
@@ -17,6 +18,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/entrada" element={<EntradaPage />} />
+        <Route path="/definir-senha" element={<DefinirSenhaPage />} />
         <Route path="/diagnostico" element={<DiagnosticoPage />} />
 
         <Route element={<RequireAuth />}>

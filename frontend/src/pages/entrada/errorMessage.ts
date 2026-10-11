@@ -9,7 +9,7 @@ export function authErrorMessage(error: unknown): string {
   const body = error.body;
   if (body && typeof body === "object") {
     const fields = body as Record<string, unknown>;
-    for (const key of ["username", "password", "detail"]) {
+    for (const key of ["username", "password", "current_password", "new_password", "detail"]) {
       const value = fields[key];
       if (Array.isArray(value) && value.length > 0) {
         return String(value[0]);
