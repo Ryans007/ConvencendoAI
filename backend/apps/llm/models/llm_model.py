@@ -31,6 +31,46 @@ class LLMModel(models.Model):
         ),
     )
     is_active = models.BooleanField(default=True)
+    input_price_per_million_tokens = models.DecimalField(
+        "preço por 1M de tokens de entrada (US$)",
+        max_digits=10,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        help_text="Só para modelos de chat.",
+    )
+    output_price_per_million_tokens = models.DecimalField(
+        "preço por 1M de tokens de saída (US$)",
+        max_digits=10,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        help_text="Só para modelos de chat. O raciocínio do modelo conta como saída.",
+    )
+    price_per_audio_hour = models.DecimalField(
+        "preço por hora de áudio (US$)",
+        max_digits=10,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        help_text="Só para modelos de transcrição de voz (STT).",
+    )
+    min_billed_audio_seconds = models.PositiveSmallIntegerField(
+        "segundos mínimos cobrados por pedido",
+        default=0,
+        help_text=(
+            "Só para STT. Alguns provedores cobram um mínimo por pedido, mesmo para uma fala "
+            "mais curta; o Whisper do Groq cobra 10 segundos."
+        ),
+    )
+    price_per_million_characters = models.DecimalField(
+        "preço por 1M de caracteres (US$)",
+        max_digits=10,
+        decimal_places=4,
+        null=True,
+        blank=True,
+        help_text="Só para modelos de síntese de voz (TTS).",
+    )
 
     class Meta:
         constraints = [
