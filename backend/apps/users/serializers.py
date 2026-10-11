@@ -1,33 +1,19 @@
-from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 
-class RegisterSerializer(serializers.ModelSerializer):
-    """Dados de registro: usuário e senha, validada pelas mesmas regras do admin.
+class LoginSerializer(TokenObtainPairSerializer):
+    """Login por usuário e senha: devolve o par de tokens e se a troca de senha é obrigatória.
 
-    A conta é criada e autenticada na mesma chamada — a resposta já traz o par de
-    tokens (acesso e renovação), sem exigir uma chamada de login separada em seguida.
+    A resposta já diz se o aluno entrou com a senha temporária, para o frontend levá-lo
+    direto à tela de troca sem uma chamada a mais.
     """
 
-    password = serializers.CharField(
-        write_only=True,
-        help_text=(
-            "Ao menos 8 caracteres; não pode ser inteiramente numérica, nem uma senha "
-            "comum demais, nem parecida com o nome de usuário."
-        ),
-    )
-
-    class Meta:
-        model = get_user_model()
-        fields = ["username", "password"]
-
-    def validate_password(self, value: str) -> str:
-        validate_password(value)
-        return value
-
-    def create(self, validated_data: dict):
-        return get_user_model().objects.create_user(**validated_data)
+    def validate(self, attrs: dict) -> dict:
+        data = super().validate(attrs)
+        data["must_change_password"] = self.user.must_change_password
+        return data
 
 
 class TokenPairSerializer(serializers.Serializer):
@@ -45,9 +31,56 @@ class TokenPairSerializer(serializers.Serializer):
     )
 
 
+class LoginResponseSerializer(TokenPairSerializer):
+    """Resposta do login: o par de tokens e a indicação da troca obrigatória."""
+
+    must_change_password = serializers.BooleanField(
+        help_text=(
+            "Verdadeiro quando o aluno entrou com a senha temporária: até trocá-la, todas as "
+            "rotas, menos a troca de senha e o logout, respondem 403 `password_change_required`."
+        )
+    )
+
+
 class LogoutSerializer(serializers.Serializer):
     """Corpo esperado pelo logout: o token de renovação a bloquear."""
 
     refresh = serializers.CharField(
-        help_text="O token de renovação do próprio aluno, o mesmo devolvido no login ou registro."
+        help_text="O token de renovação do próprio aluno, o mesmo devolvido no login."
     )
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    """Corpo da troca de senha: a senha atual e a nova.
+
+    A senha atual prova que quem pede é o dono da conta, mesmo com um token roubado. A nova
+    passa pelas regras de validação já configuradas e não pode repetir a atual, o que
+    obrigaria a trocar a senha temporária por ela mesma.
+    """
+
+    current_password = serializers.CharField(
+        write_only=True, help_text="A senha atual; no primeiro acesso, a senha temporária."
+    )
+    new_password = serializers.CharField(
+        write_only=True,
+        help_text=(
+            "Ao menos 8 caracteres; não pode ser inteiramente numérica, nem uma senha comum "
+            "demais, nem parecida com o nome de usuário, nem igual à atual."
+        ),
+    )
+
+    def validate_current_password(self, value: str) -> str:
+        if not self.context["request"].user.check_password(value):
+            raise serializers.ValidationError("A senha atual não confere.")
+        return value
+
+    def validate_new_password(self, value: str) -> str:
+        validate_password(value, self.context["request"].user)
+        return value
+
+    def validate(self, attrs: dict) -> dict:
+        if attrs["new_password"] == attrs["current_password"]:
+            raise serializers.ValidationError(
+                {"new_password": ["A senha nova não pode ser igual à atual."]}
+            )
+        return attrs
