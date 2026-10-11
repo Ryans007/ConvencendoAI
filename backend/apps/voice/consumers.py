@@ -22,6 +22,7 @@ from apps.agents.services.tutor import suggest_answer
 from apps.catalog.models import Level, Scenario
 from apps.progress.models import Attempt
 from apps.llm.services.factory import log_active_models
+from apps.usage.services.owner import usage_owner
 from apps.voice.services.failures import (
     FAILURE_DESCRIPTIONS,
     SessionErrorCode,
@@ -91,6 +92,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             await self._fail(str(exc))
             return
 
+        self.user = user
         self.content = content
         self.attempt = attempt
         self.seen_messages = 0
@@ -114,9 +116,19 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             "taking_over": False,
             "addressed_by_student": False,
         }
-        await self._advance(initial_state, resume=None, started_at=time.monotonic())
+        with self._usage_owner():
+            await self._advance(initial_state, resume=None, started_at=time.monotonic())
+
+    def _usage_owner(self):
+        """A marca de dono do uso de modelos: o aluno e a sessão desta conexão."""
+        return usage_owner(user=self.user, attempt=self.attempt)
 
     async def receive(self, text_data: str | None = None, bytes_data: bytes | None = None) -> None:
+        """Atende uma mensagem do cliente com o uso dos modelos atribuído ao aluno e à sessão."""
+        with self._usage_owner():
+            await self._receive(text_data, bytes_data)
+
+    async def _receive(self, text_data: str | None, bytes_data: bytes | None) -> None:
         """Recebe o áudio de um turno do aluno, transcreve e avança a conversa.
 
         Falha do provedor de STT encerra a sessão com erro explícito, sem fallback
