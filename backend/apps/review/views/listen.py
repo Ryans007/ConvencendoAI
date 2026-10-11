@@ -10,6 +10,7 @@ from rest_framework.views import APIView
 from apps.review.models import ReviewAnswer
 from apps.review.services.answering import AnswerFailed
 from apps.review.services.listening import correct_form_audio
+from apps.usage.services.review_limits import review_limit_reached, too_many_requests_response
 
 _FAILURE_DETAIL = "O serviço de IA está indisponível no momento. Tente de novo em alguns minutos."
 
@@ -44,6 +45,8 @@ class ReviewAnswerAudioView(APIView):
     def get(self, request: Request, answer_id: int) -> Response:
         answers = ReviewAnswer.objects.filter(item__user=request.user).exclude(revealed_correct="")
         answer = get_object_or_404(answers, pk=answer_id)
+        if review_limit_reached(request.user):
+            return too_many_requests_response()
         try:
             audio = correct_form_audio(answer)
         except AnswerFailed as failure:

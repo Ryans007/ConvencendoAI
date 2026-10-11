@@ -13,6 +13,7 @@ from apps.review.serializers import (
     answer_payload,
 )
 from apps.review.services.answering import AnswerFailed, ProgressChanged, answer_item
+from apps.usage.services.review_limits import review_limit_reached, too_many_requests_response
 from apps.review.services.queries import due_items
 
 _FAILURE_DETAIL = "O serviço de IA está indisponível no momento. Tente de novo em alguns minutos."
@@ -55,6 +56,8 @@ class ReviewAnswerView(APIView):
     def post(self, request: Request, item_id: int) -> Response:
         today = timezone.localdate()
         item = get_object_or_404(due_items(request.user, today), pk=item_id)
+        if review_limit_reached(request.user):
+            return too_many_requests_response()
         upload = ReviewAnswerUploadSerializer(data=request.data)
         upload.is_valid(raise_exception=True)
 
