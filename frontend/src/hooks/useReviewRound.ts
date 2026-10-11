@@ -1,13 +1,14 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
-import { ApiError } from "../api/client";
+import { ApiError, apiErrorCode } from "../api/client";
 import { discardItem, fetchAnswerAudio, sendAnswer, type RoundItem } from "../api/reviewRound";
 import { AudioRecorder, MIN_RECORDING_MS } from "../services/audioRecorder";
 import { INITIAL_ROUND_STATE, roundReducer, type RoundState } from "../services/reviewRound";
 
-const RECORDABLE_PHASES = ["idle", "not_heard", "mic_denied"];
+const RECORDABLE_PHASES = ["idle", "not_heard", "too_many", "mic_denied"];
 const CONFLICT = 409;
+const TOO_MANY_REQUESTS_CODE = "too_many_requests";
 
 function startRound(items: RoundItem[]): RoundState {
   return roundReducer(INITIAL_ROUND_STATE, { type: "loaded", items });
@@ -55,6 +56,10 @@ export function useReviewRound(items: RoundItem[], reloadRound: () => void) {
       } catch (error) {
         if (error instanceof ApiError && error.status === CONFLICT) {
           reloadRound();
+          return;
+        }
+        if (error instanceof ApiError && apiErrorCode(error) === TOO_MANY_REQUESTS_CODE) {
+          dispatch({ type: "tooMany" });
           return;
         }
         dispatch({ type: "failed" });

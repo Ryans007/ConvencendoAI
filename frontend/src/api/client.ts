@@ -19,6 +19,16 @@ export class ApiError extends Error {
   }
 }
 
+/** O codigo estavel que a API manda no corpo de um erro, quando ha; nunca o texto tecnico. */
+export function apiErrorCode(error: ApiError): string | null {
+  const body = error.body;
+  if (typeof body === "object" && body !== null) {
+    const code = (body as Record<string, unknown>).code;
+    return typeof code === "string" ? code : null;
+  }
+  return null;
+}
+
 interface RequestOptions {
   signal?: AbortSignal;
   /** Chamada de autenticacao (login, renovacao): nunca leva o header nem tenta renovar. */

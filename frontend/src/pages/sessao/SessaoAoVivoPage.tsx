@@ -39,6 +39,7 @@ export default function SessaoAoVivoPage() {
     errorCode,
     result,
     noSpeechNotice,
+    audioTooLargeNotice,
     hint,
     startRecording,
     stopRecording,
@@ -105,6 +106,11 @@ export default function SessaoAoVivoPage() {
               {studentTurn && !recording && "Sua vez de falar"}
               {recording && "Gravando..."}
             </span>
+            {studentTurn && !recording && audioTooLargeNotice && (
+              <span role="status" className="text-center text-scenario text-warn-strong">
+                Sua fala ficou longa demais. Fale uma parte de cada vez e tente de novo.
+              </span>
+            )}
             {studentTurn && !recording && noSpeechNotice && (
               <span role="status" className="text-center text-scenario text-warn-strong">
                 Não consegui ouvir você. Segure o botão e fale de novo.

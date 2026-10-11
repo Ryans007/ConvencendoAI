@@ -35,6 +35,7 @@ export interface LiveSessionState {
   errorCode: string | null;
   result: LiveSessionResult | null;
   noSpeechNotice: boolean;
+  audioTooLargeNotice: boolean;
   hint: SessionHint;
 }
 
@@ -43,7 +44,7 @@ export const NO_HINT: SessionHint = { status: "idle", text: null };
 type Listener = (state: LiveSessionState) => void;
 
 interface ControlMessage {
-  type: "session_ended" | "error" | "no_speech" | "evaluating" | "hint" | "hint_unavailable";
+  type: "session_ended" | "error" | "no_speech" | "audio_too_large" | "evaluating" | "hint" | "hint_unavailable";
   attempt_id?: number;
   final_score?: number;
   passed?: boolean;
@@ -78,6 +79,7 @@ export class LiveSession {
     errorCode: null,
     result: null,
     noSpeechNotice: false,
+    audioTooLargeNotice: false,
     hint: NO_HINT,
   };
 
@@ -123,6 +125,10 @@ export class LiveSession {
       const payload = JSON.parse(event.data) as ControlMessage;
       if (payload.type === "no_speech") {
         this.setState({ phase: "student-turn", noSpeechNotice: true });
+        return;
+      }
+      if (payload.type === "audio_too_large") {
+        this.setState({ phase: "student-turn", audioTooLargeNotice: true });
         return;
       }
       if (payload.type === "hint") {
@@ -255,7 +261,7 @@ export class LiveSession {
       this.setState({ noSpeechNotice: true });
       return;
     }
-    this.setState({ phase: "recording", noSpeechNotice: false });
+    this.setState({ phase: "recording", noSpeechNotice: false, audioTooLargeNotice: false });
   }
 
   stopRecording(): void {

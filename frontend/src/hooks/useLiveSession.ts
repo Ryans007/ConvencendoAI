@@ -16,6 +16,7 @@ const INITIAL_STATE: LiveSessionState = {
   errorCode: null,
   result: null,
   noSpeechNotice: false,
+  audioTooLargeNotice: false,
   hint: NO_HINT,
 };
 
