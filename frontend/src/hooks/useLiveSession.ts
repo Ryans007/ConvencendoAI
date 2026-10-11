@@ -14,6 +14,7 @@ const INITIAL_STATE: LiveSessionState = {
   turnCount: 0,
   errorMessage: null,
   errorCode: null,
+  errorRetryAfterSeconds: null,
   result: null,
   noSpeechNotice: false,
   audioTooLargeNotice: false,

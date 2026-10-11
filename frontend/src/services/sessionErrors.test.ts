@@ -17,6 +17,39 @@ describe("sessionErrorMessage", () => {
     );
   });
 
+  it("diz que o cenário ainda não está liberado", () => {
+    expect(sessionErrorMessage("scenario_locked")).toBe(
+      "Este cenário ainda não está liberado. Conclua o anterior na jornada para abrir este.",
+    );
+  });
+
+  it("diz em horas e minutos quando o nível volta, a partir do tempo do servidor", () => {
+    expect(sessionErrorMessage("level_in_cooldown", 10 * 3600 + 5 * 60)).toBe(
+      "Este nível volta a ficar disponível em 10 horas e 5 minutos.",
+    );
+  });
+
+  it("usa o singular e omite a unidade zerada no tempo do nível", () => {
+    expect(sessionErrorMessage("level_in_cooldown", 3600)).toBe(
+      "Este nível volta a ficar disponível em 1 hora.",
+    );
+    expect(sessionErrorMessage("level_in_cooldown", 60)).toBe(
+      "Este nível volta a ficar disponível em 1 minuto.",
+    );
+  });
+
+  it("arredonda para cima os segundos que sobram no tempo do nível", () => {
+    expect(sessionErrorMessage("level_in_cooldown", 61)).toBe(
+      "Este nível volta a ficar disponível em 2 minutos.",
+    );
+  });
+
+  it("sem o tempo, diz só que o nível ainda está em intervalo", () => {
+    expect(sessionErrorMessage("level_in_cooldown")).toBe(
+      "Este nível ainda está no intervalo entre tentativas. Volte um pouco mais tarde.",
+    );
+  });
+
   it("diz que já existe outra sessão aberta", () => {
     expect(sessionErrorMessage("session_already_open")).toBe(
       "Você já tem uma sessão aberta em outra aba ou dispositivo. Feche a outra e tente de novo.",

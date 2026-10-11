@@ -33,6 +33,7 @@ export interface LiveSessionState {
   turnCount: number;
   errorMessage: string | null;
   errorCode: string | null;
+  errorRetryAfterSeconds: number | null;
   result: LiveSessionResult | null;
   noSpeechNotice: boolean;
   audioTooLargeNotice: boolean;
@@ -50,6 +51,7 @@ interface ControlMessage {
   passed?: boolean;
   message?: string;
   code?: string;
+  retry_after_seconds?: number;
   text?: string;
 }
 
@@ -58,6 +60,7 @@ interface PendingOutcome {
   result?: LiveSessionResult;
   errorMessage?: string;
   errorCode?: string;
+  errorRetryAfterSeconds?: number;
 }
 
 /**
@@ -77,6 +80,7 @@ export class LiveSession {
     turnCount: 0,
     errorMessage: null,
     errorCode: null,
+    errorRetryAfterSeconds: null,
     result: null,
     noSpeechNotice: false,
     audioTooLargeNotice: false,
@@ -155,6 +159,7 @@ export class LiveSession {
           phase: "error",
           errorMessage: payload.message ?? "Falha na sessao.",
           errorCode: payload.code,
+          errorRetryAfterSeconds: payload.retry_after_seconds,
         };
       }
       this.settleIfIdle();
@@ -218,6 +223,7 @@ export class LiveSession {
           phase: "error",
           errorMessage: outcome.errorMessage ?? null,
           errorCode: outcome.errorCode ?? null,
+          errorRetryAfterSeconds: outcome.errorRetryAfterSeconds ?? null,
         });
       }
       return;

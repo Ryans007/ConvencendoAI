@@ -37,6 +37,7 @@ export default function SessaoAoVivoPage() {
     turnCount,
     errorMessage,
     errorCode,
+    errorRetryAfterSeconds,
     result,
     noSpeechNotice,
     audioTooLargeNotice,
@@ -161,7 +162,7 @@ export default function SessaoAoVivoPage() {
           <span className="text-scenario font-medium text-warn-strong">
             {phase === "connection-lost"
               ? "A conexão caiu antes da sessão terminar."
-              : sessionErrorMessage(errorCode)}
+              : sessionErrorMessage(errorCode, errorRetryAfterSeconds)}
           </span>
           <button
             type="button"
