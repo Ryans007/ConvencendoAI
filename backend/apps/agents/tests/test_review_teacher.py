@@ -86,6 +86,48 @@ def test_repeating_the_step_one_sentence_in_step_two_is_refused_without_the_mode
     assert llm.prompts == []
 
 
+def test_the_step_two_prompt_judges_the_rule_and_not_the_wording_of_the_example(fake_llm):
+    llm = fake_llm(ReviewVerdict(correct=True, feedback=HIT))
+
+    _judge(step=2, attempt=1, heard="Last week I finished the project")
+
+    prompt = llm.prompts[0]
+    assert "SAME RULE" in " ".join(prompt.split())
+    assert "do not require" in prompt
+    assert "same structure" not in prompt
+    assert "small change" not in prompt
+
+
+def test_a_correction_that_only_adds_punctuation_to_the_students_sentence_shows_the_correct_form(
+    fake_llm,
+):
+    fake_llm(
+        ReviewVerdict(
+            correct=False,
+            feedback=HINT,
+            correction="Last week, I finished the project.",
+        )
+    )
+
+    verdict = _judge(step=2, attempt=2, heard="last week I finished the project")
+
+    assert verdict.correction == CORRECT
+
+
+def test_a_correction_that_really_changes_the_students_sentence_is_kept(fake_llm):
+    fake_llm(
+        ReviewVerdict(
+            correct=False,
+            feedback=HINT,
+            correction="Last week I finished the project.",
+        )
+    )
+
+    verdict = _judge(step=2, attempt=2, heard="Last week I have finished the project")
+
+    assert verdict.correction == "Last week I finished the project."
+
+
 def test_feedback_in_english_is_asked_again(fake_llm):
     llm = fake_llm(_wrong("Look at the time word, it is finished and needs the past."), _wrong(HINT))
 
