@@ -322,6 +322,7 @@ class FakeMediaRecorder {
 }
 
 const HINT_REQUEST = JSON.stringify({ type: "hint_request" });
+const AUTH_MESSAGE = JSON.stringify({ type: "auth", token: "fake-token" });
 
 function studentTurn(hintsEnabled: boolean) {
   const session = new LiveSession("negociar-prazo", 3, hintsEnabled);
@@ -333,12 +334,45 @@ function studentTurn(hintsEnabled: boolean) {
   return { session, socket, states };
 }
 
+describe("LiveSession e a autenticacao da conexao", () => {
+  it("a URL da conexao nunca leva o token", () => {
+    new LiveSession("negociar-prazo", 3);
+    new LiveSession("negociar-prazo", 3, true);
+
+    for (const socket of FakeWebSocket.instances) {
+      expect(socket.url).not.toContain("token");
+      expect(socket.url).not.toContain("fake-token");
+    }
+  });
+
+  it("a primeira mensagem, ao abrir a conexao, e a autenticacao com o token atual", () => {
+    new LiveSession("negociar-prazo", 3);
+    const socket = FakeWebSocket.instances[0];
+
+    expect(socket.sent).toEqual([]);
+    socket.dispatch("open", {});
+
+    expect(socket.sent).toEqual([AUTH_MESSAGE]);
+  });
+
+  it("nenhum audio sai antes da autenticacao", () => {
+    const session = new LiveSession("negociar-prazo", 3);
+    const socket = FakeWebSocket.instances[0];
+
+    session.startRecording();
+    socket.dispatch("open", {});
+
+    expect(socket.sent[0]).toBe(AUTH_MESSAGE);
+    expect(socket.sent.filter((message) => message instanceof ArrayBuffer)).toEqual([]);
+  });
+});
+
 describe("LiveSession com dicas", () => {
   it("so liga as dicas na URL quando o aluno escolheu no briefing", () => {
     new LiveSession("negociar-prazo", 3, true);
     new LiveSession("negociar-prazo", 3);
 
-    expect(FakeWebSocket.instances[0].url).toContain("&hints=1");
+    expect(FakeWebSocket.instances[0].url).toContain("?hints=1");
     expect(FakeWebSocket.instances[1].url).not.toContain("hints");
   });
 
@@ -349,14 +383,14 @@ describe("LiveSession com dicas", () => {
     session.requestHint();
     session.requestHint();
 
-    expect(socket.sent).toEqual([HINT_REQUEST]);
+    expect(socket.sent).toEqual([AUTH_MESSAGE, HINT_REQUEST]);
     expect(states.at(-1)?.hint).toEqual({ status: "loading", text: null });
 
     socket.dispatch("message", { data: JSON.stringify({ type: "hint", text: "Sim, trabalhei em equipe." }) });
     session.requestHint();
 
     expect(states.at(-1)?.hint).toEqual({ status: "shown", text: "Sim, trabalhei em equipe." });
-    expect(socket.sent).toEqual([HINT_REQUEST]);
+    expect(socket.sent).toEqual([AUTH_MESSAGE, HINT_REQUEST]);
   });
 
   it("sem as dicas ligadas, pedir uma dica nao envia nada", () => {
@@ -364,7 +398,7 @@ describe("LiveSession com dicas", () => {
 
     session.requestHint();
 
-    expect(socket.sent).toEqual([]);
+    expect(socket.sent).toEqual([AUTH_MESSAGE]);
     expect(states.at(-1)?.hint.status).toBe("idle");
   });
 
@@ -375,7 +409,7 @@ describe("LiveSession com dicas", () => {
 
     session.requestHint();
 
-    expect(socket.sent).toEqual([]);
+    expect(socket.sent).toEqual([AUTH_MESSAGE]);
   });
 
   it("uma dica indisponivel e informada e pode ser pedida de novo", () => {
@@ -388,7 +422,7 @@ describe("LiveSession com dicas", () => {
 
     session.requestHint();
 
-    expect(socket.sent).toEqual([HINT_REQUEST, HINT_REQUEST]);
+    expect(socket.sent).toEqual([AUTH_MESSAGE, HINT_REQUEST, HINT_REQUEST]);
   });
 
   it("a dica some quando o aluno envia a resposta", async () => {
