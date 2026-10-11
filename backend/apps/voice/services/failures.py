@@ -15,6 +15,8 @@ class SessionErrorCode(StrEnum):
     PROVIDER_RATE_LIMITED = "provider_rate_limited"
     PROVIDER_UNAVAILABLE = "provider_unavailable"
     REPORT_FAILED = "report_failed"
+    SESSION_ALREADY_OPEN = "session_already_open"
+    DAILY_SESSION_LIMIT = "daily_session_limit"
     UNEXPECTED = "unexpected"
 
 
@@ -22,6 +24,8 @@ FAILURE_DESCRIPTIONS: dict[SessionErrorCode, str] = {
     SessionErrorCode.PROVIDER_RATE_LIMITED: "O provedor de IA atingiu o limite de uso.",
     SessionErrorCode.PROVIDER_UNAVAILABLE: "O provedor de IA está indisponível.",
     SessionErrorCode.REPORT_FAILED: "A sessão terminou, mas a avaliação falhou.",
+    SessionErrorCode.SESSION_ALREADY_OPEN: "O aluno já tem uma sessão de voz aberta.",
+    SessionErrorCode.DAILY_SESSION_LIMIT: "O aluno atingiu o limite de sessões de voz de hoje.",
     SessionErrorCode.UNEXPECTED: "Erro inesperado durante a sessão.",
 }
 

@@ -23,6 +23,12 @@ from apps.catalog.models import Level, Scenario
 from apps.progress.models import Attempt
 from apps.llm.services.factory import log_active_models
 from apps.usage.services.owner import usage_owner
+from apps.usage.services.session_limits import (
+    SessionRefused,
+    open_session_lease,
+    release_session_lease,
+    turn_audio_limit_bytes,
+)
 from apps.voice.services.failures import (
     FAILURE_DESCRIPTIONS,
     SessionErrorCode,
@@ -60,6 +66,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         de dica são atendidos, e a tentativa registra a escolha.
         """
         self.scene_over = False
+        self.lease = None
         self.hints_enabled = False
         self.current_hint: str | None = None
         await self.accept()
@@ -82,6 +89,13 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
 
         if user.must_change_password:
             await self._fail("Defina uma senha nova antes de iniciar uma sessão.")
+            return
+
+        try:
+            self.lease = await sync_to_async(open_session_lease)(user)
+        except SessionRefused as refusal:
+            code = SessionErrorCode(refusal.code)
+            await self._fail(FAILURE_DESCRIPTIONS[code], code=code)
             return
 
         try:
@@ -119,6 +133,17 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         with self._usage_owner():
             await self._advance(initial_state, resume=None, started_at=time.monotonic())
 
+    async def disconnect(self, code) -> None:
+        """Libera a sessão reservada do aluno, por qualquer motivo que a conexão tenha terminado.
+
+        Uma falha ao liberar vai para o log e não derruba o consumidor: a reserva vence sozinha
+        depois do tempo máximo, então o pior caso é o aluno esperar, e não a conexão quebrar.
+        """
+        try:
+            await sync_to_async(release_session_lease)(getattr(self, "lease", None))
+        except Exception as exc:
+            logger.error("falha ao liberar a sessão de voz reservada: %s", exc)
+
     def _usage_owner(self):
         """A marca de dono do uso de modelos: o aluno e a sessão desta conexão."""
         return usage_owner(user=self.user, attempt=self.attempt)
@@ -153,6 +178,10 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             return
         if self.scene_over:
             print("[session] audio recebido depois do fim da cena; ignorado")
+            return
+        if len(bytes_data) > await sync_to_async(turn_audio_limit_bytes)():
+            print("[session] audio maior que o limite do turno; recusado sem transcrever")
+            await self.send(text_data=json.dumps({"type": "audio_too_large"}))
             return
 
         started_at = time.monotonic()
