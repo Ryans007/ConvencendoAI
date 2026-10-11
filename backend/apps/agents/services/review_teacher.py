@@ -44,10 +44,13 @@ correct when the sentence fixes the mistake of the rule above, even with differe
 a different word order or small variations. Other mistakes that have nothing to do with
 the rule above must NOT make the sentence wrong."""
 
-_EXERCISE_NEW = """Step 2. The student had to say a NEW sentence, on any topic, that uses the
-same structure as the correct form above. Mark it correct only when the sentence applies
-the rule above correctly. A sentence that avoids the structure is not correct, and a copy
-of the correct form with at most a small change is not a new sentence."""
+_EXERCISE_NEW = """Step 2. The student had to say a NEW sentence, on any topic, that applies the SAME
+RULE as above. The rule is what matters, never the wording of the example: do not require
+the sentence to follow the example's word order, its template or its other words. Mark it
+correct when the sentence uses the point of the rule correctly (for a word-choice rule,
+the right word where it belongs; for a grammar rule, the grammar done correctly), even if
+the rest of the sentence is different, longer or on a different topic. Mark it wrong only
+when the sentence breaks the rule, or does not use the point of the rule at all."""
 
 _FEEDBACK_IF_CORRECT = (
     "- If the sentence is correct: confirm in one short sentence why it is right, naming "
@@ -145,6 +148,10 @@ def judge_review_answer(
     preencher, vira `ReviewJudgmentFailed`: julgar o aluno errado por causa disso seria
     injusto.
 
+    Quando o veredito é errado mas a correção do modelo é a própria frase do aluno, só com
+    pontuação ou maiúscula diferentes, a correção vira a forma correta do item: mostrar a
+    frase dele como "forma correta" não ensina nada e confunde.
+
     A nota em português que o cartão já mostrou entra no prompt. No primeiro erro de um item
     com nota, o feedback é uma frase fixa que remete a ela: medido com o modelo real, pedir à
     IA um "outro ângulo" não funcionava (repetia a nota em 6 de 6, e com uma instrução mais
@@ -155,6 +162,18 @@ def judge_review_answer(
             correct=False, feedback=_REPEATED_SENTENCE_FEEDBACK, correction=correct
         )
 
+    verdict = _judge(
+        rule=rule, said=said, correct=correct, note=note, step=step, attempt=attempt, heard=heard
+    )
+    if not verdict.correct and _normalize(verdict.correction) == _normalize(heard):
+        return verdict.model_copy(update={"correction": correct})
+    return verdict
+
+
+def _judge(
+    *, rule: str, said: str, correct: str, note: str, step: int, attempt: int, heard: str
+) -> ReviewVerdict:
+    """Pede o veredito ao modelo, com as proteções de idioma e de pista, e o devolve."""
     prompt = _build_prompt(
         rule=rule,
         said=said,
