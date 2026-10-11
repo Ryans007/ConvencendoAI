@@ -21,6 +21,7 @@ from apps.agents.services.transcript import AFTER_HINT_KEY
 from apps.agents.services.tutor import suggest_answer
 from apps.catalog.models import Level, Scenario
 from apps.progress.models import Attempt
+from apps.progress.services.session_access import AccessDenied, session_access_denial
 from apps.llm.services.factory import log_active_models
 from apps.usage.services.owner import usage_owner
 from apps.usage.services.session_limits import (
@@ -89,6 +90,16 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
 
         if user.must_change_password:
             await self._fail("Defina uma senha nova antes de iniciar uma sessão.")
+            return
+
+        denial = await sync_to_async(self._access_denial)(user, scenario_slug, level_order)
+        if denial is not None:
+            code = SessionErrorCode(denial.code)
+            await self._fail(
+                FAILURE_DESCRIPTIONS[code],
+                code=code,
+                retry_after_seconds=denial.retry_after_seconds,
+            )
             return
 
         try:
@@ -329,12 +340,24 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         )
         await self.close()
 
-    async def _fail(self, message: str, *, code: SessionErrorCode | None = None) -> None:
-        """Encerra a sessão com um aviso de erro; `code` só vai quando a falha é de uma etapa."""
+    async def _fail(
+        self,
+        message: str,
+        *,
+        code: SessionErrorCode | None = None,
+        retry_after_seconds: int | None = None,
+    ) -> None:
+        """Encerra a sessão com um aviso de erro; `code` só vai quando a falha é de uma etapa.
+
+        `retry_after_seconds` vai junto quando a recusa tem um tempo de espera, como o
+        intervalo entre tentativas de um nível.
+        """
         self.scene_over = True
         payload = {"type": "error", "message": message}
         if code is not None:
             payload["code"] = code.value
+        if retry_after_seconds is not None:
+            payload["retry_after_seconds"] = retry_after_seconds
         await self.send(text_data=json.dumps(payload))
         await self.close()
 
@@ -352,6 +375,20 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         code = code or classify_failure(exc)
         logger.error("Sessão encerrada por falha (%s)", code.value, exc_info=exc)
         await self._fail(FAILURE_DESCRIPTIONS[code], code=code)
+
+    @staticmethod
+    def _access_denial(user, scenario_slug: str, level_order: int) -> AccessDenied | None:
+        """Por que a jornada não libera esta sessão para o aluno, ou `None` se libera.
+
+        Cenário ou nível inexistente não é recusa da jornada: segue o caminho de sempre, que
+        responde que não existe.
+        """
+        try:
+            scenario = Scenario.objects.get(slug=scenario_slug)
+            level = Level.objects.get(order=level_order)
+        except ObjectDoesNotExist:
+            return None
+        return session_access_denial(user, scenario, level)
 
     @staticmethod
     def _authenticate(raw_token: str):

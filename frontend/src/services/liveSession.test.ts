@@ -259,6 +259,38 @@ describe("services/liveSession", () => {
     expect(states.at(-1)?.errorCode).toBe("provider_rate_limited");
   });
 
+  it("o tempo de espera de uma recusa chega ao estado junto com o codigo", () => {
+    const session = new LiveSession("negociar-prazo", 3);
+    const socket = FakeWebSocket.instances[0];
+    const states = collectStates(session);
+    socket.dispatch("open", {});
+
+    socket.dispatch("message", {
+      data: JSON.stringify({
+        type: "error",
+        message: "O nivel ainda esta no intervalo entre tentativas.",
+        code: "level_in_cooldown",
+        retry_after_seconds: 36300,
+      }),
+    });
+
+    expect(states.at(-1)?.errorCode).toBe("level_in_cooldown");
+    expect(states.at(-1)?.errorRetryAfterSeconds).toBe(36300);
+  });
+
+  it("uma recusa sem tempo de espera deixa o estado sem tempo", () => {
+    const session = new LiveSession("negociar-prazo", 3);
+    const socket = FakeWebSocket.instances[0];
+    const states = collectStates(session);
+    socket.dispatch("open", {});
+
+    socket.dispatch("message", {
+      data: JSON.stringify({ type: "error", message: "x", code: "scenario_locked" }),
+    });
+
+    expect(states.at(-1)?.errorRetryAfterSeconds).toBeNull();
+  });
+
   it("um erro sem codigo deixa o codigo nulo", () => {
     const session = new LiveSession("negociar-prazo", 3);
     const socket = FakeWebSocket.instances[0];

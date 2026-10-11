@@ -17,6 +17,8 @@ class SessionErrorCode(StrEnum):
     REPORT_FAILED = "report_failed"
     SESSION_ALREADY_OPEN = "session_already_open"
     DAILY_SESSION_LIMIT = "daily_session_limit"
+    SCENARIO_LOCKED = "scenario_locked"
+    LEVEL_IN_COOLDOWN = "level_in_cooldown"
     UNEXPECTED = "unexpected"
 
 
@@ -26,6 +28,8 @@ FAILURE_DESCRIPTIONS: dict[SessionErrorCode, str] = {
     SessionErrorCode.REPORT_FAILED: "A sessão terminou, mas a avaliação falhou.",
     SessionErrorCode.SESSION_ALREADY_OPEN: "O aluno já tem uma sessão de voz aberta.",
     SessionErrorCode.DAILY_SESSION_LIMIT: "O aluno atingiu o limite de sessões de voz de hoje.",
+    SessionErrorCode.SCENARIO_LOCKED: "O cenário ainda não está liberado para o aluno.",
+    SessionErrorCode.LEVEL_IN_COOLDOWN: "O nível ainda está no intervalo entre tentativas.",
     SessionErrorCode.UNEXPECTED: "Erro inesperado durante a sessão.",
 }
 
