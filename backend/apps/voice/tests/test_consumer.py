@@ -291,3 +291,14 @@ def test_live_session_refuses_a_token_of_a_user_that_no_longer_exists(django_use
 
     assert payload["type"] == "error"
     assert attempts == 0
+
+
+def test_live_session_refuses_a_user_that_still_has_to_change_the_password(django_user_model):
+    user = django_user_model.objects.create(username="aluno", must_change_password=True)
+    token = str(AccessToken.for_user(user))
+
+    payload, attempts = _connection_error(token)
+
+    assert payload["type"] == "error"
+    assert "senha" in payload["message"]
+    assert attempts == 0
