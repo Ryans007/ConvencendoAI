@@ -41,7 +41,7 @@ class _FakeGroqClient:
 
 def _configure_tts_model(monkeypatch, fake_client) -> None:
     provider = LLMProvider.objects.create(
-        code="groq", name="Groq", base_url="https://api.groq.com/openai/v1", api_key="gsk-test"
+        code="groq", name="Groq", base_url="https://api.groq.com/openai/v1", api_key_env="LLM_TEST_API_KEY"
     )
     model = LLMModel.objects.create(
         provider=provider,

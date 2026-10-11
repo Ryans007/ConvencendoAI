@@ -52,7 +52,7 @@ def item(student) -> ReviewItem:
 
 @pytest.fixture
 def llm():
-    provider = LLMProvider.objects.create(code="g", name="G", base_url="https://x/v1", api_key="k")
+    provider = LLMProvider.objects.create(code="g", name="G", base_url="https://x/v1", api_key_env="LLM_TEST_API_KEY")
     return LLMModel.objects.create(provider=provider, model_id="m", display_name="m")
 
 
