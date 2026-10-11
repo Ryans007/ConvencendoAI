@@ -21,6 +21,7 @@ from apps.review.services.item_progress import (
     revealed_correct,
 )
 from apps.review.services.schedule import due_date, is_mastered, next_box
+from apps.usage.services.owner import usage_owner
 from apps.voice.services.failures import SessionErrorCode, classify_failure
 from apps.voice.services.stt import transcribe
 
@@ -131,12 +132,13 @@ def answer_item(item: ReviewItem, audio: bytes, today: date) -> AnsweredItem:
     if progress.finished:
         raise ProgressChanged(item.pk)
 
-    heard = _transcribe(audio).strip()
-    if not heard:
-        return AnsweredItem(status=AnswerStatus.NOT_HEARD)
+    with usage_owner(user=item.user, review_item=item):
+        heard = _transcribe(audio).strip()
+        if not heard:
+            return AnsweredItem(status=AnswerStatus.NOT_HEARD)
 
-    occurrence = item.occurrences.first()
-    verdict = _judge(item, occurrence, progress, heard)
+        occurrence = item.occurrences.first()
+        verdict = _judge(item, occurrence, progress, heard)
 
     with transaction.atomic():
         locked = ReviewItem.objects.select_for_update().get(pk=item.pk)

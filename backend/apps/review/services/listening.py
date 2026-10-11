@@ -3,6 +3,7 @@ import logging
 from apps.llm.models import AgentModelConfig
 from apps.review.models import ReviewAnswer
 from apps.review.services.answering import AnswerFailed
+from apps.usage.services.owner import usage_owner
 from apps.voice.services.failures import classify_failure
 from apps.voice.services.tts import synthesize
 
@@ -20,7 +21,8 @@ def correct_form_audio(answer: ReviewAnswer) -> bytes:
     """
     voice = AgentModelConfig.get_solo().review_voice
     try:
-        return synthesize(answer.revealed_correct, voice)
+        with usage_owner(user=answer.item.user, review_item=answer.item):
+            return synthesize(answer.revealed_correct, voice)
     except Exception as exc:
         logger.exception("falha ao sintetizar a forma correta da revisão")
         raise AnswerFailed(classify_failure(exc)) from exc

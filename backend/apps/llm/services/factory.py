@@ -1,5 +1,5 @@
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ProviderStrategy, ToolStrategy
@@ -15,6 +15,7 @@ from apps.llm.constants import (
     StructuredOutputMethod,
 )
 from apps.llm.models import AgentModelConfig, LLMModel
+from apps.usage.services.recording import record_chat_call
 
 _TEMPERATURE_BY_PURPOSE = {
     ModelPurpose.PERSONA: 0.7,
@@ -69,6 +70,25 @@ def get_llm(purpose: str) -> ChatOpenAI:
     )
 
 
+@dataclass
+class _Tally:
+    """O consumo somado das respostas do modelo numa chamada do sistema."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    model_calls: int = 0
+    started_at: float = field(default_factory=time.monotonic)
+
+    def add(self, message: BaseMessage) -> None:
+        usage = getattr(message, "usage_metadata", None) or {}
+        self.input_tokens += int(usage.get("input_tokens", 0))
+        self.output_tokens += int(usage.get("output_tokens", 0))
+
+    @property
+    def duration_ms(self) -> int:
+        return int((time.monotonic() - self.started_at) * 1000)
+
+
 class _StructuredAgent:
     """Adapta um agente LangChain para a interface `.invoke(messages) -> schema` que o
     resto do código espera, sem expor o estado inteiro do agente (histórico, etc.).
@@ -94,10 +114,11 @@ class _StructuredAgent:
         {"tool_use_failed", "output_parse_failed", "json_validate_failed"}
     )
 
-    def __init__(self, agent, schema: type, purpose: str):
+    def __init__(self, agent, schema: type, purpose: str, model: LLMModel | None = None):
         self._agent = agent
         self._schema = schema
         self._purpose = purpose
+        self._model = model
 
     def _log_missing_response(self, new_messages: list[BaseMessage]) -> None:
         last = next(
@@ -114,8 +135,37 @@ class _StructuredAgent:
         )
 
     def invoke(self, messages: list[BaseMessage]):
-        started_at = time.monotonic()
-        model_calls = 0
+        """Chama o agente e devolve o schema preenchido, gravando o uso da chamada.
+
+        A linha de uso soma o consumo de todas as respostas do modelo, inclusive as da nova
+        tentativa, e é gravada também quando a chamada falha, antes de a exceção seguir.
+        """
+        tally = _Tally()
+        try:
+            structured = self._run(messages, tally)
+        except Exception as exc:
+            self._record(tally, failed=True, error_code=type(exc).__name__)
+            raise
+        self._record(tally)
+        elapsed = time.monotonic() - tally.started_at
+        print(f"[timing] {self._purpose}: {elapsed:.2f}s ({tally.model_calls} model call(s))")
+        return structured or self._schema()
+
+    def _record(self, tally: _Tally, *, failed: bool = False, error_code: str = "") -> None:
+        if self._model is None:
+            return
+        record_chat_call(
+            llm_model=self._model,
+            purpose=self._purpose,
+            input_tokens=tally.input_tokens,
+            output_tokens=tally.output_tokens,
+            model_calls=tally.model_calls,
+            duration_ms=tally.duration_ms,
+            failed=failed,
+            error_code=error_code,
+        )
+
+    def _run(self, messages: list[BaseMessage], tally: _Tally):
         structured = None
         for _ in range(self._ATTEMPTS):
             try:
@@ -123,7 +173,7 @@ class _StructuredAgent:
             except BadRequestError as exc:
                 if exc.code not in self._SCHEMA_REFUSAL_CODES:
                     raise
-                model_calls += 1
+                tally.model_calls += 1
                 body = exc.body if isinstance(exc.body, dict) else {}
                 generated = str(body.get("failed_generation", ""))[:200]
                 print(
@@ -132,14 +182,15 @@ class _StructuredAgent:
                 )
                 continue
             new_messages = result.get("messages", [])[len(messages) :]
-            model_calls += sum(1 for message in new_messages if isinstance(message, AIMessage))
+            for message in new_messages:
+                if isinstance(message, AIMessage):
+                    tally.model_calls += 1
+                    tally.add(message)
             structured = result.get("structured_response")
             if structured is not None:
                 break
             self._log_missing_response(new_messages)
-        elapsed = time.monotonic() - started_at
-        print(f"[timing] {self._purpose}: {elapsed:.2f}s ({model_calls} model call(s))")
-        return structured or self._schema()
+        return structured
 
 
 @dataclass(frozen=True)
@@ -153,6 +204,7 @@ class AudioClient:
 
     client: OpenAI
     model_id: str
+    model: LLMModel | None = None
 
 
 def _audio_model_for(purpose: str, config: AgentModelConfig) -> LLMModel:
@@ -182,7 +234,7 @@ def get_audio_client(purpose: str) -> AudioClient:
         timeout=PROVIDER_TIMEOUT_SECONDS,
         max_retries=PROVIDER_MAX_RETRIES,
     )
-    return AudioClient(client=client, model_id=model.model_id)
+    return AudioClient(client=client, model_id=model.model_id, model=model)
 
 
 def log_active_models() -> None:
@@ -224,4 +276,4 @@ def get_structured_llm(purpose: str, schema: type) -> _StructuredAgent:
     else:
         response_format = ToolStrategy(schema)
     agent = create_agent(model=llm, tools=[], response_format=response_format)
-    return _StructuredAgent(agent, schema, purpose)
+    return _StructuredAgent(agent, schema, purpose, model)

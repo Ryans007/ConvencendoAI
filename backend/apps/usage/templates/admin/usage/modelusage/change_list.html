@@ -1,0 +1,36 @@
+{% extends "admin/change_list.html" %}
+
+{% block result_list %}
+{% if usage_totals %}
+<div class="module" style="margin-bottom: 12px;">
+  <table style="width: 100%;">
+    <caption>Totais do recorte filtrado (custo estimado com o preço de cada chamada)</caption>
+    <thead>
+      <tr>
+        <th>Chamadas</th>
+        <th>Falhas</th>
+        <th>Tokens de entrada</th>
+        <th>Tokens de saída</th>
+        <th>Segundos de áudio cobrados</th>
+        <th>Caracteres</th>
+        <th>Custo estimado (US$)</th>
+        <th>Chamadas sem preço</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>{{ usage_totals.calls }}</td>
+        <td>{{ usage_totals.failures }}</td>
+        <td>{{ usage_totals.input_tokens }}</td>
+        <td>{{ usage_totals.output_tokens }}</td>
+        <td>{{ usage_totals.billed_audio_seconds|floatformat:1 }}</td>
+        <td>{{ usage_totals.characters }}</td>
+        <td>{{ usage_totals.cost_usd|floatformat:6 }}</td>
+        <td>{{ usage_totals.unpriced_calls }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{{ block.super }}
+{% endblock %}
