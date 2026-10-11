@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 
+import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { useJourney } from "../../hooks/useJourney";
 import { useReviewSummary } from "../../hooks/useReviewSummary";
 import { activeTrack } from "../../pages/jornada/activeTrack";
-import { AvatarPlaceholder } from "../AvatarPlaceholder";
 import { LogoutLink } from "../LogoutLink";
 import { Logo } from "../Logo";
 import { activeNavItem, type NavItemId } from "./activeNavItem";
@@ -70,7 +70,7 @@ const REVIEW_ICON = (
 );
 
 /**
- * Menu lateral das telas logadas: marca, itens de navegação, papel do aluno e saída da conta.
+ * Menu lateral das telas logadas: marca, itens de navegação, nome de usuário com o papel na trilha e saída da conta.
  *
  * No celular ele é uma gaveta: fechada, fica fora da tela e invisível, para o foco do teclado
  * não entrar num menu que ninguém vê. Em telas largas, `lg:` o devolve à coluna fixa.
@@ -80,6 +80,7 @@ export function SideNav({ id, open, onClose }: SideNavProps) {
   const current = activeNavItem(pathname);
   const { data: tracks } = useJourney();
   const { data: review } = useReviewSummary();
+  const { data: user } = useCurrentUser();
   const role = activeTrack(tracks)?.student_role;
 
   return (
@@ -120,10 +121,14 @@ export function SideNav({ id, open, onClose }: SideNavProps) {
       <div className="flex-1" />
 
       <div className="flex flex-col gap-3.5 border-t border-line px-2.5 pt-4">
-        {role && (
-          <div className="flex items-center gap-2.5">
-            <AvatarPlaceholder size={32} />
-            <span className="text-aux leading-snug text-ink/80">{role}</span>
+        {(user || role) && (
+          <div className="flex min-w-0 flex-col gap-0.5 px-0.5">
+            {user && (
+              <span className="truncate text-score font-semibold leading-snug text-ink">
+                {user.username}
+              </span>
+            )}
+            {role && <span className="text-[12px] leading-snug text-ink-muted">{role}</span>}
           </div>
         )}
         <LogoutLink className="w-fit text-aux font-medium text-ink-muted hover:text-ink" />
