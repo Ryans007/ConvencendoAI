@@ -1,6 +1,6 @@
 [project]
 name = "convencendoai-backend"
-version = "0.16.0"
+version = "0.16.1"
 description = "Backend do ConvencendoAI"
 requires-python = ">=3.12,<3.13"
 dependencies = [
