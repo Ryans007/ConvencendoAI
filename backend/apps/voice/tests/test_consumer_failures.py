@@ -6,7 +6,6 @@ import openai
 import pytest
 from asgiref.sync import async_to_sync, sync_to_async
 from channels.routing import URLRouter
-from channels.testing import WebsocketCommunicator
 from rest_framework_simplejwt.tokens import AccessToken
 
 from apps.agents.graph import personas as graph_personas
@@ -17,6 +16,7 @@ from apps.progress.models import Attempt
 from apps.progress.services import build_journey
 from apps.voice import consumers as voice_consumers
 from apps.voice.routing import websocket_urlpatterns
+from apps.voice.tests.session_client import SessionCommunicator
 
 pytestmark = pytest.mark.django_db
 
@@ -72,7 +72,7 @@ def _student(django_user_model):
 
 
 async def _connect(token):
-    communicator = WebsocketCommunicator(
+    communicator = SessionCommunicator(
         URLRouter(websocket_urlpatterns), f"/ws/voice/negociar-prazo/3/?token={token}"
     )
     connected, _ = await communicator.connect()

@@ -4,7 +4,6 @@ from datetime import timedelta
 import pytest
 from asgiref.sync import async_to_sync, sync_to_async
 from channels.routing import URLRouter
-from channels.testing import WebsocketCommunicator
 from django.utils import timezone
 from rest_framework_simplejwt.tokens import AccessToken
 
@@ -16,6 +15,7 @@ from apps.progress.models import Attempt
 from apps.usage.models import AccessLimits, LiveSessionLease
 from apps.voice import consumers as voice_consumers
 from apps.voice.routing import websocket_urlpatterns
+from apps.voice.tests.session_client import SessionCommunicator
 
 pytestmark = pytest.mark.django_db
 
@@ -43,7 +43,7 @@ def _refusal(token: str) -> tuple[dict, int]:
     """O aviso de erro da conexão recusada e quantas tentativas existem depois dela."""
 
     async def run() -> tuple[dict, int]:
-        communicator = WebsocketCommunicator(
+        communicator = SessionCommunicator(
             URLRouter(websocket_urlpatterns), _URL.format(token=token)
         )
         connected, _ = await communicator.connect()
@@ -97,7 +97,7 @@ def test_a_session_whose_lease_expired_does_not_block_a_new_one(django_user_mode
     LiveSessionLease.objects.create(user=user, expires_at=timezone.now() - timedelta(minutes=1))
 
     async def run() -> bytes:
-        communicator = WebsocketCommunicator(
+        communicator = SessionCommunicator(
             URLRouter(websocket_urlpatterns), _URL.format(token=_token(user))
         )
         connected, _ = await communicator.connect()
@@ -115,7 +115,7 @@ def test_leaving_the_session_frees_the_next_one(django_user_model, monkeypatch):
     _fake_session(monkeypatch)
 
     async def run() -> tuple[int, int]:
-        communicator = WebsocketCommunicator(
+        communicator = SessionCommunicator(
             URLRouter(websocket_urlpatterns), _URL.format(token=_token(user))
         )
         connected, _ = await communicator.connect()
@@ -154,7 +154,7 @@ def test_a_turn_audio_over_the_limit_is_refused_without_transcribing_or_ending(
     monkeypatch.setattr(voice_consumers, "transcribe", must_not_transcribe)
 
     async def run() -> dict:
-        communicator = WebsocketCommunicator(
+        communicator = SessionCommunicator(
             URLRouter(websocket_urlpatterns), _URL.format(token=_token(user))
         )
         connected, _ = await communicator.connect()
@@ -175,7 +175,7 @@ def test_a_turn_audio_within_the_limit_is_transcribed_as_before(django_user_mode
     monkeypatch.setattr(voice_consumers, "transcribe", lambda audio: "   ")
 
     async def run() -> dict:
-        communicator = WebsocketCommunicator(
+        communicator = SessionCommunicator(
             URLRouter(websocket_urlpatterns), _URL.format(token=_token(user))
         )
         connected, _ = await communicator.connect()

@@ -89,13 +89,14 @@ function playNextAudio() {
 connectButton.addEventListener("click", () => {
   const scenario = document.getElementById("scenario").value.trim();
   const level = document.getElementById("level").value.trim();
-  const url = `ws://${location.host}/ws/voice/${scenario}/${level}/?token=${encodeURIComponent(accessToken)}`;
+  const url = `ws://${location.host}/ws/voice/${scenario}/${level}/`;
 
   statusBox.textContent = `conectando em ${url}...`;
   socket = new WebSocket(url);
   socket.binaryType = "arraybuffer";
 
   socket.addEventListener("open", () => {
+    socket.send(JSON.stringify({ type: "auth", token: accessToken }));
     log("conectado");
     talkButton.disabled = false;
   });

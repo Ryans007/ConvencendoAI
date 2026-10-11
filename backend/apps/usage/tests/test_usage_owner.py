@@ -4,7 +4,6 @@ from types import SimpleNamespace
 import pytest
 from asgiref.sync import async_to_sync
 from channels.routing import URLRouter
-from channels.testing import WebsocketCommunicator
 from langchain_core.messages import AIMessage
 from rest_framework_simplejwt.tokens import AccessToken
 
@@ -28,6 +27,7 @@ from apps.usage.models import ModelUsage
 from apps.usage.services.recording import record_speech_call, record_transcription_call
 from apps.voice import consumers as voice_consumers
 from apps.voice.routing import websocket_urlpatterns
+from apps.voice.tests.session_client import SessionCommunicator
 from apps.voice.services import stt, tts
 
 pytestmark = pytest.mark.django_db
@@ -116,7 +116,7 @@ def test_every_model_call_of_a_live_session_is_attributed_to_the_student_and_the
     monkeypatch.setattr(evaluator, "get_structured_llm", lambda purpose, schema: judge)
 
     async def run() -> int:
-        communicator = WebsocketCommunicator(
+        communicator = SessionCommunicator(
             URLRouter(websocket_urlpatterns),
             f"/ws/voice/{scenario.slug}/{level.order}/?token={token}",
         )
