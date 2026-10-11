@@ -7,7 +7,13 @@ from langchain_core.messages import AIMessage, BaseMessage
 from langchain_openai import ChatOpenAI
 from openai import BadRequestError, OpenAI
 
-from apps.llm.constants import ModelCategory, ModelPurpose, StructuredOutputMethod
+from apps.llm.constants import (
+    PROVIDER_MAX_RETRIES,
+    PROVIDER_TIMEOUT_SECONDS,
+    ModelCategory,
+    ModelPurpose,
+    StructuredOutputMethod,
+)
 from apps.llm.models import AgentModelConfig, LLMModel
 
 _TEMPERATURE_BY_PURPOSE = {
@@ -41,6 +47,14 @@ def get_llm(purpose: str) -> ChatOpenAI:
 
     O cliente é sempre `ChatOpenAI`: nenhum provedor exige um SDK próprio, todos
     falam uma API compatível com a da OpenAI.
+
+    Toda chamada tem limite de tempo e de retentativas. Sem eles valem os padrões do SDK, 10
+    minutos por tentativa e 2 retentativas, e um provedor que aceita a conexão e não responde
+    segurava a requisição por até 30 minutos, deixando a tela do aluno parada sem nunca
+    falhar. Com 30 segundos e 1 retentativa, a chamada travada vira, em no máximo cerca de 1
+    minuto, o erro de tempo esgotado que a sessão e a revisão já tratam como "serviço de IA
+    indisponível". O SDK também retenta o tempo esgotado, por isso o pior caso é duas vezes o
+    limite. As chamadas normais levam de 2 a 7 segundos, e 24 com o modelo frio.
     """
     config = AgentModelConfig.get_solo()
     model = _model_for(purpose, config)
@@ -50,6 +64,8 @@ def get_llm(purpose: str) -> ChatOpenAI:
         api_key=provider.api_key,
         base_url=provider.base_url,
         temperature=_TEMPERATURE_BY_PURPOSE[purpose],
+        timeout=PROVIDER_TIMEOUT_SECONDS,
+        max_retries=PROVIDER_MAX_RETRIES,
     )
 
 
@@ -154,12 +170,18 @@ def get_audio_client(purpose: str) -> AudioClient:
     O cliente é o SDK da OpenAI, apontado para o mesmo `base_url` compatível com a OpenAI
     que o chat usa: assim um único `LLMProvider` (uma URL, uma chave) atende chat, STT e
     TTS. SDKs próprios de provedor montam o caminho da API por conta própria e esperam
-    outra URL base, o que obrigaria a cadastrar o mesmo provedor duas vezes.
+    outra URL base, o que obrigaria a cadastrar o mesmo provedor duas vezes. Tem os mesmos
+    limites de tempo e de retentativas do chat, pelo mesmo motivo.
     """
     config = AgentModelConfig.get_solo()
     model = _audio_model_for(purpose, config)
     provider = model.provider
-    client = OpenAI(api_key=provider.api_key, base_url=provider.base_url)
+    client = OpenAI(
+        api_key=provider.api_key,
+        base_url=provider.base_url,
+        timeout=PROVIDER_TIMEOUT_SECONDS,
+        max_retries=PROVIDER_MAX_RETRIES,
+    )
     return AudioClient(client=client, model_id=model.model_id)
 
 

@@ -1,3 +1,6 @@
+import socket
+import threading
+import time
 from dataclasses import dataclass
 
 import httpx
@@ -8,6 +11,7 @@ from apps.llm.constants import ModelCategory, ModelPurpose, StructuredOutputMeth
 from apps.llm.models import AgentModelConfig, LLMModel, LLMProvider
 from apps.llm.services import factory
 from apps.llm.services.factory import ModelNotConfigured, get_llm
+from apps.voice.services.failures import SessionErrorCode, classify_failure
 
 pytestmark = pytest.mark.django_db
 
@@ -346,3 +350,119 @@ def test_get_audio_client_raises_when_provider_inactive():
 
     with pytest.raises(ModelNotConfigured):
         factory.get_audio_client(ModelCategory.STT)
+
+
+class _SilentServer:
+    """Servidor local que aceita a conexão e nunca responde, como um provedor travado."""
+
+    def __init__(self):
+        self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._socket.bind(("127.0.0.1", 0))
+        self._socket.listen(8)
+        self._connections: list[socket.socket] = []
+        self._thread = threading.Thread(target=self._accept, daemon=True)
+        self._thread.start()
+
+    @property
+    def base_url(self) -> str:
+        return f"http://127.0.0.1:{self._socket.getsockname()[1]}/v1"
+
+    def _accept(self) -> None:
+        while True:
+            try:
+                connection, _ = self._socket.accept()
+            except OSError:
+                return
+            self._connections.append(connection)
+
+    def close(self) -> None:
+        self._socket.close()
+        for connection in self._connections:
+            connection.close()
+
+
+@pytest.fixture
+def silent_provider(monkeypatch):
+    server = _SilentServer()
+    monkeypatch.setattr(factory, "PROVIDER_TIMEOUT_SECONDS", 0.4)
+    monkeypatch.setattr(factory, "PROVIDER_MAX_RETRIES", 0)
+    yield server
+    server.close()
+
+
+def _configure_silent(server: _SilentServer) -> LLMProvider:
+    provider = LLMProvider.objects.create(
+        code="silent", name="Silent", base_url=server.base_url, api_key="k", is_active=True
+    )
+    config = AgentModelConfig.get_solo()
+    config.persona_model = LLMModel.objects.create(
+        provider=provider, model_id="m", display_name="m", is_active=True
+    )
+    config.stt_model = LLMModel.objects.create(
+        provider=provider,
+        category=ModelCategory.STT,
+        model_id="stt",
+        display_name="stt",
+        is_active=True,
+    )
+    config.save()
+    return provider
+
+
+def test_a_chat_call_to_a_provider_that_never_answers_times_out(silent_provider):
+    _configure_silent(silent_provider)
+    started = time.monotonic()
+
+    with pytest.raises(openai.APITimeoutError) as failure:
+        get_llm(ModelPurpose.PERSONA).invoke("oi")
+
+    assert time.monotonic() - started < 5
+    assert classify_failure(failure.value) is SessionErrorCode.PROVIDER_UNAVAILABLE
+
+
+def test_an_audio_call_to_a_provider_that_never_answers_times_out(silent_provider):
+    _configure_silent(silent_provider)
+    audio = factory.get_audio_client(ModelCategory.STT)
+    started = time.monotonic()
+
+    with pytest.raises(openai.APITimeoutError) as failure:
+        audio.client.audio.transcriptions.create(model=audio.model_id, file=("a.webm", b"x"))
+
+    assert time.monotonic() - started < 5
+    assert classify_failure(failure.value) is SessionErrorCode.PROVIDER_UNAVAILABLE
+
+
+def test_the_default_limits_bound_a_stuck_call_to_about_a_minute():
+    assert factory.PROVIDER_TIMEOUT_SECONDS == 30
+    assert factory.PROVIDER_MAX_RETRIES == 1
+    worst_case = factory.PROVIDER_TIMEOUT_SECONDS * (factory.PROVIDER_MAX_RETRIES + 1)
+    assert worst_case <= 60
+
+
+def test_the_clients_are_built_with_the_limits():
+    model = _make_model()
+    audio = _make_audio_model(category=ModelCategory.STT, model_id="whisper")
+    config = AgentModelConfig.get_solo()
+    config.persona_model = model
+    config.stt_model = audio
+    config.save()
+
+    chat = get_llm(ModelPurpose.PERSONA)
+    stt = factory.get_audio_client(ModelCategory.STT)
+
+    assert chat.request_timeout == factory.PROVIDER_TIMEOUT_SECONDS
+    assert chat.max_retries == factory.PROVIDER_MAX_RETRIES
+    assert stt.client.timeout == factory.PROVIDER_TIMEOUT_SECONDS
+    assert stt.client.max_retries == factory.PROVIDER_MAX_RETRIES
+
+
+def test_a_stuck_call_is_retried_once_before_giving_up(silent_provider, monkeypatch):
+    monkeypatch.setattr(factory, "PROVIDER_MAX_RETRIES", 1)
+    _configure_silent(silent_provider)
+    started = time.monotonic()
+
+    with pytest.raises(openai.APITimeoutError):
+        get_llm(ModelPurpose.PERSONA).invoke("oi")
+
+    elapsed = time.monotonic() - started
+    assert 0.8 <= elapsed < 5
