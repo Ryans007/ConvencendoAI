@@ -26,6 +26,7 @@ from apps.review.services import listening
 from apps.usage.constants import UsagePurpose
 from apps.usage.models import ModelUsage
 from apps.usage.services.recording import record_speech_call, record_transcription_call
+from apps.voice import consumers as voice_consumers
 from apps.voice.routing import websocket_urlpatterns
 from apps.voice.services import stt, tts
 
@@ -86,6 +87,7 @@ def test_every_model_call_of_a_live_session_is_attributed_to_the_student_and_the
     )
     chat = LLMModel.objects.create(provider=provider, model_id="chat", display_name="c")
     _fake_audio(monkeypatch, provider)
+    monkeypatch.setattr(voice_consumers, "session_access_denial", lambda user, scenario, level: None)
     scenario = Scenario.objects.get(slug="negociar-prazo")
     level = Level.objects.get(order=3)
 
