@@ -59,6 +59,16 @@ hand the floor to the other character.
 """
 
 
+TRANSCRIPTION_NOTICE = """
+HOW YOU RECEIVE WHAT THE STUDENT SAYS
+The student speaks, and what you read is an automatic voice transcription, so a word may
+have been swapped for another that sounds alike (for example "I won" for "I want"). When a
+word makes no sense in the situation, read the message as what the student most likely
+meant, and answer that. Never mention, correct or comment on the transcription, and never
+turn this example into a topic of conversation.
+"""
+
+
 def build_system_prompt(
     content: ScenarioContent,
     role: Role,
@@ -74,6 +84,10 @@ def build_system_prompt(
     sobre a resistência da persona: medido em teste real, a resistência cadastrada no
     cenário ("pede exemplos concretos") vencia a regra do nível quando as duas apareciam
     com o mesmo peso no prompt.
+
+    O aviso de transcrição (`TRANSCRIPTION_NOTICE`) entra logo antes de `CRITICAL RULES`,
+    para as regras continuarem sendo a última coisa lida. Sem ele, medido com o modelo real,
+    4 de 8 falas tratavam "I won a wood floor" como uma vitória; com ele, 0 de 8.
 
     Com `taking_over`, a persona está assumindo a conversa pelo equilíbrio de turno: a
     última fala do aluno respondeu a outro personagem, e é ela quem faz a transição.
@@ -200,7 +214,7 @@ If they ask how to say something, ask you to repeat, to speak more slowly, or
 say they did not understand: help them immediately and warmly, in character.
 Give them the word or phrase, or repeat using simpler words. Then continue the
 scene. This is never a reason to be impatient.
-
+{TRANSCRIPTION_NOTICE}
 CRITICAL RULES
 - QUESTION FORMAT (this overrides how you resist and what you ask for):
   {content.questions} This limit is per TURN, not per line: either you ask
@@ -266,7 +280,7 @@ def fallback_line(role: Role, history: list) -> str:
 
 _CLOSING_PROMPT = """You are {name}, {scene_function}, talking to a student who is
 practising English. The conversation has just run out of time.
-
+{notice}
 Last exchanges:
 {excerpt}
 
@@ -281,11 +295,13 @@ def generate_closing_line(content: ScenarioContent, role: Role, history: list) -
     """Gera a última fala da cena com um prompt curto e sem histórico longo.
 
     Chamada própria porque, no prompt completo, o padrão de perguntar dos
-    turnos anteriores prevalece sobre a instrução de encerrar.
+    turnos anteriores prevalece sobre a instrução de encerrar. Pela mesma razão ela não
+    herda o aviso de transcrição do prompt principal, então o recebe aqui também.
     """
     prompt = _CLOSING_PROMPT.format(
         name=role.name,
         scene_function=role.scene_function,
+        notice=TRANSCRIPTION_NOTICE,
         excerpt=transcript_text(history, last=3),
     )
     llm = get_structured_llm(ModelPurpose.PERSONA, ClosingLine)
@@ -301,7 +317,7 @@ def generate_closing_line(content: ScenarioContent, role: Role, history: list) -
 
 _CLOSING_HINT_PROMPT = """You are {name}, {scene_function}, talking to a student who is
 practising English. Keep your English simple.
-{facts}
+{notice}{facts}
 Last exchanges:
 {excerpt}
 
@@ -329,7 +345,8 @@ def generate_closing_hint_line(content: ScenarioContent, role: Role, history: li
     Por ser um prompt à parte, ele não herda a regra de responder ao aluno nem os fatos da
     cena do papel: sem eles, uma pergunta do aluno que cai justamente nesta rodada seria
     ignorada e a persona repetiria o convite. Por isso o prompt pede uma frase curta que
-    responda ou reaja antes do convite, e traz os fatos do papel quando há.
+    responda ou reaja antes do convite, e traz os fatos do papel quando há e o aviso de
+    transcrição.
     """
     extra_instruction = role.extra_instruction.strip()
     facts = (
@@ -338,6 +355,7 @@ def generate_closing_hint_line(content: ScenarioContent, role: Role, history: li
     prompt = _CLOSING_HINT_PROMPT.format(
         name=role.name,
         scene_function=role.scene_function,
+        notice=TRANSCRIPTION_NOTICE,
         facts=facts,
         excerpt=transcript_text(history, last=3),
         closing_instruction=content.closing_hint,
