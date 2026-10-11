@@ -8,6 +8,7 @@ export type RoundPhase =
   | "analyzing"
   | "result"
   | "not_heard"
+  | "too_many"
   | "unavailable"
   | "mic_denied"
   | "confirm_discard"
@@ -42,6 +43,7 @@ export type RoundEvent =
   | { type: "submitted" }
   | { type: "answered"; response: AnswerResponse }
   | { type: "failed" }
+  | { type: "tooMany" }
   | { type: "retry" }
   | { type: "continue" }
   | { type: "askDiscard" }
@@ -60,8 +62,15 @@ export const INITIAL_ROUND_STATE: RoundState = {
   finished: [],
 };
 
-const CAN_RECORD: RoundPhase[] = ["idle", "not_heard", "mic_denied"];
-const CAN_DISCARD: RoundPhase[] = ["idle", "not_heard", "mic_denied", "unavailable", "result"];
+const CAN_RECORD: RoundPhase[] = ["idle", "not_heard", "too_many", "mic_denied"];
+const CAN_DISCARD: RoundPhase[] = [
+  "idle",
+  "not_heard",
+  "too_many",
+  "mic_denied",
+  "unavailable",
+  "result",
+];
 
 function startItem(state: RoundState, index: number): RoundState {
   const item = state.items[index];
@@ -141,6 +150,9 @@ export function roundReducer(state: RoundState, event: RoundEvent): RoundState {
 
     case "failed":
       return state.phase === "analyzing" ? { ...state, phase: "unavailable" } : state;
+
+    case "tooMany":
+      return state.phase === "analyzing" ? { ...state, phase: "too_many" } : state;
 
     case "retry":
       return state.phase === "unavailable" ? { ...state, phase: "analyzing" } : state;

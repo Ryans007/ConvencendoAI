@@ -85,6 +85,8 @@ DATABASES = {
 }
 
 AUTH_USER_MODEL = "users.User"
+AUTHENTICATION_BACKENDS = ["apps.users.backends.LockoutModelBackend"]
+TRUSTED_PROXY_COUNT = env.int("TRUSTED_PROXY_COUNT", default=0)
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},

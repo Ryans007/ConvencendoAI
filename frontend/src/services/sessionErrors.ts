@@ -5,6 +5,10 @@ const SESSION_ERROR_MESSAGES: Record<string, string> = {
     "O serviço de IA atingiu o limite de uso por agora. Tente de novo em alguns minutos.",
   provider_unavailable:
     "O serviço de IA está indisponível no momento. Tente de novo em alguns minutos.",
+  session_already_open:
+    "Você já tem uma sessão aberta em outra aba ou dispositivo. Feche a outra e tente de novo.",
+  daily_session_limit:
+    "Você atingiu o limite de sessões de hoje. Volte amanhã para continuar praticando.",
   report_failed:
     "Você concluiu a sessão, mas não foi possível gerar o relatório agora. Tente de novo mais tarde.",
 };

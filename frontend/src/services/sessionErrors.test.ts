@@ -17,6 +17,18 @@ describe("sessionErrorMessage", () => {
     );
   });
 
+  it("diz que já existe outra sessão aberta", () => {
+    expect(sessionErrorMessage("session_already_open")).toBe(
+      "Você já tem uma sessão aberta em outra aba ou dispositivo. Feche a outra e tente de novo.",
+    );
+  });
+
+  it("diz que o limite de sessões do dia foi atingido", () => {
+    expect(sessionErrorMessage("daily_session_limit")).toBe(
+      "Você atingiu o limite de sessões de hoje. Volte amanhã para continuar praticando.",
+    );
+  });
+
   it("diz que a sessão foi concluída mas o relatório não saiu", () => {
     expect(sessionErrorMessage("report_failed")).toBe(
       "Você concluiu a sessão, mas não foi possível gerar o relatório agora. Tente de novo mais tarde.",

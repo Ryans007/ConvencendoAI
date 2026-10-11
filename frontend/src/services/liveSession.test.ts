@@ -153,6 +153,22 @@ describe("services/liveSession", () => {
     expect(states.at(-1)?.result).toEqual({ attemptId: 42, finalScore: 90, passed: true });
   });
 
+  it("fala longa demais, devolve a vez ao aluno com aviso e sem encerrar a sessão", () => {
+    const session = new LiveSession("negociar-prazo", 3);
+    const socket = FakeWebSocket.instances[0];
+    const states = collectStates(session);
+    socket.dispatch("open", {});
+    socket.dispatch("message", { data: new ArrayBuffer(4) });
+    FakeAudio.instances[0].triggerEnded();
+
+    socket.dispatch("message", { data: JSON.stringify({ type: "audio_too_large" }) });
+
+    expect(states.at(-1)?.phase).toBe("student-turn");
+    expect(states.at(-1)?.audioTooLargeNotice).toBe(true);
+    expect(states.at(-1)?.noSpeechNotice).toBe(false);
+    expect(states.at(-1)?.turnCount).toBe(1);
+  });
+
   it("sem fala detectada, devolve a vez ao aluno com aviso e sem contar turno", () => {
     const session = new LiveSession("negociar-prazo", 3);
     const socket = FakeWebSocket.instances[0];

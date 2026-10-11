@@ -213,7 +213,7 @@ wheels = [
 
 [[package]]
 name = "convencendoai-backend"
-version = "0.20.1"
+version = "0.21.0"
 source = { virtual = "." }
 dependencies = [
     { name = "channels" },

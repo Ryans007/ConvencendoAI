@@ -14,10 +14,11 @@ interface RoundScreenProps {
   onReload: () => void;
 }
 
-const TALK_PHASES: RoundPhase[] = ["idle", "recording", "not_heard", "mic_denied"];
+const TALK_PHASES: RoundPhase[] = ["idle", "recording", "not_heard", "too_many", "mic_denied"];
 const DISCARDABLE_PHASES: RoundPhase[] = [
   "idle",
   "not_heard",
+  "too_many",
   "mic_denied",
   "unavailable",
   "result",
@@ -28,6 +29,7 @@ const ANNOUNCEMENTS: Partial<Record<RoundPhase, string>> = {
   recording: "Gravando. Solte para enviar.",
   analyzing: "Analisando sua resposta...",
   not_heard: "Não consegui ouvir você. Segure o botão e fale de novo.",
+  too_many: "Muitas respostas em pouco tempo. Espere um minuto e tente de novo.",
   unavailable: "O serviço de IA está indisponível no momento. Tente de novo em alguns minutos.",
   summary: "Rodada concluída",
 };
@@ -77,7 +79,7 @@ export function RoundScreen({ items, totalDue, onReload }: RoundScreenProps) {
   }
 
   const bodyPhase = state.phase === "confirm_discard" ? state.phaseBeforeDiscard : state.phase;
-  const secondTry = state.attempt === 2 && (bodyPhase === "idle" || bodyPhase === "not_heard");
+  const secondTry = state.attempt === 2 && (bodyPhase === "idle" || bodyPhase === "not_heard" || bodyPhase === "too_many");
   const announcement =
     state.phase === "result" && state.last
       ? state.last.feedback
@@ -121,6 +123,14 @@ export function RoundScreen({ items, totalDue, onReload }: RoundScreenProps) {
             {bodyPhase === "not_heard" && (
               <div className="self-stretch">
                 <Notice tone="info">Não consegui ouvir você. Segure o botão e fale de novo.</Notice>
+              </div>
+            )}
+            {bodyPhase === "too_many" && (
+              <div className="self-stretch">
+                <Notice tone="warn">
+                  Muitas respostas em pouco tempo. Espere um minuto e tente de novo; sua tentativa
+                  não foi gasta.
+                </Notice>
               </div>
             )}
             {bodyPhase === "mic_denied" && (

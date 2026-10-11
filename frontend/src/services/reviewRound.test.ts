@@ -97,6 +97,25 @@ describe("gravar e responder", () => {
     expect(state).toMatchObject({ phase: "not_heard", step: 1, attempt: 1 });
   });
 
+  it("uma resposta recusada pelo limite por minuto mantém a tentativa e deixa gravar de novo", () => {
+    const refused = run([
+      loaded(item(1)),
+      { type: "recordingStarted" },
+      { type: "submitted" },
+      { type: "tooMany" },
+    ]);
+    expect(refused).toMatchObject({ phase: "too_many", step: 1, attempt: 1 });
+
+    const again = roundReducer(refused, { type: "recordingStarted" });
+    expect(again.phase).toBe("recording");
+  });
+
+  it("o limite por minuto fora da análise não muda nada", () => {
+    const state = run([loaded(item(1)), { type: "tooMany" }]);
+
+    expect(state.phase).toBe("idle");
+  });
+
   it("depois de 'não consegui ouvir', dá para gravar de novo", () => {
     const state = run([
       loaded(item(1)),
