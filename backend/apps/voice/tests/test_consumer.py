@@ -249,3 +249,45 @@ def test_live_session_fails_explicitly_for_invalid_token():
         await communicator.disconnect()
 
     async_to_sync(run)()
+
+
+def _connection_error(token: str) -> tuple[dict, int]:
+    """O aviso de erro da conexão e quantas tentativas existem depois dela."""
+
+    async def run() -> tuple[dict, int]:
+        application = URLRouter(websocket_urlpatterns)
+        communicator = WebsocketCommunicator(
+            application, f"/ws/voice/negociar-prazo/3/?token={token}"
+        )
+        connected, _ = await communicator.connect()
+        assert connected
+
+        payload = json.loads(await communicator.receive_from())
+        attempts = await sync_to_async(Attempt.objects.count)()
+        await communicator.disconnect()
+        return payload, attempts
+
+    return async_to_sync(run)()
+
+
+def test_live_session_refuses_a_user_deactivated_after_the_token_was_issued(django_user_model):
+    user = django_user_model.objects.create(username="aluno")
+    token = str(AccessToken.for_user(user))
+    user.is_active = False
+    user.save(update_fields=["is_active"])
+
+    payload, attempts = _connection_error(token)
+
+    assert payload["type"] == "error"
+    assert attempts == 0
+
+
+def test_live_session_refuses_a_token_of_a_user_that_no_longer_exists(django_user_model):
+    user = django_user_model.objects.create(username="aluno")
+    token = str(AccessToken.for_user(user))
+    user.delete()
+
+    payload, attempts = _connection_error(token)
+
+    assert payload["type"] == "error"
+    assert attempts == 0
