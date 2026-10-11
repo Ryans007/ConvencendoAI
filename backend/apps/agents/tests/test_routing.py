@@ -218,3 +218,41 @@ def test_student_just_answering_in_a_long_conversation_addresses_nobody(monkeypa
     )
 
     assert result == {}
+
+
+def test_the_student_talking_to_the_current_character_is_logged_with_the_name(
+    monkeypatch, capsys
+):
+    content = _content()
+    current = content.role_keys()[0]
+    _router_says(monkeypatch, current)
+
+    make_routing_node(content, _FixedDraw(3))(_state(current, _history(current, 5)))
+
+    logged = capsys.readouterr().out
+    assert f"aluno falou com {content.role(current).name}" in logged
+    assert "equilibrio de turno nao aplicado" in logged
+
+
+def test_the_student_turning_to_the_other_character_is_still_logged(monkeypatch, capsys):
+    content = _content()
+    current, other = content.role_keys()
+    _router_says(monkeypatch, other)
+
+    make_routing_node(content, _FixedDraw(3))(_state(current))
+
+    logged = capsys.readouterr().out
+    assert f"aluno direcionou para {other} (era {current})" in logged
+    assert "aluno falou com" not in logged
+
+
+def test_nothing_is_logged_for_the_student_when_nobody_is_addressed(monkeypatch, capsys):
+    content = _content()
+    current = content.role_keys()[0]
+    _router_says(monkeypatch, NO_ADDRESSEE)
+
+    make_routing_node(content, _FixedDraw(3))(_state(current))
+
+    logged = capsys.readouterr().out
+    assert "aluno falou com" not in logged
+    assert "aluno direcionou" not in logged

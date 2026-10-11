@@ -32,7 +32,10 @@ def make_routing_node(content: ScenarioContent, rng: random.Random | None = None
 
     Sempre que reconhece um destinatário, liga `addressed_by_student`, inclusive quando
     ele já era a persona da vez: a persona chamada responde ao que o aluno disse e fecha
-    a rodada, e sem essa marca ela não teria como saber que o aluno falou com ela.
+    a rodada, e sem essa marca ela não teria como saber que o aluno falou com ela. Esse caso
+    não muda o estado da conversa, então ele é registrado no log: sem o registro, um
+    equilíbrio de turnos que demora mais que o esperado não deixa saber se foi sorteio ou se
+    a fala foi lida como dirigida à persona da vez.
 
     Sem modelo de roteamento configurado, ou se a chamada falhar por qualquer motivo, o
     nó trata como "sem destinatário" — o equilíbrio continua valendo, e a execução nunca
@@ -72,6 +75,10 @@ def make_routing_node(content: ScenarioContent, rng: random.Random | None = None
                     "taking_over": False,
                     "addressed_by_student": True,
                 }
+            print(
+                f"[routing] aluno falou com {content.role(current).name}; "
+                "equilibrio de turno nao aplicado"
+            )
             return {"addressed_by_student": True}
 
         history = list(state["messages"])

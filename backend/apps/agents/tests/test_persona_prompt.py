@@ -4,7 +4,12 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
 from apps.agents.services import personas as personas_service
-from apps.agents.services.personas import build_system_prompt, generate_closing_hint_line
+from apps.agents.services.personas import (
+    TRANSCRIPTION_NOTICE,
+    build_system_prompt,
+    generate_closing_hint_line,
+    generate_closing_line,
+)
 from apps.agents.services.scenario_content import load_scenario_content
 from apps.agents.services.schemas import ClosingLine
 from apps.catalog.models import Level, Scenario
@@ -173,3 +178,40 @@ def test_closing_hint_turn_without_facts_has_no_facts_block(monkeypatch):
     prompt = _closing_hint_prompt(monkeypatch, "")
 
     assert "WHAT YOU KNOW ABOUT THIS SCENE" not in prompt
+
+
+def _closing_line_prompt(monkeypatch) -> str:
+    content = _content()
+    prompts = []
+    monkeypatch.setattr(
+        personas_service, "get_structured_llm", lambda purpose, schema: _CapturingLLM(prompts)
+    )
+    history = [
+        AIMessage(content="[Rachel] Which floor would you like?"),
+        HumanMessage(content="I won a wood floor."),
+    ]
+
+    generate_closing_line(content, content.roles[0], history)
+
+    return prompts[0]
+
+
+def test_the_main_prompt_carries_the_transcription_notice_before_the_critical_rules():
+    prompt = _prompt_with_extra_instruction("")
+
+    assert TRANSCRIPTION_NOTICE in prompt
+    assert prompt.index(TRANSCRIPTION_NOTICE) < prompt.index("\nCRITICAL RULES\n")
+
+
+def test_the_time_limit_closing_prompt_carries_the_transcription_notice(monkeypatch):
+    assert TRANSCRIPTION_NOTICE in _closing_line_prompt(monkeypatch)
+
+
+def test_the_closing_hint_prompt_carries_the_transcription_notice(monkeypatch):
+    assert TRANSCRIPTION_NOTICE in _closing_hint_prompt(monkeypatch, "")
+
+
+def test_the_notice_says_what_the_transcription_is_and_forbids_commenting_on_it():
+    assert "automatic voice transcription" in TRANSCRIPTION_NOTICE
+    assert '"I won" for "I want"' in TRANSCRIPTION_NOTICE
+    assert "Never mention, correct or comment on the transcription" in TRANSCRIPTION_NOTICE
