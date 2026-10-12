@@ -37,6 +37,9 @@ class FakeWebSocket {
   }
 
   dispatch(type: string, event: unknown): void {
+    if (type === "open") {
+      this.readyState = FakeWebSocket.OPEN;
+    }
     for (const listener of this.listeners[type] ?? []) {
       listener(event);
     }
@@ -46,31 +49,44 @@ class FakeWebSocket {
 class FakeAudio {
   static instances: FakeAudio[] = [];
   static nextPlayRejects = false;
-  readonly src: string;
-  private endedListener: (() => void) | null = null;
+  src = "";
+  error: Error | null = null;
+  onended: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  readonly played: string[] = [];
 
-  constructor(src: string) {
-    this.src = src;
+  constructor() {
     FakeAudio.instances.push(this);
   }
 
-  addEventListener(type: string, listener: () => void): void {
-    if (type === "ended") {
-      this.endedListener = listener;
-    }
-  }
-
   play(): Promise<void> {
+    this.played.push(this.src);
     if (FakeAudio.nextPlayRejects) {
       FakeAudio.nextPlayRejects = false;
-      return Promise.reject(new Error("NotAllowedError"));
+      return Promise.reject(new DOMException("recusado", "NotAllowedError"));
     }
     return Promise.resolve();
   }
 
   triggerEnded(): void {
-    this.endedListener?.();
+    this.onended?.();
   }
+}
+
+/** Termina o áudio que está tocando e deixa a sessão seguir para o próximo da fila. */
+async function endAudio(): Promise<void> {
+  FakeAudio.instances[0].triggerEnded();
+  await Promise.resolve();
+}
+
+/** O player da sessão: um só elemento de áudio por sessão. */
+function player(): FakeAudio {
+  return FakeAudio.instances[0];
+}
+
+/** As falas das personas que o player já começou a tocar, sem contar o silêncio de liberação. */
+function spokenLines(): string[] {
+  return player().played.filter((src) => !src.startsWith("blob:silence"));
 }
 
 function collectStates(session: LiveSession): LiveSessionState[] {
@@ -86,7 +102,15 @@ beforeEach(() => {
   vi.stubGlobal("WebSocket", FakeWebSocket);
   vi.stubGlobal("Audio", FakeAudio);
   vi.stubGlobal("location", { protocol: "https:", host: "app.exemplo.com.br" });
-  vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: () => "blob:fake" }));
+  let blobCount = 0;
+  vi.stubGlobal(
+    "URL",
+    Object.assign(URL, {
+      createObjectURL: (blob: Blob) =>
+        blob.size === 1644 ? "blob:silence" : `blob:fake-${(blobCount += 1)}`,
+      revokeObjectURL: () => undefined,
+    }),
+  );
 });
 
 afterEach(() => {
@@ -105,7 +129,7 @@ describe("services/liveSession", () => {
     );
   });
 
-  it("toca o audio das personas em sequencia, nunca dois ao mesmo tempo", () => {
+  it("toca o audio das personas em sequencia, nunca dois ao mesmo tempo", async () => {
     const session = new LiveSession("negociar-prazo", 3);
     const socket = FakeWebSocket.instances[0];
     socket.dispatch("open", {});
@@ -114,12 +138,14 @@ describe("services/liveSession", () => {
     socket.dispatch("message", { data: new ArrayBuffer(4) });
 
     expect(FakeAudio.instances).toHaveLength(1);
+    expect(spokenLines()).toHaveLength(1);
 
-    FakeAudio.instances[0].triggerEnded();
-    expect(FakeAudio.instances).toHaveLength(2);
+    await endAudio();
+    expect(FakeAudio.instances).toHaveLength(1);
+    expect(spokenLines()).toHaveLength(2);
 
     const states = collectStates(session);
-    FakeAudio.instances[1].triggerEnded();
+    await endAudio();
 
     expect(states.at(-1)?.phase).toBe("student-turn");
     expect(states.at(-1)?.turnCount).toBe(1);
@@ -142,11 +168,14 @@ describe("services/liveSession", () => {
       expect.any(Error),
     );
     expect(states.at(-1)?.phase).toBe("student-turn");
+    expect(socket.sent).toContain(
+      JSON.stringify({ type: "playback_failed", reason: "NotAllowedError" }),
+    );
 
     errorSpy.mockRestore();
   });
 
-  it("so resolve o fim de sessao depois que o ultimo audio termina de tocar", () => {
+  it("so resolve o fim de sessao depois que o ultimo audio termina de tocar", async () => {
     const session = new LiveSession("negociar-prazo", 3);
     const socket = FakeWebSocket.instances[0];
     const states = collectStates(session);
@@ -159,19 +188,19 @@ describe("services/liveSession", () => {
 
     expect(states.at(-1)?.phase).toBe("persona-speaking");
 
-    FakeAudio.instances[0].triggerEnded();
+    await endAudio();
 
     expect(states.at(-1)?.phase).toBe("ended");
     expect(states.at(-1)?.result).toEqual({ attemptId: 42, finalScore: 90, passed: true });
   });
 
-  it("fala longa demais, devolve a vez ao aluno com aviso e sem encerrar a sessão", () => {
+  it("fala longa demais, devolve a vez ao aluno com aviso e sem encerrar a sessão", async () => {
     const session = new LiveSession("negociar-prazo", 3);
     const socket = FakeWebSocket.instances[0];
     const states = collectStates(session);
     socket.dispatch("open", {});
     socket.dispatch("message", { data: new ArrayBuffer(4) });
-    FakeAudio.instances[0].triggerEnded();
+    await endAudio();
 
     socket.dispatch("message", { data: JSON.stringify({ type: "audio_too_large" }) });
 
@@ -181,14 +210,14 @@ describe("services/liveSession", () => {
     expect(states.at(-1)?.turnCount).toBe(1);
   });
 
-  it("sem fala detectada, devolve a vez ao aluno com aviso e sem contar turno", () => {
+  it("sem fala detectada, devolve a vez ao aluno com aviso e sem contar turno", async () => {
     const session = new LiveSession("negociar-prazo", 3);
     const socket = FakeWebSocket.instances[0];
     const states = collectStates(session);
     socket.dispatch("open", {});
 
     socket.dispatch("message", { data: new ArrayBuffer(4) });
-    FakeAudio.instances[0].triggerEnded();
+    await endAudio();
     expect(states.at(-1)?.turnCount).toBe(1);
 
     socket.dispatch("message", { data: JSON.stringify({ type: "no_speech" }) });
@@ -198,7 +227,7 @@ describe("services/liveSession", () => {
     expect(states.at(-1)?.turnCount).toBe(1);
   });
 
-  it("depois do aviso de avaliacao, o fim do audio leva a fase de avaliacao, e nao a vez do aluno", () => {
+  it("depois do aviso de avaliacao, o fim do audio leva a fase de avaliacao, e nao a vez do aluno", async () => {
     const session = new LiveSession("negociar-prazo", 3);
     const socket = FakeWebSocket.instances[0];
     const states = collectStates(session);
@@ -206,7 +235,7 @@ describe("services/liveSession", () => {
 
     socket.dispatch("message", { data: new ArrayBuffer(4) });
     socket.dispatch("message", { data: JSON.stringify({ type: "evaluating" }) });
-    FakeAudio.instances[0].triggerEnded();
+    await endAudio();
 
     expect(states.at(-1)?.phase).toBe("evaluating");
     expect(states.some((state) => state.phase === "student-turn")).toBe(false);
@@ -219,7 +248,7 @@ describe("services/liveSession", () => {
     expect(states.at(-1)?.result).toEqual({ attemptId: 7, finalScore: 80, passed: true });
   });
 
-  it("o fechamento logo apos o fim de sessao nao vira conexao perdida enquanto o audio toca", () => {
+  it("o fechamento logo apos o fim de sessao nao vira conexao perdida enquanto o audio toca", async () => {
     const session = new LiveSession("negociar-prazo", 3);
     const socket = FakeWebSocket.instances[0];
     const states = collectStates(session);
@@ -230,13 +259,13 @@ describe("services/liveSession", () => {
       data: JSON.stringify({ type: "session_ended", attempt_id: 7, final_score: 80, passed: true }),
     });
     socket.close();
-    FakeAudio.instances[0].triggerEnded();
+    await endAudio();
 
     expect(states.some((state) => state.phase === "connection-lost")).toBe(false);
     expect(states.at(-1)?.phase).toBe("ended");
   });
 
-  it("uma mensagem de erro so aparece depois que o audio pendente termina", () => {
+  it("uma mensagem de erro so aparece depois que o audio pendente termina", async () => {
     const session = new LiveSession("negociar-prazo", 3);
     const socket = FakeWebSocket.instances[0];
     const states = collectStates(session);
@@ -247,7 +276,7 @@ describe("services/liveSession", () => {
 
     expect(states.at(-1)?.phase).toBe("persona-speaking");
 
-    FakeAudio.instances[0].triggerEnded();
+    await endAudio();
 
     expect(states.at(-1)?.phase).toBe("error");
     expect(states.at(-1)?.errorMessage).toBe("Falha na transcricao.");
@@ -336,13 +365,13 @@ class FakeMediaRecorder {
 const HINT_REQUEST = JSON.stringify({ type: "hint_request" });
 const AUTH_MESSAGE = JSON.stringify({ type: "auth", token: "fake-token" });
 
-function studentTurn(hintsEnabled: boolean) {
+async function studentTurn(hintsEnabled: boolean) {
   const session = new LiveSession("negociar-prazo", 3, hintsEnabled);
   const socket = FakeWebSocket.instances[0];
   const states = collectStates(session);
   socket.dispatch("open", {});
   socket.dispatch("message", { data: new ArrayBuffer(4) });
-  FakeAudio.instances[0].triggerEnded();
+  await endAudio();
   return { session, socket, states };
 }
 
@@ -388,8 +417,8 @@ describe("LiveSession com dicas", () => {
     expect(FakeWebSocket.instances[1].url).not.toContain("hints");
   });
 
-  it("pede a dica uma vez por vez e mostra a dica recebida", () => {
-    const { session, socket, states } = studentTurn(true);
+  it("pede a dica uma vez por vez e mostra a dica recebida", async () => {
+    const { session, socket, states } = await studentTurn(true);
     expect(states.at(-1)?.phase).toBe("student-turn");
 
     session.requestHint();
@@ -405,8 +434,8 @@ describe("LiveSession com dicas", () => {
     expect(socket.sent).toEqual([AUTH_MESSAGE, HINT_REQUEST]);
   });
 
-  it("sem as dicas ligadas, pedir uma dica nao envia nada", () => {
-    const { session, socket, states } = studentTurn(false);
+  it("sem as dicas ligadas, pedir uma dica nao envia nada", async () => {
+    const { session, socket, states } = await studentTurn(false);
 
     session.requestHint();
 
@@ -424,8 +453,8 @@ describe("LiveSession com dicas", () => {
     expect(socket.sent).toEqual([AUTH_MESSAGE]);
   });
 
-  it("uma dica indisponivel e informada e pode ser pedida de novo", () => {
-    const { session, socket, states } = studentTurn(true);
+  it("uma dica indisponivel e informada e pode ser pedida de novo", async () => {
+    const { session, socket, states } = await studentTurn(true);
 
     session.requestHint();
     socket.dispatch("message", { data: JSON.stringify({ type: "hint_unavailable" }) });
@@ -442,7 +471,7 @@ describe("LiveSession com dicas", () => {
     vi.stubGlobal("navigator", {
       mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }) },
     });
-    const { session, socket, states } = studentTurn(true);
+    const { session, socket, states } = await studentTurn(true);
     session.requestHint();
     socket.dispatch("message", { data: JSON.stringify({ type: "hint", text: "Sim." }) });
 
@@ -461,6 +490,66 @@ describe("LiveSession com dicas", () => {
 });
 
 
+describe("LiveSession e o player das falas", () => {
+  function microphone(onOpen: () => void = () => undefined) {
+    const getUserMedia = vi.fn(async () => {
+      onOpen();
+      return { getTracks: () => [{ stop: vi.fn() }] };
+    });
+    vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
+    vi.stubGlobal("navigator", { mediaDevices: { getUserMedia } });
+    return getUserMedia;
+  }
+
+  it("segurar para falar libera o player antes de abrir o microfone", async () => {
+    let playedWhenMicrophoneOpened: string[] = [];
+    microphone(() => {
+      playedWhenMicrophoneOpened = [...player().played];
+    });
+    const { session } = await studentTurn(false);
+
+    await session.startRecording();
+
+    expect(playedWhenMicrophoneOpened).toContain("blob:silence");
+  });
+
+  it("o silêncio de liberação não é uma fala: não entra na fila nem muda a vez", async () => {
+    microphone();
+    const { session, states } = await studentTurn(false);
+    const spokenBefore = spokenLines().length;
+
+    await session.startRecording();
+
+    expect(spokenLines()).toHaveLength(spokenBefore);
+    expect(states.at(-1)?.phase).toBe("recording");
+    expect(states.at(-1)?.turnCount).toBe(1);
+  });
+
+  it("toca a fala seguinte sozinha, no mesmo player que foi liberado", async () => {
+    microphone();
+    const { session, socket } = await studentTurn(false);
+    await session.startRecording();
+    const elementsBefore = FakeAudio.instances.length;
+
+    socket.dispatch("message", { data: new ArrayBuffer(4) });
+
+    expect(FakeAudio.instances).toHaveLength(elementsBefore);
+    expect(spokenLines()).toHaveLength(2);
+  });
+
+  it("não libera o player no meio de uma fala da persona", async () => {
+    microphone();
+    const session = new LiveSession("negociar-prazo", 3);
+    const socket = FakeWebSocket.instances[0];
+    socket.dispatch("open", {});
+    socket.dispatch("message", { data: new ArrayBuffer(4) });
+
+    await session.startRecording();
+
+    expect(player().played.filter((src) => src === "blob:silence")).toHaveLength(0);
+  });
+});
+
 describe("LiveSession gravando a fala do aluno", () => {
   function microphone() {
     const stopTrack = vi.fn();
@@ -472,7 +561,7 @@ describe("LiveSession gravando a fala do aluno", () => {
 
   it("uma gravação curta demais não é enviada, e o aluno é avisado de que não foi ouvido", async () => {
     microphone();
-    const { session, socket, states } = studentTurn(false);
+    const { session, socket, states } = await studentTurn(false);
 
     await session.startRecording();
     session.stopRecording();
@@ -493,7 +582,7 @@ describe("LiveSession gravando a fala do aluno", () => {
     }
     const { stopTrack } = microphone();
     vi.stubGlobal("MediaRecorder", EmptyMediaRecorder);
-    const { session, socket, states } = studentTurn(false);
+    const { session, socket, states } = await studentTurn(false);
 
     vi.useFakeTimers({ toFake: ["Date"] });
     await session.startRecording();
@@ -510,7 +599,7 @@ describe("LiveSession gravando a fala do aluno", () => {
 
   it("depois do aviso, o aluno pode gravar de novo e a fala longa é enviada", async () => {
     microphone();
-    const { session, socket, states } = studentTurn(false);
+    const { session, socket, states } = await studentTurn(false);
     await session.startRecording();
     session.stopRecording();
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -536,7 +625,7 @@ describe("LiveSession gravando a fala do aluno", () => {
           openMicrophone = resolve as (stream: unknown) => void;
         }),
     ) as never;
-    const { session, states } = studentTurn(false);
+    const { session, states } = await studentTurn(false);
 
     const starting = session.startRecording();
     session.stopRecording();
@@ -550,7 +639,7 @@ describe("LiveSession gravando a fala do aluno", () => {
 
   it("dois toques seguidos abrem um só microfone", async () => {
     const { getUserMedia } = microphone();
-    const { session } = studentTurn(false);
+    const { session } = await studentTurn(false);
 
     const first = session.startRecording();
     const second = session.startRecording();
