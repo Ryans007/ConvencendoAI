@@ -4,6 +4,9 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  build: {
+    assetsInlineLimit: (file) => (/\.woff2?$/.test(file) ? false : undefined),
+  },
   server: {
     // Escuta em todas as interfaces porque o dev server roda dentro do container e
     // precisa ser alcancavel pelo navegador, que roda no host.
