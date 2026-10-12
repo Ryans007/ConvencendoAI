@@ -8,7 +8,6 @@ from apps.voice.services.failures import (
     FAILURE_DESCRIPTIONS,
     SessionErrorCode,
     classify_failure,
-    is_invalid_audio,
 )
 
 _REQUEST = httpx.Request("POST", "https://provider.example/v1/chat/completions")
@@ -61,36 +60,3 @@ def test_every_code_has_a_fixed_description_without_the_original_error():
     for description in FAILURE_DESCRIPTIONS.values():
         assert description
         assert "detalhe técnico" not in description
-
-
-def _bad_request(code: str | None) -> openai.BadRequestError:
-    response = httpx.Response(400, request=_REQUEST)
-    body = {"message": "detalhe técnico do provedor", "type": "invalid_request_error"}
-    if code is not None:
-        body["code"] = code
-    return openai.BadRequestError("detalhe técnico do provedor", response=response, body=body)
-
-
-def test_an_audio_the_provider_cannot_read_is_recognised():
-    assert is_invalid_audio(_bad_request("invalid_media_file")) is True
-
-
-@pytest.mark.parametrize(
-    "exc",
-    [
-        _bad_request("model_not_found"),
-        _bad_request(None),
-        _status_error(openai.RateLimitError, 429),
-        _status_error(openai.InternalServerError, 503),
-        openai.APIConnectionError(request=_REQUEST),
-        RuntimeError("invalid_media_file"),
-    ],
-)
-def test_any_other_failure_is_not_taken_for_an_invalid_audio(exc):
-    assert is_invalid_audio(exc) is False
-
-
-def test_an_invalid_audio_would_still_be_a_provider_failure_without_the_check():
-    exc = _bad_request("invalid_media_file")
-
-    assert classify_failure(exc) is SessionErrorCode.PROVIDER_UNAVAILABLE

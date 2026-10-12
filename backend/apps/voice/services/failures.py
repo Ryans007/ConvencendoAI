@@ -34,20 +34,6 @@ FAILURE_DESCRIPTIONS: dict[SessionErrorCode, str] = {
 }
 
 
-INVALID_MEDIA_CODE = "invalid_media_file"
-
-
-def is_invalid_audio(exc: BaseException) -> bool:
-    """O provedor de STT recusou o áudio por ele não ser um arquivo de mídia válido.
-
-    É um problema da gravação, e não do provedor: um toque curto demais no botão de falar
-    gera um arquivo de poucos bytes, sem áudio de verdade. Tratar como queda do provedor
-    encerraria a sessão do aluno por causa de um toque, então quem chama deve pedir que ele
-    fale de novo, como faz com uma transcrição vazia.
-    """
-    return isinstance(exc, openai.BadRequestError) and exc.code == INVALID_MEDIA_CODE
-
-
 def classify_failure(exc: BaseException) -> SessionErrorCode:
     """Traduz a exceção de uma etapa da sessão no código que o cliente recebe.
 
