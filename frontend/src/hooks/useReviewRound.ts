@@ -3,7 +3,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
 import { ApiError, apiErrorCode } from "../api/client";
 import { discardItem, fetchAnswerAudio, sendAnswer, type RoundItem } from "../api/reviewRound";
-import { AudioRecorder, MIN_RECORDING_MS } from "../services/audioRecorder";
+import { AudioRecorder, hasSpeech } from "../services/audioRecorder";
 import { INITIAL_ROUND_STATE, roundReducer, type RoundState } from "../services/reviewRound";
 
 const RECORDABLE_PHASES = ["idle", "not_heard", "too_many", "mic_denied"];
@@ -71,7 +71,7 @@ export function useReviewRound(items: RoundItem[], reloadRound: () => void) {
   const finishRecording = useCallback(async () => {
     started.current = false;
     const recording = await microphone.stop();
-    if (!recording || recording.durationMs < MIN_RECORDING_MS) {
+    if (!recording || !hasSpeech(recording)) {
       dispatch({ type: "tooShort" });
       return;
     }
