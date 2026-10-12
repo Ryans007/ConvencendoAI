@@ -14,6 +14,7 @@ from apps.agents.services.personas import (
 from apps.agents.services.schemas import PersonaTurn
 from apps.agents.services.scenario_content import Role, ScenarioContent
 from apps.llm.constants import ModelPurpose
+from apps.llm.services.conversation_log import conversation_log
 from apps.llm.services.factory import get_structured_llm
 
 
@@ -22,7 +23,7 @@ def _fallback_key(content: ScenarioContent, state: ScenarioState) -> str:
 
 
 def _speak(role: Role, text: str) -> None:
-    print(f"{role.name}: {text}")
+    conversation_log(role.name, text)
 
 
 def _generate_turn(

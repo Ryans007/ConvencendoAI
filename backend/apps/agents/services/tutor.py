@@ -5,6 +5,7 @@ from apps.agents.services.scenario_content import ScenarioContent
 from apps.agents.services.schemas import SuggestedAnswer
 from apps.agents.services.transcript import transcript_text
 from apps.llm.constants import ModelPurpose
+from apps.llm.services.conversation_log import conversation_log
 from apps.llm.services.factory import get_structured_llm
 
 _PROMPT = """You help a Brazilian student who is practising spoken English in a
@@ -80,5 +81,5 @@ def suggest_answer(content: ScenarioContent, history: list) -> str:
         if text and not looks_english(text):
             return text
         if text:
-            print(f"[hint] sugestão em inglês descartada: {text}")
+            conversation_log("[hint] sugestão em inglês descartada", text)
     return ""

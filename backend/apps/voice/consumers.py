@@ -25,6 +25,7 @@ from apps.catalog.models import Level, Scenario
 from apps.progress.models import Attempt
 from apps.progress.services.session_access import AccessDenied, session_access_denial
 from apps.llm.services.factory import log_active_models
+from apps.llm.services.conversation_log import conversation_log
 from apps.usage.services.owner import usage_owner
 from apps.usage.services.session_limits import (
     SessionRefused,
@@ -277,7 +278,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({"type": "no_speech"}))
             return
 
-        print(f"You: {text}")
+        conversation_log("You", text)
 
         resume = {"text": text, AFTER_HINT_KEY: True} if self.current_hint else text
         self.current_hint = None
@@ -318,7 +319,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             await sync_to_async(
                 Attempt.objects.filter(pk=self.attempt.pk).update
             )(hints_used=F("hints_used") + 1)
-            print(f"[hint] {suggestion}")
+            conversation_log("[hint]", suggestion)
         await self.send(text_data=json.dumps({"type": "hint", "text": self.current_hint}))
 
     async def _advance(
