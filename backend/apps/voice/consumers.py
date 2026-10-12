@@ -44,6 +44,7 @@ from apps.voice.services.tts import synthesize
 _AUTH_TIMEOUT_SECONDS = 10
 _AUTH_MAX_CHARS = 4096
 _SPEAKER_PREFIX = re.compile(r"^\[([^\]]+)\]\s*(.*)$", re.DOTALL)
+_PLAYBACK_REASON = re.compile(r"^[A-Za-z]{1,40}$")
 
 logger = logging.getLogger(__name__)
 
@@ -285,8 +286,23 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             message = json.loads(text_data)
         except json.JSONDecodeError:
             return
-        if isinstance(message, dict) and message.get("type") == "hint_request":
+        if not isinstance(message, dict):
+            return
+        if message.get("type") == "hint_request":
             await self._answer_hint_request()
+        elif message.get("type") == "playback_failed":
+            self._log_playback_failure(message.get("reason"))
+
+    @staticmethod
+    def _log_playback_failure(reason: object) -> None:
+        """Registra que o navegador do aluno recusou tocar uma fala, com o nome do erro.
+
+        O console do celular não é acessível a quem mantém o sistema, então este é o único
+        lugar onde a recusa aparece. O nome vem do cliente e só entra no log se for uma palavra
+        curta de letras, para a conexão não servir de via para escrever texto livre no log.
+        """
+        valid = isinstance(reason, str) and _PLAYBACK_REASON.fullmatch(reason)
+        print(f"[session] o navegador recusou tocar o audio: {reason if valid else 'desconhecido'}")
 
     async def _answer_hint_request(self) -> None:
         """Manda ao aluno a dica da vez atual, gerando-a na primeira vez que ele pede.
