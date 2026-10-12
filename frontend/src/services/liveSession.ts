@@ -1,8 +1,6 @@
+import { resolveWsBaseUrl } from "../api/origin";
 import { AudioRecorder, MIN_RECORDING_MS } from "./audioRecorder";
 import { getAccessToken } from "./session";
-
-const DEFAULT_WS_BASE_URL = "ws://localhost:8010/ws";
-const wsBaseUrl: string = import.meta.env.VITE_WS_BASE_URL ?? DEFAULT_WS_BASE_URL;
 
 export type LiveSessionPhase =
   | "connecting"
@@ -99,6 +97,7 @@ export class LiveSession {
 
   constructor(scenarioSlug: string, levelOrder: number, hintsEnabled = false) {
     const hintsParam = hintsEnabled ? "?hints=1" : "";
+    const wsBaseUrl = resolveWsBaseUrl(import.meta.env.VITE_WS_BASE_URL, globalThis.location);
     const url = `${wsBaseUrl}/voice/${scenarioSlug}/${levelOrder}/${hintsParam}`;
     this.hintsEnabled = hintsEnabled;
     this.socket = new WebSocket(url);

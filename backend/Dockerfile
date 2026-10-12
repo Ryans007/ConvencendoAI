@@ -32,6 +32,12 @@ RUN uv sync --frozen
 
 COPY . .
 
+RUN DJANGO_SETTINGS_MODULE=core.settings.prod     DJANGO_SECRET_KEY=build-only-key     POSTGRES_DB=build POSTGRES_USER=build POSTGRES_PASSWORD=build     python manage.py collectstatic --noinput --ignore test_client.html
+
+RUN useradd --system --create-home --uid 10001 app     && chown -R app:app /app
+
+USER app
+
 EXPOSE 8000
 
 # Gunicorn como gerente de processos, com worker ASGI: serve HTTP hoje e nao precisa

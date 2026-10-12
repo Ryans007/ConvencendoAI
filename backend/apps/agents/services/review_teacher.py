@@ -5,6 +5,7 @@ from langchain_core.messages import HumanMessage
 from apps.agents.services.language import looks_english
 from apps.agents.services.schemas import ReviewVerdict
 from apps.llm.constants import ModelPurpose
+from apps.llm.services.conversation_log import conversation_log
 from apps.llm.services.factory import get_structured_llm
 
 MAX_TRIES = 3
@@ -191,7 +192,7 @@ def _judge(
             return verdict.model_copy(update={"feedback": _FIRST_MISS_WITH_NOTE})
         if _is_acceptable(verdict, attempt, correct):
             return verdict
-        print(f"[review] feedback descartado: {verdict.feedback!r}")
+        conversation_log("[review] feedback descartado", verdict.feedback)
 
     if not verdict.feedback.strip():
         raise ReviewJudgmentFailed("o professor devolveu um veredito vazio")

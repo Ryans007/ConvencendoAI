@@ -1,8 +1,10 @@
 from core.settings.base import *  # noqa: F403
+from core.settings.base import env
 
 DEBUG = False
 
-SECURE_SSL_REDIRECT = True
+SECURE_SSL_REDIRECT = env.bool("DJANGO_SECURE_SSL_REDIRECT", default=True)
+SECURE_REDIRECT_EXEMPT = [r"^api/health/$"]
 SECURE_HSTS_SECONDS = 31536000
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True

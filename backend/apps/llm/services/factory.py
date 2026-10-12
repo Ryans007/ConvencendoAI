@@ -15,6 +15,7 @@ from apps.llm.constants import (
     StructuredOutputMethod,
 )
 from apps.llm.models import AgentModelConfig, LLMModel
+from apps.llm.services.conversation_log import conversation_log
 from apps.usage.services.recording import record_chat_call
 
 _TEMPERATURE_BY_PURPOSE = {
@@ -146,10 +147,8 @@ class _StructuredAgent:
             print(f"[warning] {self._purpose}: agente terminou sem nenhuma resposta do modelo")
             return
         tool_calls = [call.get("name") for call in last.tool_calls]
-        print(
-            f"[warning] {self._purpose}: resposta sem schema preenchido; "
-            f"content={str(last.content)[:200]!r} tool_calls={tool_calls}"
-        )
+        print(f"[warning] {self._purpose}: resposta sem schema preenchido; tool_calls={tool_calls}")
+        conversation_log(f"[warning] {self._purpose}: conteudo da resposta", str(last.content)[:200])
 
     def invoke(self, messages: list[BaseMessage]):
         """Chama o agente e devolve o schema preenchido, gravando o uso da chamada.
@@ -195,8 +194,9 @@ class _StructuredAgent:
                 generated = str(body.get("failed_generation", ""))[:200]
                 print(
                     f"[warning] {self._purpose}: provedor recusou a resposta fora do schema "
-                    f"({exc.code}); gerado={generated!r}"
+                    f"({exc.code})"
                 )
+                conversation_log(f"[warning] {self._purpose}: gerado", generated)
                 continue
             new_messages = result.get("messages", [])[len(messages) :]
             for message in new_messages:

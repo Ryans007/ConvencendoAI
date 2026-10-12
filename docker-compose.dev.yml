@@ -39,6 +39,7 @@ services:
         CORPORATE_CA_CERT: ${CORPORATE_CA_CERT}
     container_name: convencendoai_backend
     restart: unless-stopped
+    user: "0:0"
     # O comando padrao da imagem e gunicorn com worker ASGI, que e o de producao. Aqui
     # trocamos por uvicorn --reload para ganhar recarregamento automatico; a pilha ASGI
     # e a mesma nos dois casos. O migrate na subida e conveniencia de desenvolvimento:
@@ -69,6 +70,7 @@ services:
     # nada a fazer com a senha do banco.
     environment:
       VITE_API_BASE_URL: ${VITE_API_BASE_URL}
+      VITE_WS_BASE_URL: ${VITE_WS_BASE_URL}
     volumes:
       - ./frontend:/app
       # Volume nomeado para o node_modules. Sem ele, o bind mount de /app viria do host,

@@ -85,14 +85,26 @@ beforeEach(() => {
   FakeAudio.nextPlayRejects = false;
   vi.stubGlobal("WebSocket", FakeWebSocket);
   vi.stubGlobal("Audio", FakeAudio);
+  vi.stubGlobal("location", { protocol: "https:", host: "app.exemplo.com.br" });
   vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: () => "blob:fake" }));
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe("services/liveSession", () => {
+  it("abre a conexao no mesmo host da pagina quando o build nao configura a URL", () => {
+    vi.stubEnv("VITE_WS_BASE_URL", "");
+
+    new LiveSession("negociar-prazo", 3);
+
+    expect(FakeWebSocket.instances[0].url).toBe(
+      "wss://app.exemplo.com.br/ws/voice/negociar-prazo/3/",
+    );
+  });
+
   it("toca o audio das personas em sequencia, nunca dois ao mesmo tempo", () => {
     const session = new LiveSession("negociar-prazo", 3);
     const socket = FakeWebSocket.instances[0];

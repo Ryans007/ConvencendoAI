@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  convencendoai-api:
+    environment:
+      POSTGRES_HOST: db
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+      DJANGO_CSRF_TRUSTED_ORIGINS: http://localhost:${PROD_LOCAL_PORT:-8088}
+      DJANGO_SECURE_SSL_REDIRECT: "False"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  convencendoai-web:
+    ports:
+      - "${PROD_LOCAL_PORT:-8088}:8080"
+
+volumes:
+  postgres_data:
