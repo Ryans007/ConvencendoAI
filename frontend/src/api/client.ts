@@ -1,10 +1,9 @@
 import { endSession, getAccessToken, refresh, requirePasswordChange } from "../services/session";
-
-const DEFAULT_BASE_URL = "http://localhost:8010/api";
+import { resolveApiBaseUrl } from "./origin";
 
 const PASSWORD_CHANGE_REQUIRED_CODE = "password_change_required";
 
-const baseUrl: string = import.meta.env.VITE_API_BASE_URL ?? DEFAULT_BASE_URL;
+const baseUrl: string = resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL);
 
 /** Falha em uma chamada a API, com o status e o corpo desserializado quando houve resposta. */
 export class ApiError extends Error {
