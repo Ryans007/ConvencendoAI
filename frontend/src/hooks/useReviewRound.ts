@@ -3,6 +3,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
 import { ApiError, apiErrorCode } from "../api/client";
 import { discardItem, fetchAnswerAudio, sendAnswer, type RoundItem } from "../api/reviewRound";
+import { AudioPlayer } from "../services/audioPlayer";
 import { AudioRecorder, hasSpeech } from "../services/audioRecorder";
 import { INITIAL_ROUND_STATE, roundReducer, type RoundState } from "../services/reviewRound";
 
@@ -29,6 +30,7 @@ export function useReviewRound(items: RoundItem[], reloadRound: () => void) {
   const queryClient = useQueryClient();
   const [state, dispatch] = useReducer(roundReducer, items, startRound);
   const [microphone] = useState(() => new AudioRecorder());
+  const [player] = useState(() => new AudioPlayer());
   const [listening, setListening] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -144,23 +146,17 @@ export function useReviewRound(items: RoundItem[], reloadRound: () => void) {
     if (!answerId || listening) {
       return;
     }
+    player.unlock();
     setListening(true);
     setActionError(null);
     try {
-      const url = URL.createObjectURL(await fetchAnswerAudio(answerId));
-      const player = new Audio(url);
-      const release = () => {
-        URL.revokeObjectURL(url);
-        setListening(false);
-      };
-      player.addEventListener("ended", release);
-      player.addEventListener("error", release);
-      await player.play();
+      await player.play(await fetchAnswerAudio(answerId));
     } catch {
-      setListening(false);
       setActionError("Não foi possível tocar o áudio agora.");
+    } finally {
+      setListening(false);
     }
-  }, [listening]);
+  }, [listening, player]);
 
   return {
     state,

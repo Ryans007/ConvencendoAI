@@ -1,4 +1,5 @@
 import { resolveWsBaseUrl } from "../api/origin";
+import { AudioPlayer } from "./audioPlayer";
 import { AudioRecorder, hasSpeech } from "./audioRecorder";
 import { getAccessToken } from "./session";
 
@@ -92,6 +93,7 @@ export class LiveSession {
   private endedByStudent = false;
 
   private readonly microphone = new AudioRecorder();
+  private readonly player = new AudioPlayer();
 
   private readonly hintsEnabled: boolean;
 
@@ -201,16 +203,27 @@ export class LiveSession {
       this.playingAudio = false;
       return;
     }
-    const audio = new Audio(URL.createObjectURL(blob));
     const advance = () => {
       this.playingAudio = false;
       this.playNextAudio();
     };
-    audio.addEventListener("ended", advance);
-    audio.play().catch((cause) => {
+    this.player.play(blob).then(advance, (cause) => {
       console.error("Falha ao reproduzir audio da persona:", cause);
+      this.reportPlaybackFailure(cause);
       advance();
     });
+  }
+
+  /**
+   * Avisa o servidor de que o navegador recusou tocar uma fala, so com o nome do erro. O console
+   * do celular nao e acessivel a quem mantem o sistema, entao o log do servidor e o unico lugar
+   * onde a recusa pode ser vista.
+   */
+  private reportPlaybackFailure(cause: unknown): void {
+    const reason = cause instanceof Error ? cause.name : "unknown";
+    if (this.socket.readyState === WebSocket.OPEN) {
+      this.socket.send(JSON.stringify({ type: "playback_failed", reason }));
+    }
   }
 
   /**
@@ -270,6 +283,9 @@ export class LiveSession {
   }
 
   async startRecording(): Promise<void> {
+    if (!this.playingAudio) {
+      this.player.unlock();
+    }
     if (this.state.phase !== "student-turn" || this.microphone.active) {
       return;
     }
