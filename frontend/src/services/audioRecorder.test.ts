@@ -1,8 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AudioRecorder, MIN_RECORDING_MS } from "./audioRecorder";
+import {
+  AudioRecorder,
+  FLUSH_TIMEOUT_MS,
+  hasSpeech,
+  MIN_RECORDING_MS,
+  type Recording,
+} from "./audioRecorder";
+
+type Behavior = "chrome" | "safari" | "never-delivers";
+
+const SAFARI_DELIVERY_DELAY_MS = 20;
 
 class FakeMediaRecorder {
+  static behavior: Behavior = "chrome";
+
   state: "inactive" | "recording" = "inactive";
   readonly mimeType: string = "audio/webm;codecs=opus";
   ondataavailable: ((event: { data: Blob }) => void) | null = null;
@@ -14,14 +26,22 @@ class FakeMediaRecorder {
 
   stop(): void {
     this.state = "inactive";
-    this.ondataavailable?.({ data: new Blob(["fala"]) });
-    this.onstop?.();
+    if (FakeMediaRecorder.behavior === "chrome") {
+      this.ondataavailable?.({ data: new Blob(["fala"]) });
+      this.onstop?.();
+    } else if (FakeMediaRecorder.behavior === "safari") {
+      this.onstop?.();
+      setTimeout(() => this.ondataavailable?.({ data: new Blob(["fala"]) }), SAFARI_DELIVERY_DELAY_MS);
+    } else {
+      this.onstop?.();
+    }
   }
 }
 
 const stopTrack = vi.fn();
 
 beforeEach(() => {
+  FakeMediaRecorder.behavior = "chrome";
   vi.useFakeTimers();
   stopTrack.mockClear();
   vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
@@ -93,6 +113,57 @@ describe("AudioRecorder", () => {
     const recording = await recorder.stop();
 
     expect(await recording?.blob.text()).toBe("fala");
+  });
+
+  it("quando o navegador avisa o fim antes de entregar o áudio, espera o áudio chegar", async () => {
+    FakeMediaRecorder.behavior = "safari";
+    const recorder = new AudioRecorder();
+    await recorder.start();
+    vi.advanceTimersByTime(1000);
+
+    const pending = recorder.stop();
+    await vi.advanceTimersByTimeAsync(SAFARI_DELIVERY_DELAY_MS);
+    const recording = await pending;
+
+    expect(await recording?.blob.text()).toBe("fala");
+    expect(recording?.durationMs).toBe(1000);
+  });
+
+  it("quando o navegador entrega o áudio antes de avisar o fim, não espera nada", async () => {
+    const recorder = new AudioRecorder();
+    await recorder.start();
+
+    const recording = await recorder.stop();
+
+    expect(await recording?.blob.text()).toBe("fala");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("se o último trecho nunca chega, a gravação sai vazia depois do limite de espera", async () => {
+    FakeMediaRecorder.behavior = "never-delivers";
+    const recorder = new AudioRecorder();
+    await recorder.start();
+    vi.advanceTimersByTime(1000);
+
+    const pending = recorder.stop();
+    await vi.advanceTimersByTimeAsync(FLUSH_TIMEOUT_MS);
+    const recording = await pending;
+
+    expect(recording?.blob.size).toBe(0);
+    expect(stopTrack).toHaveBeenCalledTimes(1);
+  });
+
+  it("enquanto espera o último trecho, o gravador continua ocupado", async () => {
+    FakeMediaRecorder.behavior = "safari";
+    const recorder = new AudioRecorder();
+    await recorder.start();
+
+    const pending = recorder.stop();
+
+    expect(recorder.active).toBe(true);
+    await vi.advanceTimersByTimeAsync(SAFARI_DELIVERY_DELAY_MS);
+    await pending;
+    expect(recorder.active).toBe(false);
   });
 
   it("a duração mínima que vale como fala é de 350 ms", () => {
@@ -225,5 +296,24 @@ describe("AudioRecorder", () => {
 
     expect(stopTrack).toHaveBeenCalledTimes(1);
     expect(recorder.active).toBe(false);
+  });
+});
+
+describe("hasSpeech", () => {
+  const recording = (parts: string[], durationMs: number): Recording => ({
+    blob: new Blob(parts),
+    durationMs,
+  });
+
+  it("vale como fala uma gravação com a duração mínima e com áudio", () => {
+    expect(hasSpeech(recording(["fala"], MIN_RECORDING_MS))).toBe(true);
+  });
+
+  it("um toque curto não vale como fala", () => {
+    expect(hasSpeech(recording(["fala"], MIN_RECORDING_MS - 1))).toBe(false);
+  });
+
+  it("uma gravação sem nenhum byte não vale como fala, por mais que tenha durado", () => {
+    expect(hasSpeech(recording([], 3000))).toBe(false);
   });
 });

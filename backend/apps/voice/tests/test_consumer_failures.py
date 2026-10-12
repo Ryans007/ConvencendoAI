@@ -12,10 +12,12 @@ from apps.agents.graph import personas as graph_personas
 from apps.agents.graph import routing as graph_routing
 from apps.agents.services.schemas import PersonaTurn, RoutingDecision
 from apps.catalog.models import Scenario
+from apps.llm.services.factory import AudioClient
 from apps.progress.models import Attempt
 from apps.progress.services import build_journey
 from apps.voice import consumers as voice_consumers
 from apps.voice.routing import websocket_urlpatterns
+from apps.voice.services import stt
 from apps.voice.tests.session_client import SessionCommunicator
 
 pytestmark = pytest.mark.django_db
@@ -222,40 +224,57 @@ def test_voice_synthesis_failure_carries_the_code_too(django_user_model, monkeyp
     async_to_sync(run)()
 
 
-def _invalid_media_file() -> openai.BadRequestError:
-    response = httpx.Response(400, request=_REQUEST)
-    body = {
-        "message": "could not process file - is it a valid media file?",
-        "type": "invalid_request_error",
-        "code": "invalid_media_file",
-    }
-    return openai.BadRequestError(body["message"], response=response, body=body)
-
-
-def test_an_audio_the_provider_cannot_read_asks_the_student_to_speak_again(
+def test_an_audio_the_provider_refuses_as_empty_asks_the_student_to_speak_again(
     django_user_model, monkeypatch
 ):
     user, token = _student(django_user_model)
-    answers = iter([_invalid_media_file(), "I need one more week."])
+    refusal_body = {"message": "file is empty", "type": "invalid_request_error"}
+    refusal_body["code"] = "empty_audio_file"
+    refusal = openai.BadRequestError(
+        "file is empty", response=httpx.Response(400, request=_REQUEST), body=refusal_body
+    )
+    answers = iter([refusal, "I need one more week."])
 
-    def transcribe_then_recover(audio):
-        answer = next(answers)
-        if isinstance(answer, BaseException):
-            raise answer
-        return answer
+    class _Transcriptions:
+        def create(self, **kwargs):
+            answer = next(answers)
+            if isinstance(answer, BaseException):
+                raise answer
+            return answer
 
-    _prepare(monkeypatch, [_OPENING, _RESOLVING], transcribe=transcribe_then_recover)
+    client = type("Client", (), {"audio": type("Audio", (), {"transcriptions": _Transcriptions()})})
+    monkeypatch.setattr(
+        "apps.voice.services.stt.get_audio_client",
+        lambda purpose: AudioClient(client=client, model_id="whisper"),
+    )
+    _prepare(monkeypatch, [_OPENING, _RESOLVING], transcribe=stt.transcribe)
 
     async def run() -> None:
         communicator = await _connect(token)
         assert await communicator.receive_from() == b"fake-wav-bytes"
 
-        await communicator.send_to(bytes_data=b"tap")
+        await communicator.send_to(bytes_data=b"RIFF....WAVEempty")
         assert json.loads(await communicator.receive_from()) == {"type": "no_speech"}
         await sync_to_async(_attempt_stayed_open)(user)
 
         await communicator.send_to(bytes_data=b"real-speech")
         assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.disconnect()
+
+    async_to_sync(run)()
+
+
+def test_an_empty_audio_frame_asks_the_student_to_speak_again(django_user_model, monkeypatch):
+    user, token = _student(django_user_model)
+    _prepare(monkeypatch, [_OPENING], transcribe=stt.transcribe)
+
+    async def run() -> None:
+        communicator = await _connect(token)
+        assert await communicator.receive_from() == b"fake-wav-bytes"
+
+        await communicator.send_input({"type": "websocket.receive", "bytes": b""})
+        assert json.loads(await communicator.receive_from()) == {"type": "no_speech"}
+        await sync_to_async(_attempt_stayed_open)(user)
         await communicator.disconnect()
 
     async_to_sync(run)()

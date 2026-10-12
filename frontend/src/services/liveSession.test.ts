@@ -483,6 +483,31 @@ describe("LiveSession gravando a fala do aluno", () => {
     expect(states.at(-1)?.noSpeechNotice).toBe(true);
   });
 
+  it("uma gravação longa que saiu sem nenhum áudio não é enviada, e o aluno é avisado", async () => {
+    class EmptyMediaRecorder extends FakeMediaRecorder {
+      stop(): void {
+        this.state = "inactive";
+        this.ondataavailable?.({ data: new Blob([]) });
+        this.onstop?.();
+      }
+    }
+    const { stopTrack } = microphone();
+    vi.stubGlobal("MediaRecorder", EmptyMediaRecorder);
+    const { session, socket, states } = studentTurn(false);
+
+    vi.useFakeTimers({ toFake: ["Date"] });
+    await session.startRecording();
+    vi.advanceTimersByTime(2000);
+    session.stopRecording();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    vi.useRealTimers();
+
+    expect(socket.sent.some((message) => message instanceof ArrayBuffer)).toBe(false);
+    expect(states.at(-1)?.phase).toBe("student-turn");
+    expect(states.at(-1)?.noSpeechNotice).toBe(true);
+    expect(stopTrack).toHaveBeenCalledTimes(1);
+  });
+
   it("depois do aviso, o aluno pode gravar de novo e a fala longa é enviada", async () => {
     microphone();
     const { session, socket, states } = studentTurn(false);

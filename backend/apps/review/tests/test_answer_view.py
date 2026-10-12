@@ -1,5 +1,7 @@
 from datetime import timedelta
 
+import httpx
+import openai
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
@@ -9,10 +11,11 @@ from rest_framework.test import APIClient
 from apps.agents.services.review_teacher import ReviewJudgmentFailed
 from apps.agents.services.schemas import ReviewVerdict
 from apps.catalog.models import Level, Scenario
-from apps.llm.services.factory import ModelNotConfigured
+from apps.llm.services.factory import AudioClient, ModelNotConfigured
 from apps.progress.models import Attempt
 from apps.review.models import ReviewAnswer, ReviewItem, ReviewOccurrence, ReviewResultKind
 from apps.review.services import answering
+from apps.voice.services import stt
 
 pytestmark = pytest.mark.django_db
 
@@ -240,6 +243,36 @@ def test_silence_is_not_heard_and_saves_nothing(client, student, teacher, monkey
     assert response.status_code == status.HTTP_200_OK
     assert response.data["status"] == "not_heard"
     assert response.data["next"] is None and response.data["result"] is None
+    assert teacher.calls == []
+    assert item.answers.count() == 0
+
+
+def test_an_audio_the_provider_refuses_as_empty_is_not_heard_and_saves_nothing(
+    client, student, teacher, monkeypatch
+):
+    item = _item(student)
+    refusal = openai.BadRequestError(
+        "file is empty",
+        response=httpx.Response(400, request=httpx.Request("POST", "https://provider.example")),
+        body={"message": "file is empty", "code": "empty_audio_file"},
+    )
+
+    class _Transcriptions:
+        def create(self, **kwargs):
+            raise refusal
+
+    audio_api = type("Audio", (), {"transcriptions": _Transcriptions()})
+    fake_client = type("Client", (), {"audio": audio_api})
+    monkeypatch.setattr(
+        "apps.voice.services.stt.get_audio_client",
+        lambda purpose: AudioClient(client=fake_client, model_id="whisper"),
+    )
+    monkeypatch.setattr(answering, "transcribe", stt.transcribe)
+
+    response = _send(client, item)
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["status"] == "not_heard"
     assert teacher.calls == []
     assert item.answers.count() == 0
 

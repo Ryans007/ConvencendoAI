@@ -37,7 +37,6 @@ from apps.voice.services.failures import (
     FAILURE_DESCRIPTIONS,
     SessionErrorCode,
     classify_failure,
-    is_invalid_audio,
 )
 from apps.voice.services.stt import transcribe
 from apps.voice.services.tts import synthesize
@@ -265,10 +264,6 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         try:
             text = await sync_to_async(transcribe)(bytes_data)
         except Exception as exc:
-            if is_invalid_audio(exc):
-                print("[stt] audio invalido (gravacao curta demais); o aluno fala de novo")
-                await self.send(text_data=json.dumps({"type": "no_speech"}))
-                return
             await self._fail_with_error(exc)
             return
         print(f"[timing] stt: {time.monotonic() - started_at:.2f}s")

@@ -1,5 +1,5 @@
 import { resolveWsBaseUrl } from "../api/origin";
-import { AudioRecorder, MIN_RECORDING_MS } from "./audioRecorder";
+import { AudioRecorder, hasSpeech } from "./audioRecorder";
 import { getAccessToken } from "./session";
 
 export type LiveSessionPhase =
@@ -290,7 +290,7 @@ export class LiveSession {
     if (!recording) {
       return;
     }
-    if (recording.durationMs < MIN_RECORDING_MS) {
+    if (!hasSpeech(recording)) {
       this.setState({ phase: "student-turn", noSpeechNotice: true });
       return;
     }

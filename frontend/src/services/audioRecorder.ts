@@ -10,7 +10,18 @@ export interface Recording {
  */
 export const MIN_RECORDING_MS = 350;
 
+/**
+ * Quanto esperar, depois de pedir o fim da gravação, pelo último trecho de áudio. Cobre o
+ * navegador que nunca o entrega: sem esse limite o aluno ficaria esperando para sempre.
+ */
+export const FLUSH_TIMEOUT_MS = 500;
+
 const DEFAULT_MIME_TYPE = "audio/webm";
+
+/** A gravação tem áudio de verdade: durou o mínimo e o arquivo não saiu vazio. */
+export function hasSpeech(recording: Recording): boolean {
+  return recording.durationMs >= MIN_RECORDING_MS && recording.blob.size > 0;
+}
 
 /**
  * Gravador de voz do microfone, compartilhado pela sessão ao vivo e pela revisão.
@@ -72,6 +83,11 @@ export class AudioRecorder {
   /**
    * Termina a gravação e solta o microfone. Sem gravação em curso, devolve `null`. Se o
    * microfone ainda está abrindo, cancela a gravação que ia começar e também devolve `null`.
+   *
+   * O arquivo só é montado depois de o navegador avisar o fim da gravação e entregar o último
+   * trecho de áudio, em qualquer ordem: o Chrome entrega o áudio antes de avisar o fim, e o
+   * Safari pode avisar o fim antes, o que montaria um arquivo vazio. Se o último trecho não
+   * chega em `FLUSH_TIMEOUT_MS`, a gravação sai com o que houver.
    */
   stop(): Promise<Recording | null> {
     if (this.starting) {
@@ -82,13 +98,36 @@ export class AudioRecorder {
     if (!recorder || recorder.state === "inactive") {
       return Promise.resolve(null);
     }
+    const durationMs = Date.now() - this.startedAt;
     return new Promise((resolve) => {
-      recorder.onstop = () => {
+      let ended = false;
+      let flushed = false;
+      let settled = false;
+      const finish = () => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
         const blob = new Blob(this.chunks, { type: recorder.mimeType || DEFAULT_MIME_TYPE });
-        const durationMs = Date.now() - this.startedAt;
         this.release();
         resolve({ blob, durationMs });
       };
+      const finishWhenComplete = () => {
+        if (ended && flushed) {
+          finish();
+        }
+      };
+      recorder.ondataavailable = (event) => {
+        this.chunks.push(event.data);
+        flushed = true;
+        finishWhenComplete();
+      };
+      recorder.onstop = () => {
+        ended = true;
+        finishWhenComplete();
+      };
+      const timer = setTimeout(finish, FLUSH_TIMEOUT_MS);
       recorder.stop();
     });
   }
