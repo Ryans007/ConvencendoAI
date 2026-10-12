@@ -1,0 +1,96 @@
+services:
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?defina POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?defina POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  convencendoai-api:
+    build:
+      context: ./backend
+      args:
+        CORPORATE_CA_CERT: ${CORPORATE_CA_CERT:-}
+    restart: unless-stopped
+    command:
+      - sh
+      - -c
+      - >-
+        python manage.py migrate --noinput && exec gunicorn core.asgi:application
+        --worker-class uvicorn_worker.UvicornWorker --bind 0.0.0.0:8000
+        --workers 2 --access-logfile -
+    environment:
+      DJANGO_SETTINGS_MODULE: core.settings.prod
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?defina DJANGO_SECRET_KEY}
+      DJANGO_ALLOWED_HOSTS: ${DOMAIN:?defina DOMAIN},localhost
+      DJANGO_CSRF_TRUSTED_ORIGINS: https://${DOMAIN}
+      API_DOCS_ENABLED: ${API_DOCS_ENABLED:-False}
+      LOG_CONVERSATION_CONTENT: ${LOG_CONVERSATION_CONTENT:-False}
+      TRUSTED_PROXY_COUNT: 2
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OLLAMA_CLOUD_API_KEY: ${OLLAMA_CLOUD_API_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/', timeout=4)"
+      interval: 15s
+      timeout: 6s
+      retries: 5
+      start_period: 40s
+
+  convencendoai-web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        CORPORATE_CA_CERT: ${CORPORATE_CA_CERT:-}
+    restart: unless-stopped
+    depends_on:
+      convencendoai-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 4s
+      retries: 5
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN:?defina DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      convencendoai-web:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
