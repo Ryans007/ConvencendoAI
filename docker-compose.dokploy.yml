@@ -1,0 +1,67 @@
+services:
+  convencendoai-api:
+    build:
+      context: ./backend
+      args:
+        CORPORATE_CA_CERT: ${CORPORATE_CA_CERT:-}
+    restart: unless-stopped
+    command:
+      - sh
+      - -c
+      - >-
+        python manage.py migrate --noinput && exec gunicorn core.asgi:application
+        --worker-class uvicorn_worker.UvicornWorker --bind 0.0.0.0:8000
+        --workers 2 --access-logfile -
+    environment:
+      DJANGO_SETTINGS_MODULE: core.settings.prod
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?defina DJANGO_SECRET_KEY}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:?defina DJANGO_ALLOWED_HOSTS},localhost
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-}
+      DJANGO_SECURE_SSL_REDIRECT: ${DJANGO_SECURE_SSL_REDIRECT:-True}
+      API_DOCS_ENABLED: ${API_DOCS_ENABLED:-False}
+      LOG_CONVERSATION_CONTENT: ${LOG_CONVERSATION_CONTENT:-False}
+      TRUSTED_PROXY_COUNT: 2
+      POSTGRES_DB: ${POSTGRES_DB:?defina POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:?defina POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}
+      POSTGRES_HOST: ${POSTGRES_HOST:?defina POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OLLAMA_CLOUD_API_KEY: ${OLLAMA_CLOUD_API_KEY:-}
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/', timeout=4)"
+      interval: 15s
+      timeout: 6s
+      retries: 5
+      start_period: 40s
+    networks:
+      - default
+      - dokploy-network
+
+  convencendoai-web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        CORPORATE_CA_CERT: ${CORPORATE_CA_CERT:-}
+    restart: unless-stopped
+    depends_on:
+      convencendoai-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 4s
+      retries: 5
+    networks:
+      - default
+      - dokploy-network
+
+networks:
+  dokploy-network:
+    external: true
