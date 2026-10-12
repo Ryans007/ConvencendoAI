@@ -1,12 +1,12 @@
 # Ambiente de DESENVOLVIMENTO.
 #
-# Este arquivo tem um par para producao, docker-compose.prod.yml, que nasce junto da
+# Este arquivo tem um par para producao, docker-compose.prod.yml (VPS manual) e docker-compose.dokploy.yml, que nascem junto da
 # etapa de deploy. Os dois sao autocontidos de proposito, para que cada ambiente se leia
 # por inteiro num unico lugar. O preco e duplicacao: mudanca no servico do banco, na
 # versao da imagem ou nos blocos de build precisa ser replicada no par.
 #
 # COMPOSE_FILE no .env aponta para este arquivo, entao "docker compose up" basta.
-# Producao passa "-f docker-compose.prod.yml" explicitamente, o que sobrepoe o .env.
+# Producao passa "-f docker-compose.prod.yml" (ou o dokploy) explicitamente, o que sobrepoe o .env.
 
 services:
   db:
