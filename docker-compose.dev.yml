@@ -39,6 +39,7 @@ services:
         CORPORATE_CA_CERT: ${CORPORATE_CA_CERT}
     container_name: convencendoai_backend
     restart: unless-stopped
+    user: "0:0"
     # O comando padrao da imagem e gunicorn com worker ASGI, que e o de producao. Aqui
     # trocamos por uvicorn --reload para ganhar recarregamento automatico; a pilha ASGI
     # e a mesma nos dois casos. O migrate na subida e conveniencia de desenvolvimento:
