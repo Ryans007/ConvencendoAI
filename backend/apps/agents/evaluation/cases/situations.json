@@ -1,0 +1,248 @@
+{
+  "histories": {
+    "rachel-opens": [
+      "[Rachel] Hi, I'm Rachel from HR. Thanks for coming today. Can you tell me a little about yourself?"
+    ],
+    "deadline-opens": [
+      "[Rachel] Hi. I heard you have an update about the module. What's going on?"
+    ],
+    "hotel-opens": [
+      "[Emma] Good evening, welcome to the front desk. How can I help you?"
+    ]
+  },
+  "situations": [
+    {
+      "id": "P01-technical-topic-with-hr",
+      "goal": "Technical topic while Rachel leads: does she hand over to Tom, and does he enter well?",
+      "scenario": "entrevista-de-emprego", "level": 3, "samples": 5,
+      "current": "rachel", "turn_count": 1,
+      "history": ["@rachel-opens", "Student: I'm a backend developer. For the last two years I built a REST API with Django that handles two million requests a day, and I made the database queries much faster."],
+      "expect": [
+        {"check": "passes_to", "value": "tom"},
+        {"check": "introduces", "value": "tom"},
+        {"check": "single_question", "value": true},
+        {"check": "last_line_to_student", "value": true}
+      ]
+    },
+    {
+      "id": "P02-hr-topic-with-hr",
+      "goal": "HR topic while Rachel leads: she keeps the floor.",
+      "scenario": "entrevista-de-emprego", "level": 3, "samples": 4,
+      "current": "rachel", "turn_count": 1,
+      "history": ["@rachel-opens", "Student: I'm a backend developer. I'm looking for a hybrid job, and I really like working in a friendly team."],
+      "expect": [
+        {"check": "no_handoff", "value": true},
+        {"check": "single_question", "value": true}
+      ]
+    },
+    {
+      "id": "P03-balance-gives-the-floor-to-tom",
+      "goal": "Rachel led three rounds and the balance gives the floor to Tom: he reacts, introduces himself and asks once.",
+      "scenario": "entrevista-de-emprego", "level": 3, "samples": 5,
+      "current": "tom", "taking_over": true, "turn_count": 3,
+      "history": [
+        "@rachel-opens",
+        "Student: I'm a backend developer with three years of experience.",
+        "[Rachel] Great. Can you tell me about a time you worked in a team?",
+        "Student: Yes, in my last job I worked with four developers and we did code reviews every day.",
+        "[Rachel] What did you do when you disagreed with a teammate?",
+        "Student: I talked to him and we looked at the data together, and we chose the faster solution."
+      ],
+      "expect": [
+        {"check": "introduces", "value": "tom"},
+        {"check": "single_question", "value": true},
+        {"check": "last_line_to_student", "value": true},
+        {"judge": "Does Tom react briefly to what the student just said before asking his own question?"}
+      ]
+    },
+    {
+      "id": "P04-student-calls-tom",
+      "goal": "The student calls Tom with a question: he answers with the scene facts, asks once and does not hand over.",
+      "scenario": "entrevista-de-emprego", "level": 3, "samples": 3,
+      "current": "tom", "addressed": true, "turn_count": 2,
+      "history": [
+        "@rachel-opens",
+        "Student: I'm a backend developer with three years of experience.",
+        "[Rachel] Great. Can you tell me about a time you worked in a team?",
+        "Student: Tom, do you use automated tests in the team?"
+      ],
+      "expect": [
+        {"check": "no_handoff", "value": true},
+        {"check": "single_question", "value": true},
+        {"judge": "Does Tom answer the student's question about automated tests using only facts of the scene?"}
+      ]
+    },
+    {
+      "id": "P05-hr-asked-for-technical-opinion",
+      "goal": "The student asks Rachel (HR) for a technical opinion: does she stay in her role?",
+      "scenario": "entrevista-de-emprego", "level": 3, "samples": 3,
+      "current": "rachel", "addressed": true, "turn_count": 2,
+      "history": [
+        "@rachel-opens",
+        "Student: I'm a backend developer with three years of experience.",
+        "[Rachel] Great. What kind of projects did you work on?",
+        "Student: Rachel, do you think I should use Redis to make your tracking API faster?"
+      ],
+      "expect": [
+        {"check": "last_line_to_student", "value": true},
+        {"judge": "Does Rachel, as the HR recruiter, avoid giving a technical recommendation about Redis?"}
+      ]
+    },
+    {
+      "id": "P06-tom-asks-about-the-student-choices",
+      "goal": "Tom asks about what the student said, with one question.",
+      "scenario": "entrevista-de-emprego", "level": 3, "samples": 5,
+      "current": "tom", "turn_count": 2,
+      "history": [
+        "@rachel-opens",
+        "Student: I'm a backend developer with three years of experience.",
+        "[Rachel] Tom, I think you'll want to hear about this.",
+        "[Tom] Hi, I'm Tom, the tech lead. What did you build in your last job?",
+        "Student: I built an order tracking API with Django and PostgreSQL, and I added caching to make it faster."
+      ],
+      "expect": [
+        {"check": "single_question", "value": true},
+        {"check": "last_line_to_student", "value": true}
+      ]
+    },
+    {
+      "id": "P07-student-asks-if-the-english-is-correct",
+      "goal": "The student asks if the English is correct: the persona does not correct or grade it.",
+      "scenario": "entrevista-de-emprego", "level": 3, "samples": 3,
+      "current": "rachel", "turn_count": 2,
+      "history": [
+        "@rachel-opens",
+        "Student: I'm a backend developer.",
+        "[Rachel] How long have you worked as a developer?",
+        "Student: I has worked as developer for three years. Is my English correct?"
+      ],
+      "expect": [
+        {"check": "single_question", "value": true},
+        {"judge": "Does Rachel avoid correcting, grading or commenting on the student's English?"}
+      ]
+    },
+    {
+      "id": "P08-first-request-for-more-time",
+      "goal": "First request for more time to the PM: she does not concede at once.",
+      "scenario": "negociar-prazo", "level": 3, "samples": 3,
+      "current": "rachel", "addressed": true, "turn_count": 1,
+      "history": [
+        "@deadline-opens",
+        "Student: Rachel, I need one more week to deliver the module, because the scope grew."
+      ],
+      "expect": [
+        {"check": "scene_resolved", "value": false},
+        {"judge": "Does Rachel refuse to grant the extra week right away, mentioning the client commitment or asking what is already done?"}
+      ]
+    },
+    {
+      "id": "P09-ally-asked-to-decide",
+      "goal": "The student asks the ally to decide: Tom supports without negotiating for the student or ending the scene.",
+      "scenario": "negociar-prazo", "level": 3, "samples": 3,
+      "current": "tom", "addressed": true, "turn_count": 2,
+      "history": [
+        "@deadline-opens",
+        "Student: The scope grew, so I need more time.",
+        "[Rachel] The client expects it on Friday. What have you finished so far?",
+        "Student: Tom, can you tell Rachel we need one more week? You can decide it with her."
+      ],
+      "expect": [
+        {"check": "scene_resolved", "value": false},
+        {"judge": "Does Tom support the student without deciding the deadline himself and without acting as the student's opponent?"}
+      ]
+    },
+    {
+      "id": "P10a-pm-with-a-complete-argument",
+      "goal": "With a technical reason and a phased plan, the PM concedes and confirms the new deadline.",
+      "scenario": "negociar-prazo", "level": 3, "samples": 3,
+      "current": "rachel", "turn_count": 3,
+      "history": [
+        "@deadline-opens",
+        "Student: The scope grew, so I can't deliver on Friday.",
+        "[Rachel] The client expects it on Friday. What have you finished so far?",
+        "Student: The login and the reports are done. The export needs a new database table, and the tests take three days. We can deliver the login and the reports on Friday, and the export next Friday."
+      ],
+      "expect": [
+        {"judge": "Does Rachel accept the extension and say the new deadline explicitly?"}
+      ]
+    },
+    {
+      "id": "P10b-ally-takes-the-floor-at-the-end",
+      "goal": "Same situation, but Tom (ally) takes the floor by the balance: he does not decide the deadline.",
+      "scenario": "negociar-prazo", "level": 3, "samples": 3,
+      "current": "tom", "taking_over": true, "turn_count": 3,
+      "history": [
+        "@deadline-opens",
+        "Student: The scope grew, so I can't deliver on Friday.",
+        "[Rachel] The client expects it on Friday. What have you finished so far?",
+        "Student: The login and the reports are done. The export needs a new database table, and the tests take three days. We can deliver the login and the reports on Friday, and the export next Friday."
+      ],
+      "expect": [
+        {"check": "scene_resolved", "value": false},
+        {"judge": "Does Tom avoid deciding or announcing the new deadline himself?"}
+      ]
+    },
+    {
+      "id": "P11-manager-takes-the-floor-by-the-balance",
+      "goal": "Emma led three rounds and the balance gives the floor to James: his entry sounds natural.",
+      "scenario": "problema-no-quarto", "level": 3, "samples": 4,
+      "current": "james", "taking_over": true, "turn_count": 3,
+      "history": [
+        "@hotel-opens",
+        "Student: Hi. The air conditioner in my room doesn't work, and the room is very hot.",
+        "[Emma] I'm sorry to hear that. What is your room number?",
+        "Student: It's room 312.",
+        "[Emma] Thank you. I can send a technician to check it now. Is that okay?",
+        "Student: I'm not sure. It's really hot, and I want to sleep soon."
+      ],
+      "expect": [
+        {"check": "introduces", "value": "james"},
+        {"check": "single_question", "value": true},
+        {"check": "last_line_to_student", "value": true}
+      ]
+    },
+    {
+      "id": "P12-guest-asks-for-a-discount",
+      "goal": "The guest asks for a discount: Emma refuses, because the hotel does not give one.",
+      "scenario": "problema-no-quarto", "level": 3, "samples": 3,
+      "current": "emma", "addressed": true, "turn_count": 2,
+      "history": [
+        "@hotel-opens",
+        "Student: Hi. The air conditioner in my room doesn't work.",
+        "[Emma] I'm sorry to hear that. What is your room number?",
+        "Student: Room 312. Emma, can I get a discount for tonight?"
+      ],
+      "expect": [
+        {"judge": "Does Emma refuse the discount politely without promising any compensation?"}
+      ]
+    },
+    {
+      "id": "P13-reception-procedure",
+      "goal": "The guest already asks for another room: Emma follows her card (room number first, technician offered before the change).",
+      "scenario": "problema-no-quarto", "level": 3, "samples": 3,
+      "current": "emma", "turn_count": 1,
+      "history": [
+        "@hotel-opens",
+        "Student: Hi, the air conditioner in my room is broken. I want another room."
+      ],
+      "expect": [
+        {"check": "single_question", "value": true},
+        {"judge": "Does Emma follow the reception procedure, asking for the room number or offering a technician before agreeing to change rooms?"}
+      ]
+    },
+    {
+      "id": "P14-handoff-at-level-one",
+      "goal": "At level 1 the round keeps one closed question (yes, no or a simple choice).",
+      "scenario": "entrevista-de-emprego", "level": 1, "samples": 3,
+      "current": "rachel", "turn_count": 1,
+      "history": [
+        "[Rachel] Hi, I'm Rachel from HR. Are you a backend developer?",
+        "Student: Yes. I build APIs with Django. I made the database faster."
+      ],
+      "expect": [
+        {"check": "single_question", "value": true},
+        {"judge": "Is the question to the student closed, answerable with yes, no or a simple choice?"}
+      ]
+    }
+  ]
+}

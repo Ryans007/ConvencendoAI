@@ -1,0 +1,42 @@
+{
+  "histories": {
+    "interview": [
+      "[Rachel] Hi, I'm Rachel from HR, and this is Tom, our tech lead. Thanks for coming. Can you tell us a little about yourself?",
+      "Student: Sure. I'm a backend developer with three years of experience.",
+      "[Tom] Nice to meet you. What kind of systems have you built?"
+    ],
+    "hotel": [
+      "[Emma] Good evening, welcome to the front desk. How can I help you?",
+      "Student: Hi. The air conditioner in my room doesn't work.",
+      "[Emma] I'm sorry to hear that. What is your room number?"
+    ],
+    "deadline": [
+      "[Rachel] Hi. I heard you have an update about the module. What's going on?",
+      "Student: Yes. The scope grew and I can't deliver on Friday.",
+      "[Rachel] The client is expecting it on Friday. What have you finished so far?"
+    ]
+  },
+  "cases": [
+    {"id": "R01", "scenario": "entrevista-de-emprego", "history": "interview", "current": "tom", "line": "I built REST APIs with Django for an e-commerce company.", "accepted": ["none", "tom"]},
+    {"id": "R02", "scenario": "entrevista-de-emprego", "history": "interview", "current": "tom", "line": "Tom, do you use PyTest in your team?", "accepted": ["tom"]},
+    {"id": "R03", "scenario": "entrevista-de-emprego", "history": "interview", "current": "tom", "line": "Rachel, how many people are in the team?", "accepted": ["rachel"]},
+    {"id": "R04", "scenario": "entrevista-de-emprego", "history": "interview", "current": "tom", "line": "Thanks, Rachel. I built REST APIs with Django for an e-commerce company.", "accepted": ["none", "tom"]},
+    {"id": "R05", "scenario": "entrevista-de-emprego", "history": "interview", "current": "tom", "line": "Could you repeat the question, please?", "accepted": ["none", "tom"]},
+    {"id": "R06", "scenario": "entrevista-de-emprego", "history": "interview", "current": "tom", "line": "And what about you, Rachel? How long have you worked at TechCorp?", "accepted": ["rachel"]},
+    {"id": "R07", "scenario": "entrevista-de-emprego", "history": "interview", "current": "tom", "line": "I think Rachel asked me that before, but yes, I worked in a team of five.", "accepted": ["none", "tom"]},
+    {"id": "R08", "scenario": "entrevista-de-emprego", "history": "interview", "current": "tom", "line": "Tom, do you use pie test?", "accepted": ["tom"]},
+    {"id": "R09", "scenario": "entrevista-de-emprego", "history": "interview", "current": "tom", "line": "Sorry, I didn't understand the question.", "accepted": ["none", "tom"]},
+    {"id": "R10", "scenario": "entrevista-de-emprego", "history": "interview", "current": "tom", "line": "Before I answer, Rachel, is the job remote?", "accepted": ["rachel"]},
+    {"id": "R11", "scenario": "problema-no-quarto", "history": "hotel", "current": "emma", "line": "It's room 312.", "accepted": ["none", "emma"]},
+    {"id": "R12", "scenario": "problema-no-quarto", "history": "hotel", "current": "emma", "line": "James, can I change to another room today?", "accepted": ["james"]},
+    {"id": "R13", "scenario": "problema-no-quarto", "history": "hotel", "current": "emma", "line": "Can I speak to the manager, please?", "accepted": null},
+    {"id": "R14", "scenario": "problema-no-quarto", "history": "hotel", "current": "emma", "line": "Emma, thank you, but I really need another room tonight.", "accepted": ["emma"]},
+    {"id": "R15", "scenario": "problema-no-quarto", "history": "hotel", "current": "emma", "line": "Mr. James, is there a free room on the fifth floor?", "accepted": ["james"]},
+    {"id": "R16", "scenario": "negociar-prazo", "history": "deadline", "current": "rachel", "line": "I finished the login and the reports, but the export is not ready.", "accepted": ["none", "rachel"]},
+    {"id": "R17", "scenario": "negociar-prazo", "history": "deadline", "current": "rachel", "line": "Tom, can you explain the technical problem to Rachel?", "accepted": ["tom"]},
+    {"id": "R18", "scenario": "negociar-prazo", "history": "deadline", "current": "rachel", "line": "What do you think, Tom?", "accepted": ["tom"]},
+    {"id": "R19", "scenario": "negociar-prazo", "history": "deadline", "current": "rachel", "line": "Rachel, can we deliver in two phases?", "accepted": ["rachel"]},
+    {"id": "R20", "scenario": "negociar-prazo", "history": "deadline", "current": "rachel", "line": "Thanks for the support, Tom. Rachel, I need one more week.", "accepted": ["rachel"]},
+    {"id": "R21", "scenario": "negociar-prazo", "history": "deadline", "current": "rachel", "line": "Tom agrees with me that the export needs more time.", "accepted": ["none", "rachel"]}
+  ]
+}
