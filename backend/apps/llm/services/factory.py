@@ -16,6 +16,7 @@ from apps.llm.constants import (
 )
 from apps.llm.models import AgentModelConfig, LLMModel
 from apps.llm.services.conversation_log import conversation_log
+from apps.llm.services.model_override import current_override
 from apps.usage.services.recording import record_chat_call
 
 _TEMPERATURE_BY_PURPOSE = {
@@ -53,7 +54,8 @@ def _require_key(model: LLMModel) -> LLMModel:
 
 
 def _model_for(purpose: str, config: AgentModelConfig) -> LLMModel:
-    model = getattr(config, _FIELD_BY_PURPOSE[purpose])
+    """O modelo do papel: o escolhido para a execução em curso, ou o da configuração gravada."""
+    model = current_override(purpose) or getattr(config, _FIELD_BY_PURPOSE[purpose])
     if model is None or not model.is_active or not model.provider.is_active:
         raise ModelNotConfigured(
             f"Nenhum modelo ativo configurado para o papel '{purpose}'."

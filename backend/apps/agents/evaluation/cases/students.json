@@ -1,0 +1,65 @@
+{
+  "sessions": [
+    {
+      "id": "S1a-interview-curious",
+      "scenario": "entrevista-de-emprego", "level": 3,
+      "english": "B1: short simple sentences, sometimes a small grammar mistake.",
+      "length": "one or two sentences, at most 30 words",
+      "profile": "Backend developer with three years of experience (Django, PostgreSQL, a delivery tracking project, caching, code reviews). Answer with short concrete examples. Friendly.",
+      "beats": {
+        "3": "In this reply, start by thanking Rachel by name ('Thanks, Rachel.'), then answer the last question, even if it came from Tom.",
+        "5": "In this reply, ask Tom directly, by name, how the team works with tests or code review.",
+        "7": "In this reply, ask Rachel directly, by name, about the hybrid work.",
+        "9": "In this reply, ask a question without naming anyone: what is the biggest challenge of the team right now?"
+      }
+    },
+    {
+      "id": "S1b-interview-shy",
+      "scenario": "entrevista-de-emprego", "level": 3,
+      "english": "B1: short simple sentences, sometimes a small grammar mistake.",
+      "length": "one or two sentences, at most 30 words",
+      "profile": "Backend developer with three years of experience (Django, PostgreSQL, a delivery tracking project, caching, code reviews). Answer with short concrete examples. A bit shy.",
+      "beats": {
+        "4": "In this reply, answer and then ask Rachel by name what the next steps of the process are.",
+        "6": "In this reply, say you did not understand the question and ask them to repeat it.",
+        "8": "In this reply, ask Tom by name what the team is working on now."
+      }
+    },
+    {
+      "id": "S2-deadline-negotiation",
+      "scenario": "negociar-prazo", "level": 3,
+      "english": "B1: short simple sentences, sometimes a small grammar mistake.",
+      "length": "one or two sentences, at most 30 words",
+      "profile": "You need one more week for the module. Facts you can use: the scope grew (a new export feature), the export needs a new database table and three days of tests, the login and the reports are done. Your plan: deliver login and reports on Friday, and the export next Friday.",
+      "beats": {
+        "2": "In this reply, ask Tom by name to help you explain the technical details.",
+        "4": "In this reply, propose the two-phase delivery clearly.",
+        "6": "In this reply, thank Tom by name, then ask Rachel by name to confirm the new date."
+      }
+    },
+    {
+      "id": "S3-hotel-room",
+      "scenario": "problema-no-quarto", "level": 3,
+      "english": "B1: short simple sentences, sometimes a small grammar mistake.",
+      "length": "one or two sentences, at most 30 words",
+      "profile": "The air conditioner in your room 312 is broken and the room is very hot. You prefer changing rooms tonight. Polite but firm.",
+      "beats": {
+        "3": "In this reply, ask for another room tonight.",
+        "5": "In this reply, ask Emma by name for a discount for tonight.",
+        "7": "In this reply, ask to speak to the manager, without saying his name.",
+        "9": "In this reply, ask James by name which floor the new room is on."
+      }
+    },
+    {
+      "id": "S4-interview-level-one-short-answers",
+      "scenario": "entrevista-de-emprego", "level": 1,
+      "english": "A2: very short answers.",
+      "length": "a very short answer: yes, no, or a few words (at most 8 words)",
+      "profile": "Beginner learner who is a backend developer. Answer the questions only.",
+      "beats": {
+        "4": "In this reply, answer 'Yes' and thank Tom by name.",
+        "6": "In this reply, say you did not understand and ask them to repeat."
+      }
+    }
+  ]
+}

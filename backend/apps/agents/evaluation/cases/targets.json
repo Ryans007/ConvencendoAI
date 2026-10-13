@@ -1,0 +1,16 @@
+{
+  "targets": [
+    {"metric": "router_named_accuracy", "goal": 0.95, "direction": "min", "label": "Roteador: acerta a persona que o aluno chamou pelo nome"},
+    {"metric": "router_false_call_rate", "goal": 0.05, "direction": "max", "label": "Roteador: vê um chamado onde o aluno só respondeu"},
+    {"metric": "passes_to_rate", "goal": 0.70, "direction": "min", "label": "Situações: passa a vez quando o assunto é da colega"},
+    {"metric": "no_handoff_rate", "goal": 0.90, "direction": "min", "label": "Situações: não passa a vez quando o assunto é dela"},
+    {"metric": "introduces_rate", "goal": 0.70, "direction": "min", "label": "Situações: a persona que estreia se apresenta"},
+    {"metric": "single_question_rate", "goal": 0.95, "direction": "min", "label": "Situações: uma pergunta só ao aluno"},
+    {"metric": "last_line_to_student_rate", "goal": 1.0, "direction": "min", "label": "Situações: a última fala é dirigida ao aluno"},
+    {"metric": "session_dangling_rounds", "goal": 0, "direction": "max", "label": "Sessões: rodadas que terminam dirigidas a outra persona"},
+    {"metric": "session_multi_question_rate", "goal": 0.05, "direction": "max", "label": "Sessões: rodadas com mais de uma pergunta"},
+    {"metric": "session_over_limit_runs", "goal": 0, "direction": "max", "label": "Sessões: persona acima do máximo de rodadas seguidas"},
+    {"metric": "session_intro_rate", "goal": 0.70, "direction": "min", "label": "Sessões: a persona que estreia se apresenta"},
+    {"metric": "role_pass_rate", "goal": 0.90, "direction": "min", "label": "Papel: falas sem falha no julgamento (lista de verificação)"}
+  ]
+}
