@@ -120,6 +120,28 @@ def test_a_call_outside_any_owner_is_recorded_as_system_use(chat_model):
     assert usage.attempt is None and usage.review_item is None
 
 
+def test_a_call_inside_a_labelled_block_without_student_carries_the_label(chat_model):
+    with usage_owner(label="avaliação"):
+        _agent(chat_model, ([_reply(10, 5)], PersonaTurn(line="Hi"))).invoke(
+            [HumanMessage(content="oi")]
+        )
+
+    usage = ModelUsage.objects.get()
+    assert usage.user is None
+    assert usage.username_at_time == "avaliação"
+
+
+def test_the_label_never_replaces_the_name_of_a_student(chat_model, django_user_model):
+    user = django_user_model.objects.create_user(username="maria")
+
+    with usage_owner(user=user, label="avaliação"):
+        _agent(chat_model, ([_reply(10, 5)], PersonaTurn(line="Hi"))).invoke(
+            [HumanMessage(content="oi")]
+        )
+
+    assert ModelUsage.objects.get().username_at_time == "maria"
+
+
 def test_a_provider_failure_is_recorded_as_a_failed_line_and_still_propagates(chat_model):
     agent = _agent(chat_model, TimeoutError("provedor parado"))
 

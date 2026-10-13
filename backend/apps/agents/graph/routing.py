@@ -3,6 +3,7 @@ import random
 from apps.agents.graph.state import ScenarioState
 from apps.agents.services.model_input import conversation_messages
 from apps.agents.services.participation import scene_participation
+from apps.agents.services.round_trace import record_round_event
 from apps.agents.services.schemas import RoutingDecision
 from apps.agents.services.scenario_content import ScenarioContent
 from apps.agents.services.turn_balance import next_leader, should_hand_over
@@ -68,6 +69,7 @@ def make_routing_node(content: ScenarioContent, rng: random.Random | None = None
         current = state.get("current_speaker") or keys[0]
         addressed = addressed_speaker(state)
         if addressed is not None:
+            record_round_event("addressed", speaker=addressed, previous=current)
             if addressed != current:
                 print(f"[routing] aluno direcionou para {addressed} (era {current})")
                 return {
@@ -85,6 +87,9 @@ def make_routing_node(content: ScenarioContent, rng: random.Random | None = None
         rounds_led = scene_participation(content, current, history).consecutive_rounds_led
         if should_hand_over(rounds_led, content.max_consecutive_turns, draw):
             leader = next_leader(content, current, history)
+            record_round_event(
+                "balance_takeover", leader=leader, previous=current, rounds_led=rounds_led
+            )
             print(
                 f"[routing] equilibrio: {current} conduziu {rounds_led} rodada(s) seguida(s); "
                 f"vez de {leader}"

@@ -4,6 +4,7 @@ from apps.agents.graph.state import ScenarioState
 from apps.agents.services.adaptation import adaptation_hint
 from apps.agents.services.model_input import conversation_messages
 from apps.agents.services.participation import scene_participation
+from apps.agents.services.round_trace import record_round_event
 from apps.agents.services.personas import (
     build_system_prompt,
     fallback_line,
@@ -67,6 +68,7 @@ def make_opening_node(content: ScenarioContent, memory: str):
 
         text = sanitize_line(turn.line) or "Hello. Let's get started."
         _speak(role, text)
+        record_round_event("opening", speaker=key)
 
         return {
             "messages": [AIMessage(content=f"[{role.name}] {text}")],
@@ -116,6 +118,7 @@ def make_persona_node(content: ScenarioContent, memory: str):
         if state.get("turn_count", 0) >= max_turns:
             text = generate_closing_line(content, role, history)
             _speak(role, text)
+            record_round_event("closing", speaker=key)
             return {
                 "messages": [AIMessage(content=f"[{role.name}] {text}")],
                 "current_speaker": key,
@@ -128,6 +131,7 @@ def make_persona_node(content: ScenarioContent, memory: str):
             text = generate_closing_hint_line(content, role, history)
             if text:
                 _speak(role, text)
+                record_round_event("closing_hint", speaker=key)
                 return {
                     "messages": [AIMessage(content=f"[{role.name}] {text}")],
                     "current_speaker": key,
@@ -151,9 +155,11 @@ def make_persona_node(content: ScenarioContent, memory: str):
         turn, text, pass_to = _generate_turn(llm, messages, role, history)
         if taking_over and pass_to in keys:
             print(f"[routing] {role.name} acabou de assumir; passagem de vez ignorada")
+            record_round_event("handoff_ignored", speaker=key, reason="taking_over")
             pass_to = "student"
         elif addressed and pass_to in keys:
             print(f"[routing] {role.name} foi chamado pelo aluno; passagem de vez ignorada")
+            record_round_event("handoff_ignored", speaker=key, reason="addressed")
             pass_to = "student"
 
         _speak(role, text)
@@ -178,6 +184,7 @@ def make_persona_node(content: ScenarioContent, memory: str):
                 other_llm, conversation_messages(other_system, history + lines), other, history
             )
             _speak(other, other_text)
+            record_round_event("handoff", origin=key, target=next_key)
             lines.append(AIMessage(content=f"[{other.name}] {other_text}"))
             speaker = other
             resolved = resolved or other_turn.scene_resolved
@@ -197,9 +204,13 @@ def make_persona_node(content: ScenarioContent, memory: str):
             )
             closing = generate_closing_line(content, speaker, history + lines[:-1])
             _speak(speaker, closing)
+            record_round_event("closing_swap", speaker=speaker.key)
             lines[-1] = AIMessage(content=f"[{speaker.name}] {closing}")
 
         print(f"[routing] next round current_speaker={next_key}")
+        record_round_event(
+            "round_end", speaker=speaker.key, next_speaker=next_key, scene_resolved=resolved
+        )
 
         return {
             "messages": lines,
