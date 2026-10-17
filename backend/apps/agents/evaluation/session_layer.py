@@ -24,20 +24,25 @@ def transcript_lines(messages: list) -> list[str]:
 
 
 def _judge_persona_lines(content: ScenarioContent, messages: list) -> list[dict[str, Any]]:
+    """Julga cada fala de persona da sessão; a última é o fechamento da cena.
+
+    A sessão termina logo depois da última fala de persona, e o sistema manda essa fala fechar
+    sem pergunta, então ela é julgada como fechamento, e não como uma fala que devia perguntar.
+    """
     role_by_name = {role.name: role for role in content.roles}
+    ai_indexes = [i for i, message in enumerate(messages) if isinstance(message, AIMessage)]
+    last_index = ai_indexes[-1] if ai_indexes else -1
     results = []
-    for index, message in enumerate(messages):
-        if not isinstance(message, AIMessage):
-            continue
-        parsed = speaker_and_text(message.content)
+    for index in ai_indexes:
+        parsed = speaker_and_text(messages[index].content)
         role = role_by_name.get(parsed[0]) if parsed else None
         if role is None:
             continue
-        try:
-            items = judge.judge_line(content, role, messages[:index], message.content)
-            results.append({"line": message.content, "items": items, "error": ""})
-        except judge.JudgeFailed as exc:
-            results.append({"line": message.content, "items": {}, "error": str(exc)})
+        results.append(
+            judge.judged_entry(
+                content, role, messages[:index], messages[index].content, final=index == last_index
+            )
+        )
     return results
 
 
