@@ -20,6 +20,11 @@ lista de verificação: fica na função, age como o arquétipo, usa só os fato
 o inglês, responde primeiro ao aluno, não repete pergunta, no máximo uma pergunta, só inglês e
 não entrega a tarefa.
 
+O juiz recebe a conversa até a fala. Um fato que o **aluno** acabou de dizer e a persona
+repete ou comenta não conta como inventado. A **última fala da sessão** é julgada como
+fechamento: o sistema manda fechar sem pergunta, então o juiz não cobra pergunta nem resistência
+dela, e olha se o fechamento combina com a função e o arquétipo.
+
 As **métricas de troca** vêm do código (eventos registrados nos nós do grafo), não do juiz. O
 juiz mede o papel, e por ser da mesma família das personas deve ser **calibrado** por uma pessoa
 antes de suas taxas serem usadas como medida (veja abaixo).
@@ -73,7 +78,9 @@ O uso gerado aparece no admin (*Uso de modelos*) sem aluno e com o nome **avalia
 docker compose exec backend python manage.py evaluate_conversation --label calibrar --calibration-sample 40
 ```
 
-Abra o `review.csv` da pasta da execução (o Excel abre) e, na coluna `human`, escreva `yes` ou
+Abra o `review.csv` da pasta da execução (o Excel abre). A coluna `context` traz as falas que
+vieram antes, as mesmas que o juiz recebeu: itens como "responde ao aluno primeiro", "não repete
+pergunta" e "só usa fatos da cena" só se decidem com elas. Na coluna `human`, escreva `yes` ou
 `no` (ou `sim` e `não`) conforme **você** ache que a fala cumpre o item. Salve e rode:
 
 ```bash
@@ -83,6 +90,19 @@ docker compose exec backend python manage.py evaluate_conversation --calibrate .
 Ele mostra a concordância total e por item, e as falas em que você discordou do juiz, com o
 motivo dele. Linhas em branco ou com outra resposta ficam de fora. Só use as taxas do juiz como
 medida depois de saber a concordância.
+
+Editores de CSV que alinham as colunas com espaços, ou que gravam `campo , "texto, com vírgula"`,
+são aceitos: a leitura ignora os espaços ao redor dos cabeçalhos e dos valores.
+
+Um arquivo gerado antes de existir a coluna `context`, e que você já preencheu, ganha o contexto
+sem perder as respostas:
+
+```bash
+docker compose exec backend python manage.py evaluate_conversation --add-context .evaluation/<pasta>/review.csv
+```
+
+O contexto vem do `results.json` da mesma pasta, e o arquivo original fica ao lado, como
+`review.csv.bak`.
 
 ## Como acrescentar um caso
 

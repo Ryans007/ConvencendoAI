@@ -91,7 +91,15 @@ def run_situation_layer(
                 results.append(entry)
                 continue
             round_lines = [message.content for message in out["messages"]]
-            entry.update({"round": round_lines, "events": events, "expectations": [], "roles": []})
+            entry.update(
+                {
+                    "context": judge.context_lines(situation.history, limit=None),
+                    "round": round_lines,
+                    "events": events,
+                    "expectations": [],
+                    "roles": [],
+                }
+            )
             for expectation in situation.expectations:
                 if expectation.check == "judge":
                     if not use_judge:

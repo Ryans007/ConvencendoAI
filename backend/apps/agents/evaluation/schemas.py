@@ -14,9 +14,10 @@ ROLE_ITEMS: dict[str, tuple[str, str]] = {
     ),
     "only_scene_facts": (
         "Só usa fatos da cena",
-        "Does the line state only facts present in the scene description or in the character's "
-        "facts, without inventing facts, offers, policies, numbers or dates? Use na when the "
-        "line states no facts.",
+        "Does the line state only facts present in the scene description, in the character's "
+        "facts, or already said by the student earlier in the conversation, without inventing "
+        "facts, offers, policies, numbers or dates? A fact the student just said, repeated or "
+        "reacted to by the character, is not invented. Use na when the line states no facts.",
     ),
     "no_english_correction": (
         "Não corrige o inglês",

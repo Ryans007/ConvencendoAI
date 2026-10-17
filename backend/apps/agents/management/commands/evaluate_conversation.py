@@ -81,10 +81,18 @@ class Command(BaseCommand):
             default="",
             help="calcula a concordância do juiz com o review.csv revisado e sai",
         )
+        parser.add_argument(
+            "--add-context",
+            default="",
+            help="acrescenta a coluna de contexto a um review.csv já preenchido e sai",
+        )
 
     def handle(self, *args, **options) -> None:
         if options["calibrate"]:
             self._calibrate(Path(options["calibrate"]))
+            return
+        if options["add_context"]:
+            self._add_context(Path(options["add_context"]))
             return
         layers = tuple(part.strip() for part in options["layers"].split(",") if part.strip())
         unknown = [layer for layer in layers if layer not in ALL_LAYERS]
@@ -129,6 +137,19 @@ class Command(BaseCommand):
         estimate = estimate_calls(cases, evaluation)
         self.stdout.write(f"Estimativa de chamadas, no máximo: {sum(estimate.values())} {estimate}")
         self.stdout.write(f"Teto: {evaluation.max_calls}. Nenhuma chamada foi feita.")
+
+    def _add_context(self, path: Path) -> None:
+        results = path.parent / "results.json"
+        if not path.exists() or not results.exists():
+            raise CommandError(
+                f"Preciso do arquivo {path} e do results.json da mesma pasta ({results})."
+            )
+        done = calibration.add_context(path, results, load_cases())
+        self.stdout.write(
+            f"Contexto acrescentado a {done['found']} linhas "
+            f"({done['missing']} não encontradas nos resultados). "
+            f"A cópia do arquivo original ficou em {path.name}.bak."
+        )
 
     def _calibrate(self, path: Path) -> None:
         if not path.exists():

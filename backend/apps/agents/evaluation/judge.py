@@ -11,6 +11,7 @@ from apps.llm.constants import ModelPurpose
 from apps.llm.services.factory import get_structured_llm
 
 ATTEMPTS = 2
+CONTEXT_LINES = 4
 
 _ROLE_PROMPT = """You are a strict reviewer of an English-practice role-play. A Brazilian student
 talks to fictional characters in a scene. Review ONE line spoken by a character.
@@ -43,7 +44,7 @@ HOW A ROUND WORKS
 In one round, a character may hand the floor to the other one: the first line is then addressed
 to the other character, with no question to the student, and the other character asks the
 student. A line that is addressed to the other character is expected in that case.
-
+{closing_note}
 CONVERSATION BEFORE THE LINE
 {history}
 
@@ -52,6 +53,15 @@ THE LINE TO REVIEW
 
 Answer every item of the checklist. Use na only where the item says so or when it clearly does
 not apply to this line. Be strict, and base each answer only on the text above."""
+
+_CLOSING_NOTE = """
+THIS IS THE FINAL LINE OF THE SCENE
+The session ends right after this line, so a closing line is expected: it contains NO question to
+the student and no longer challenges or resists. Do not penalise it for not asking or for not
+resisting, and use na for the items about asking or resisting. Judge instead whether the closing
+fits the character's function and archetype (for example, a supporter backs the student up and
+does not announce decisions that belong to someone else), and apply the other items normally.
+"""
 
 _SEMANTIC_PROMPT = """You are a strict reviewer of an English-practice role-play. A Brazilian
 student talks to fictional characters in a scene.
@@ -99,13 +109,25 @@ def _invoke(schema: type, prompt: str) -> Any:
     raise JudgeFailed(f"{type(last).__name__}: {last}") from last
 
 
+def context_lines(history: list[BaseMessage], limit: int | None = CONTEXT_LINES) -> list[str]:
+    """As últimas `limit` falas da conversa (todas, sem limite), uma por linha."""
+    lines = transcript_text(history).splitlines()
+    return lines if limit is None else lines[-limit:]
+
+
 def judge_line(
-    content: ScenarioContent, role: Role, history: list[BaseMessage], line: str
+    content: ScenarioContent,
+    role: Role,
+    history: list[BaseMessage],
+    line: str,
+    final: bool = False,
 ) -> dict[str, dict[str, str]]:
     """Pede ao avaliador o veredito de cada item da lista de verificação sobre uma fala.
 
     Recebe a conversa até a fala, o cartão do papel (com a descrição do arquétipo, lida do
-    catálogo) e as regras do nível. Devolve `{item: {"answer": "yes|no|na", "reason": ...}}`.
+    catálogo) e as regras do nível. Quando a fala é a última da cena (`final`), o prompt avisa
+    que ela é um fechamento: sem pergunta e sem resistência, que o sistema manda e o juiz não
+    pode cobrar. Devolve `{item: {"answer": "yes|no|na", "reason": ...}}`.
     """
     prompt = _ROLE_PROMPT.format(
         context=content.context,
@@ -122,6 +144,7 @@ def judge_line(
         language=content.language,
         questions=content.questions,
         reply_to_student=content.reply_to_student,
+        closing_note=_CLOSING_NOTE if final else "",
         history=transcript_text(history) or "(no one has spoken yet)",
         line=line,
     )
@@ -148,6 +171,33 @@ def judge_question(
     return {"answer": verdict.answer, "reason": verdict.reason}
 
 
+def judged_entry(
+    content: ScenarioContent,
+    role: Role,
+    history: list[BaseMessage],
+    line: str,
+    final: bool = False,
+) -> dict[str, Any]:
+    """O julgamento de uma fala, com a fala, as últimas falas anteriores e se era a final.
+
+    O contexto fica guardado junto do veredito para quem revisa o juiz ver o que ele viu: os
+    itens "responde ao aluno primeiro", "não repete pergunta" e "só usa fatos da cena" só se
+    decidem com o que veio antes. Uma falha do juiz fica registrada na entrada, sem interromper.
+    """
+    entry: dict[str, Any] = {
+        "line": line,
+        "context": context_lines(history),
+        "final": final,
+        "items": {},
+        "error": "",
+    }
+    try:
+        entry["items"] = judge_line(content, role, history, line, final)
+    except JudgeFailed as exc:
+        entry["error"] = str(exc)
+    return entry
+
+
 def judge_round(
     content: ScenarioContent, history: list[BaseMessage], round_lines: list[str]
 ) -> list[dict[str, Any]]:
@@ -159,11 +209,6 @@ def judge_round(
         speaker = line[1 : line.index("]")] if line.startswith("[") and "]" in line else ""
         role = key_by_name.get(speaker)
         if role is not None:
-            try:
-                results.append(
-                    {"line": line, "items": judge_line(content, role, seen, line), "error": ""}
-                )
-            except JudgeFailed as exc:
-                results.append({"line": line, "items": {}, "error": str(exc)})
+            results.append(judged_entry(content, role, seen, line))
         seen.append(AIMessage(content=line))
     return results
