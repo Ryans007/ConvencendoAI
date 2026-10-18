@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from io import StringIO
 
 import pytest
@@ -64,7 +65,7 @@ def test_the_estimate_counts_the_calls_of_each_layer_and_the_filter(tmp_path):
 
     estimate = estimate_calls(cases, _options(tmp_path))
 
-    assert estimate["router"] == 6
+    assert estimate["router"] == len(cases.router)
     assert estimate["situations"] > 0 and estimate["sessions"] > 0
     assert all(case.scenario == "negociar-prazo" for case in cases.router)
 
@@ -301,3 +302,26 @@ def test_the_calibration_mode_needs_a_reviewed_file(tmp_path):
 
     with pytest.raises(CommandError, match="Nenhuma linha"):
         _command("--calibrate", str(path))
+
+
+def test_a_situation_through_the_director_costs_one_more_call_per_sample(tmp_path):
+    cases = select_cases(load_cases(), _options(tmp_path, scenario="entrevista-de-emprego"))
+    options = _options(tmp_path, scenario="entrevista-de-emprego", layers=("situations",))
+    direct = [s for s in cases.situations if s.direct]
+    plain = replace(cases, situations=[replace(s, direct=False) for s in direct])
+    only_direct = replace(cases, situations=direct)
+
+    with_director = estimate_calls(only_direct, options)["situations"]
+    without_director = estimate_calls(plain, options)["situations"]
+
+    assert with_director - without_director == len(direct)
+
+
+def test_the_report_shows_the_topic_accuracy_and_the_router_time(tmp_path, monkeypatch):
+    _fakes(monkeypatch)
+
+    folder, _ = run_evaluation(_options(tmp_path, layers=("router",), use_judge=False))
+
+    report = (folder / "report.md").read_text(encoding="utf-8")
+    assert "Dono do assunto:" in report
+    assert "Erros de assunto:" in report

@@ -5,7 +5,7 @@ Como medir, com os modelos reais, se a **troca entre as personas** é natural e 
 de catálogo ou de modelo, e para ter números (e exemplos reais) para o TCC.
 
 O comando faz chamadas **pagas** a modelos. Toda execução mostra antes, no máximo, quantas
-chamadas fará, e recusa começar acima do teto (`--max-calls`, padrão 800).
+chamadas fará, e recusa começar acima do teto (`--max-calls`, padrão 1000).
 
 ## O que ele mede
 
@@ -110,11 +110,17 @@ Os casos são JSON em `apps/agents/evaluation/cases/`, validados antes de qualqu
 
 - `router.json`: uma fala do aluno, a conversa até ali, a persona da vez e `accepted` (quem é
   aceito como destinatário; `none` significa "ninguém"; `null` marca o caso como ambíguo, que
-  aparece no relatório mas não entra na conta).
+  aparece no relatório mas não entra na conta). O campo opcional `topic` diz de quem é o
+  assunto da fala (`none` para um assunto geral ou de quem já conduz): o relatório mostra o
+  acerto de assunto à parte, e um caso sem `topic` não entra nessa conta.
 - `situations.json`: o ponto da conversa, a persona da vez, as marcas da rodada (`taking_over`,
   `addressed`) e `expect`, com verificações estruturais (`passes_to`, `no_handoff`,
   `single_question`, `last_line_to_student`, `introduces`, `scene_resolved`, `next_speaker`,
-  `speaker`, que confere quem diz a primeira fala da rodada) e perguntas de sim ou não para o juiz (`{"judge": "..."}`).
+  `speaker`, que confere quem diz a primeira fala da rodada) e perguntas de sim ou não para o
+  juiz (`{"judge": "..."}`). Com `"direct": true`, a rodada passa antes pelo diretor de cena
+  real, com o sorteio do equilíbrio neutralizado, e as marcas da rodada são as que ele decidir:
+  é como se mede de ponta a ponta quem conduz a rodada. Cada amostra desse tipo custa uma
+  chamada a mais, que a estimativa já conta.
 - `students.json`: o perfil do aluno simulado e as instruções por fala (`beats`).
 - `targets.json`: a meta de cada métrica, no mínimo (`min`) ou no máximo (`max`).
 

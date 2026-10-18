@@ -24,7 +24,7 @@ from apps.usage.services.owner import usage_owner
 
 ALL_LAYERS = ("router", "situations", "sessions")
 USAGE_LABEL = "avaliação"
-DEFAULT_MAX_CALLS = 800
+DEFAULT_MAX_CALLS = 1000
 DEFAULT_OUTPUT_DIR = Path(".evaluation")
 
 _PERSONA_CALLS_PER_ROUND = 3
@@ -82,7 +82,7 @@ def estimate_calls(cases: LoadedCases, options: EvaluationOptions) -> dict[str, 
     if "situations" in options.layers:
         for situation in cases.situations:
             semantic = sum(1 for e in situation.expectations if e.check == "judge")
-            per_sample = _PERSONA_CALLS_PER_ROUND
+            per_sample = _PERSONA_CALLS_PER_ROUND + (1 if situation.direct else 0)
             if options.use_judge:
                 per_sample += _JUDGE_LINES_PER_ROUND + semantic
             estimate["situations"] += (options.samples or situation.samples) * per_sample
@@ -110,6 +110,18 @@ def _models_in_use(options: EvaluationOptions) -> dict[str, str]:
     return {purpose: _model_name(model) for purpose, model in chosen.items()}
 
 
+def _latency(rows) -> dict[str, Any] | None:
+    """Mediana e valor de 90% do tempo por chamada, em segundos; `None` sem chamadas."""
+    durations = sorted(rows.values_list("duration_ms", flat=True))
+    if not durations:
+        return None
+    return {
+        "median_s": statistics.median(durations) / 1000,
+        "p90_s": durations[min(len(durations) - 1, int(len(durations) * 0.9))] / 1000,
+        "count": len(durations),
+    }
+
+
 def _usage_summary(started_at: datetime) -> dict[str, Any]:
     rows = ModelUsage.objects.filter(
         user__isnull=True, username_at_time=USAGE_LABEL, created_at__gte=started_at
@@ -130,18 +142,13 @@ def _usage_summary(started_at: datetime) -> dict[str, Any]:
         )
         .order_by("purpose", "model_id_at_time")
     ]
-    durations = sorted(rows.filter(purpose="persona").values_list("duration_ms", flat=True))
-    latency = None
-    if durations:
-        latency = {
-            "median_s": statistics.median(durations) / 1000,
-            "p90_s": durations[min(len(durations) - 1, int(len(durations) * 0.9))] / 1000,
-            "count": len(durations),
-        }
+    latency = _latency(rows.filter(purpose="persona"))
+    router_latency = _latency(rows.filter(purpose="router"))
     priced = rows.filter(priced=True)
     return {
         "by_purpose": by_purpose,
         "persona_latency": latency,
+        "router_latency": router_latency,
         "cost_usd": float(priced.aggregate(total=Sum("cost_usd"))["total"] or 0),
         "unpriced": rows.filter(priced=False).count(),
     }

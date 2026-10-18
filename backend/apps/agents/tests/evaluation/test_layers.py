@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 from langchain_core.messages import HumanMessage
 
@@ -123,13 +125,13 @@ def test_a_persona_that_tries_to_hand_over_alone_is_not_followed(loaded, monkeyp
         "PersonaTurn",
         PersonaTurn(line="Which query did you improve?", pass_to="tom"),
     )
-
-    results = run_situation_layer(
-        [_situation(loaded, "P01-technical-topic-with-hr")],
-        loaded.contents,
-        samples=1,
-        use_judge=False,
+    situation = replace(
+        _situation(loaded, "P01-technical-topic-with-hr"),
+        direct=False,
+        expectations=[Expectation(check="passes_to", value="tom")],
     )
+
+    results = run_situation_layer([situation], loaded.contents, samples=1, use_judge=False)
 
     outcomes = {item["check"]: item["ok"] for item in results[0]["expectations"]}
     assert outcomes["passes_to"] is False
@@ -288,3 +290,122 @@ def test_a_session_that_fails_is_recorded_without_stopping_the_run(loaded, monke
 
     assert "RuntimeError" in results[0]["error"]
     assert "transcript" not in results[0]
+
+
+def _topic_router(owner: str, speaker: str = "none"):
+    def decide(messages):
+        return RoutingDecision(speaker=speaker, topic_owner=owner)
+
+    return decide
+
+
+def test_a_situation_through_the_director_gives_the_round_to_the_owner_of_the_topic(
+    loaded, monkeypatch
+):
+    models = FakeModels().install(monkeypatch)
+    models.set(ROUTER, "RoutingDecision", _topic_router("tom"))
+    models.set(
+        PERSONA,
+        "PersonaTurn",
+        PersonaTurn(line="Hi, I'm Tom, the tech lead. Which query did you improve?", pass_to="student"),
+    )
+
+    results = run_situation_layer(
+        [_situation(loaded, "P01-technical-topic-with-hr")],
+        loaded.contents,
+        samples=1,
+        use_judge=False,
+    )
+
+    outcomes = {item["check"]: item["ok"] for item in results[0]["expectations"]}
+    assert results[0]["round"][0].startswith("[Tom] Hi, I'm Tom")
+    assert outcomes == {
+        "speaker": True,
+        "introduces": True,
+        "single_question": True,
+        "last_line_to_student": True,
+    }
+    assert {"kind": "topic_takeover", "speaker": "tom", "previous": "rachel"} in results[0]["events"]
+
+
+def test_a_situation_through_the_director_fails_when_the_topic_stays_with_the_leader(
+    loaded, monkeypatch
+):
+    models = FakeModels().install(monkeypatch)
+    models.set(ROUTER, "RoutingDecision", _topic_router("none"))
+    models.set(
+        PERSONA,
+        "PersonaTurn",
+        PersonaTurn(line="Which query did you improve?", pass_to="student"),
+    )
+
+    results = run_situation_layer(
+        [_situation(loaded, "P01-technical-topic-with-hr")],
+        loaded.contents,
+        samples=1,
+        use_judge=False,
+    )
+
+    outcomes = {item["check"]: item["ok"] for item in results[0]["expectations"]}
+    assert outcomes["speaker"] is False
+
+
+def test_a_called_persona_for_the_colleagues_topic_passes_the_round(loaded, monkeypatch):
+    models = FakeModels().install(monkeypatch)
+    models.set(ROUTER, "RoutingDecision", _topic_router("tom", speaker="rachel"))
+    models.set(
+        PERSONA,
+        "PersonaTurn",
+        [
+            PersonaTurn(line="That one is for Tom.", pass_to="student"),
+            PersonaTurn(line="Redis can help. Did you try a cache before?", pass_to="student"),
+        ],
+    )
+
+    results = run_situation_layer(
+        [_situation(loaded, "P05-hr-asked-for-technical-opinion")],
+        loaded.contents,
+        samples=1,
+        use_judge=False,
+    )
+
+    outcomes = {item["check"]: item["ok"] for item in results[0]["expectations"]}
+    assert outcomes["passes_to"] is True
+    assert outcomes["last_line_to_student"] is True
+
+
+def test_the_router_layer_reads_the_owner_of_the_topic_from_the_director(loaded, monkeypatch):
+    models = FakeModels().install(monkeypatch)
+    models.set(ROUTER, "RoutingDecision", _topic_router("tom"))
+
+    results = run_router_layer(_router_cases(loaded, "R26", "R27"), loaded.contents, repetitions=1)
+    summary = summarize_router(results)
+
+    assert [r["topic_routed"] for r in results] == ["tom", "tom"]
+    assert (summary["topic_total"], summary["topic_correct"]) == (2, 1)
+    assert summary["topic_errors"][0]["id"] == "R27"
+    assert summary["topic_errors"][0]["topic_accepted"] == ["none", "rachel"]
+
+
+def test_a_call_to_a_persona_for_the_topic_of_the_other_is_the_topic_of_the_other(
+    loaded, monkeypatch
+):
+    models = FakeModels().install(monkeypatch)
+    models.set(ROUTER, "RoutingDecision", _topic_router("tom", speaker="rachel"))
+
+    results = run_router_layer(_router_cases(loaded, "R28"), loaded.contents, repetitions=1)
+
+    assert results[0]["routed"] == "rachel"
+    assert results[0]["topic_routed"] == "tom"
+    assert results[0]["topic_correct"] is True
+
+
+def test_a_case_without_a_topic_does_not_count_in_the_topic_accuracy(loaded, monkeypatch):
+    models = FakeModels().install(monkeypatch)
+    models.set(ROUTER, "RoutingDecision", _topic_router("none"))
+
+    summary = summarize_router(
+        run_router_layer(_router_cases(loaded, "R02"), loaded.contents, repetitions=1)
+    )
+
+    assert summary["topic_total"] == 0

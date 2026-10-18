@@ -47,6 +47,10 @@ def _router_section(router: list[dict[str, Any]]) -> list[str]:
         f"- Falas que chamam uma persona pelo nome: {named} de {summary['named_total']} certas.",
         f"- Falas que só respondem: {wrong} de {summary['answer_total']} vistas como chamado.",
     ]
+    if summary["topic_total"]:
+        lines.append(
+            f"- Dono do assunto: {summary['topic_correct']} de {summary['topic_total']} certos."
+        )
     if summary["failed_calls"]:
         lines.append(f"- **{summary['failed_calls']} decisões falharam** e ficaram fora da conta.")
     if summary["errors"]:
@@ -55,6 +59,13 @@ def _router_section(router: list[dict[str, Any]]) -> list[str]:
             lines.append(
                 f"- {error['id']} (vez de {error['current']}): \"{error['line']}\" → "
                 f"esperado {error['accepted']}, obtido `{error['routed']}`"
+            )
+    if summary["topic_errors"]:
+        lines += ["", "Erros de assunto:", ""]
+        for error in summary["topic_errors"]:
+            lines.append(
+                f"- {error['id']} (vez de {error['current']}): \"{error['line']}\" → "
+                f"esperado {error['topic_accepted']}, obtido `{error['topic_routed']}`"
             )
     if summary["ambiguous"]:
         lines += ["", "Casos ambíguos (fora da conta):", ""]
@@ -184,6 +195,14 @@ def _usage_section(usage: dict[str, Any]) -> list[str]:
             "",
             f"Tempo por chamada da persona: mediana {latency['median_s']:.2f} s, "
             f"90% das chamadas abaixo de {latency['p90_s']:.2f} s ({latency['count']} chamadas).",
+        ]
+    router_latency = usage.get("router_latency")
+    if router_latency:
+        lines += [
+            "",
+            f"Tempo por chamada do roteador: mediana {router_latency['median_s']:.2f} s, "
+            f"90% das chamadas abaixo de {router_latency['p90_s']:.2f} s "
+            f"({router_latency['count']} chamadas).",
         ]
     lines.append(
         f"Custo estimado: US$ {usage['cost_usd']:.4f}"

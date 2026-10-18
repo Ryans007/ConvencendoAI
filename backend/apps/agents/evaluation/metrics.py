@@ -64,7 +64,15 @@ def change_causes(events: list[dict[str, Any]]) -> Counter:
         if kind == "addressed":
             same = event["speaker"] == event["previous"]
             causes["student_same" if same else "student_directed"] += 1
-        elif kind in ("balance_takeover", "handoff", "handoff_ignored"):
+        elif kind in (
+            "balance_takeover",
+            "topic_takeover",
+            "topic_redirect",
+            "handoff",
+            "handoff_ignored",
+            "dangling_answered",
+            "dangling_unresolved",
+        ):
             causes[kind] += 1
     return causes
 

@@ -55,6 +55,7 @@ def metric_values(
     summary = summarize_router(router)
     values["router_named_accuracy"] = _ratio(summary["named_correct"], summary["named_total"])
     values["router_false_call_rate"] = _ratio(summary["answer_wrong"], summary["answer_total"])
+    values["router_topic_accuracy"] = _ratio(summary["topic_correct"], summary["topic_total"])
 
     counts = situation_check_counts(situations)
     for check in SITUATION_RATE_CHECKS:

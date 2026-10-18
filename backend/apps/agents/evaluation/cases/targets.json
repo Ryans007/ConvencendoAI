@@ -2,6 +2,7 @@
   "targets": [
     {"metric": "router_named_accuracy", "goal": 0.95, "direction": "min", "label": "Roteador: acerta a persona que o aluno chamou pelo nome"},
     {"metric": "router_false_call_rate", "goal": 0.05, "direction": "max", "label": "Roteador: vê um chamado onde o aluno só respondeu"},
+    {"metric": "router_topic_accuracy", "goal": 0.90, "direction": "min", "label": "Roteador: acerta de quem é o assunto da fala"},
     {"metric": "passes_to_rate", "goal": 0.70, "direction": "min", "label": "Situações: passa a vez quando o assunto é da colega"},
     {"metric": "no_handoff_rate", "goal": 0.90, "direction": "min", "label": "Situações: não passa a vez quando o assunto é dela"},
     {"metric": "introduces_rate", "goal": 0.70, "direction": "min", "label": "Situações: a persona que estreia se apresenta"},
