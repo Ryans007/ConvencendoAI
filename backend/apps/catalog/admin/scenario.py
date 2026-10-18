@@ -35,6 +35,7 @@ class ScenarioRoleInline(admin.TabularInline):
         "resistance",
         "concession",
         "extra_instruction",
+        "decides_outcome",
         "opening_order",
         "scaffolding_levels",
     ]
