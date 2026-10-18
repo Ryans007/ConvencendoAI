@@ -78,6 +78,22 @@ def make_opening_node(content: ScenarioContent, memory: str):
     return node_opening
 
 
+def final_speaker(content: ScenarioContent, role: Role) -> Role:
+    """Quem diz as falas finais: a persona da vez, se ela decide; senão, a primeira que decide."""
+    if content.decides(role.key):
+        return role
+    return content.deciders()[0]
+
+
+def _accepted_resolution(content: ScenarioContent, role: Role, resolved: bool) -> bool:
+    """Só vale a cena resolvida indicada por um papel que decide; as outras são registradas."""
+    if resolved and not content.decides(role.key):
+        print(f"[routing] {role.name} nao decide a cena; cena resolvida ignorada")
+        record_round_event("resolution_ignored", speaker=role.key)
+        return False
+    return resolved
+
+
 def make_persona_node(content: ScenarioContent, memory: str):
     """Nó que faz o papel da vez responder, falar e decidir o próximo passo.
 
@@ -102,6 +118,13 @@ def make_persona_node(content: ScenarioContent, memory: str):
       como resolvida e pergunta mesmo assim. Por isso, se a última fala da rodada tem
       pergunta, ela é trocada pelo fechamento do limite de turnos, que usa um prompt próprio
       que proíbe pergunta.
+
+    - Só um papel que decide o resultado da cena (`decides_outcome`) encerra a cena como
+      resolvida e diz as falas finais. Um aliado que indica `scene_resolved` é ignorado, e o
+      evento `resolution_ignored` fica no registro: medido numa negociação, o aliado
+      confirmava um prazo que só a PM podia conceder. A fala que abre a oportunidade dos
+      critérios e o fechamento do limite de turnos são ditos por `final_speaker`: a persona
+      da vez, se ela decide, ou a primeira que decide pela ordem de abertura.
     """
     keys = content.role_keys()
     max_turns = content.max_turns
@@ -116,25 +139,27 @@ def make_persona_node(content: ScenarioContent, memory: str):
         addressed = bool(state.get("addressed_by_student"))
 
         if state.get("turn_count", 0) >= max_turns:
-            text = generate_closing_line(content, role, history)
-            _speak(role, text)
-            record_round_event("closing", speaker=key)
+            final_role = final_speaker(content, role)
+            text = generate_closing_line(content, final_role, history)
+            _speak(final_role, text)
+            record_round_event("closing", speaker=final_role.key)
             return {
-                "messages": [AIMessage(content=f"[{role.name}] {text}")],
-                "current_speaker": key,
+                "messages": [AIMessage(content=f"[{final_role.name}] {text}")],
+                "current_speaker": final_role.key,
                 "scene_resolved": True,
                 "taking_over": False,
                 "addressed_by_student": False,
             }
 
         if state.get("turn_count", 0) == max_turns - 2 and content.closing_hint:
-            text = generate_closing_hint_line(content, role, history)
+            final_role = final_speaker(content, role)
+            text = generate_closing_hint_line(content, final_role, history)
             if text:
-                _speak(role, text)
-                record_round_event("closing_hint", speaker=key)
+                _speak(final_role, text)
+                record_round_event("closing_hint", speaker=final_role.key)
                 return {
-                    "messages": [AIMessage(content=f"[{role.name}] {text}")],
-                    "current_speaker": key,
+                    "messages": [AIMessage(content=f"[{final_role.name}] {text}")],
+                    "current_speaker": final_role.key,
                     "taking_over": False,
                     "addressed_by_student": False,
                 }
@@ -170,7 +195,7 @@ def make_persona_node(content: ScenarioContent, memory: str):
 
         lines = [AIMessage(content=f"[{role.name}] {text}")]
         speaker = role
-        resolved = turn.scene_resolved
+        resolved = _accepted_resolution(content, role, turn.scene_resolved)
 
         next_key = pass_to
         if next_key in keys and next_key != key and not resolved:
@@ -187,7 +212,9 @@ def make_persona_node(content: ScenarioContent, memory: str):
             record_round_event("handoff", origin=key, target=next_key)
             lines.append(AIMessage(content=f"[{other.name}] {other_text}"))
             speaker = other
-            resolved = resolved or other_turn.scene_resolved
+            resolved = resolved or _accepted_resolution(
+                content, other, other_turn.scene_resolved
+            )
             print(
                 f"[routing] handoff current_speaker={next_key} "
                 f"pass_to={other_pass_to} scene_resolved={resolved}"

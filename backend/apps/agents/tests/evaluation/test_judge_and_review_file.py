@@ -95,7 +95,7 @@ def _fake_session(monkeypatch, prompts):
         ],
     )
     models.set(PERSONA, "ClosingLine", ClosingLine(line="Thank you, bye."))
-    models.set(ROUTER, "RoutingDecision", RoutingDecision(speaker="none"))
+    models.set(ROUTER, "RoutingDecision", RoutingDecision(speaker="rachel"))
     models.set(JUDGE, "StudentReply", StudentReply(line="I need one more week."))
     _capturing_judge(models, prompts)
 
