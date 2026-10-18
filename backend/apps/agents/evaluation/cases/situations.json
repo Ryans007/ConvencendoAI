@@ -163,6 +163,7 @@
         "Student: The login and the reports are done. The export needs a new database table, and the tests take three days. We can deliver the login and the reports on Friday, and the export next Friday."
       ],
       "expect": [
+        {"check": "scene_resolved", "value": true},
         {"judge": "Does Rachel accept the extension and say the new deadline explicitly?"}
       ]
     },
@@ -242,6 +243,71 @@
       "expect": [
         {"check": "single_question", "value": true},
         {"judge": "Is the question to the student closed, answerable with yes, no or a simple choice?"}
+      ]
+    },
+    {
+      "id": "P15-opportunity-line-on-the-allys-turn",
+      "goal": "The line that opens the criteria falls on Tom's turn: it is Rachel, who decides the deadline, who says it.",
+      "scenario": "negociar-prazo", "level": 3, "samples": 3,
+      "current": "tom", "turn_count": 10,
+      "history": [
+        "@deadline-opens",
+        "Student: The scope grew, so I can't deliver on Friday.",
+        "[Rachel] The client expects it on Friday. What have you finished so far?",
+        "Student: The login and the reports are done. The export needs a new database table, and the tests take three days. We can deliver the login and the reports on Friday, and the export next Friday."
+      ],
+      "expect": [
+        {"check": "speaker", "value": "rachel"},
+        {"judge": "Does the line state the new deadline in the voice of the PM, without leaving the decision to Tom?"}
+      ]
+    },
+    {
+      "id": "P16-pm-with-an-incomplete-argument",
+      "goal": "Without a reason or a plan, the PM does not concede: she asks for what is missing.",
+      "scenario": "negociar-prazo", "level": 3, "samples": 3,
+      "current": "rachel", "addressed": true, "turn_count": 2,
+      "history": [
+        "@deadline-opens",
+        "Student: Hi, Rachel. I have an update about the module.",
+        "[Rachel] The client expects it on Friday. What is going on?",
+        "Student: Rachel, I need one more week. The module is hard."
+      ],
+      "expect": [
+        {"check": "scene_resolved", "value": false},
+        {"judge": "Does Rachel ask for what is missing, such as the reason or a plan, instead of granting the extra week?"}
+      ]
+    },
+    {
+      "id": "P17-fact-the-student-already-gave",
+      "goal": "The student already said the room number: Emma uses it and never asks for it again.",
+      "scenario": "problema-no-quarto", "level": 3, "samples": 4,
+      "current": "emma", "turn_count": 2,
+      "history": [
+        "@hotel-opens",
+        "Student: Hi. The air conditioner in my room 312 is not working.",
+        "[Emma] I'm sorry to hear that. I can send a technician now. Is that okay?",
+        "Student: I would prefer another room, please. It is really hot."
+      ],
+      "expect": [
+        {"check": "single_question", "value": true},
+        {"judge": "Does Emma avoid asking for the room number, which the student already gave as 312?"}
+      ]
+    },
+    {
+      "id": "P18-technical-question-at-level-one",
+      "goal": "Tom may ask about the caching choice, but at level 1 the question stays closed and is not a quiz.",
+      "scenario": "entrevista-de-emprego", "level": 1, "samples": 3,
+      "current": "tom", "turn_count": 2,
+      "history": [
+        "[Rachel] Hi, I'm Rachel from HR. Are you a backend developer?",
+        "Student: Yes. I build APIs with Django.",
+        "[Rachel] Tom, I think you'll want to hear about this.",
+        "[Tom] Hi, I'm Tom, the tech lead. Did you build the API alone?",
+        "Student: No, in a team. I added caching to make it faster."
+      ],
+      "expect": [
+        {"check": "single_question", "value": true},
+        {"judge": "Is the question closed, answerable with yes, no or a simple choice, and not a quiz about what a concept is?"}
       ]
     }
   ]

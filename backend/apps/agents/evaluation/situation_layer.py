@@ -48,6 +48,9 @@ def check_structural(
         return bool(_round_end(events).get("scene_resolved", False)) == value
     if check == "next_speaker":
         return _round_end(events).get("next_speaker") == value
+    if check == "speaker":
+        first = speaker_and_text(round_lines[0]) if round_lines else None
+        return bool(first) and first[0] == content.role(value).name
     raise ValueError(f"Verificação desconhecida: {check}")
 
 

@@ -221,6 +221,17 @@ def test_a_scene_resolved_expectation_reads_the_end_of_the_round():
     assert check_structural(content_free, ["[Tom] Done."], events, _Content()) is False
 
 
+def test_a_speaker_expectation_reads_who_said_the_first_line(loaded):
+    content = loaded.contents[("negociar-prazo", 3)]
+    expects_rachel = Expectation(check="speaker", value="rachel")
+    expects_tom = Expectation(check="speaker", value="tom")
+    lines = ["[Rachel] The new deadline is next Friday."]
+
+    assert check_structural(expects_rachel, lines, [], content) is True
+    assert check_structural(expects_tom, lines, [], content) is False
+    assert check_structural(expects_rachel, [], [], content) is False
+
+
 def test_a_full_session_runs_to_the_end_and_is_measured(loaded, monkeypatch):
     models = FakeModels().install(monkeypatch)
     models.set(

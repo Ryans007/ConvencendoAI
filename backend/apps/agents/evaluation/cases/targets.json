@@ -7,6 +7,8 @@
     {"metric": "introduces_rate", "goal": 0.70, "direction": "min", "label": "Situações: a persona que estreia se apresenta"},
     {"metric": "single_question_rate", "goal": 0.95, "direction": "min", "label": "Situações: uma pergunta só ao aluno"},
     {"metric": "last_line_to_student_rate", "goal": 1.0, "direction": "min", "label": "Situações: a última fala é dirigida ao aluno"},
+    {"metric": "scene_resolved_rate", "goal": 0.90, "direction": "min", "label": "Situações: só quem decide concede, e concede quando a condição é cumprida"},
+    {"metric": "speaker_rate", "goal": 1.0, "direction": "min", "label": "Situações: a fala final é dita por quem decide"},
     {"metric": "session_dangling_rounds", "goal": 0, "direction": "max", "label": "Sessões: rodadas que terminam dirigidas a outra persona"},
     {"metric": "session_multi_question_rate", "goal": 0.05, "direction": "max", "label": "Sessões: rodadas com mais de uma pergunta"},
     {"metric": "session_over_limit_runs", "goal": 0, "direction": "max", "label": "Sessões: persona acima do máximo de rodadas seguidas"},

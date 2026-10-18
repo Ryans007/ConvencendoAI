@@ -113,8 +113,8 @@ Os casos são JSON em `apps/agents/evaluation/cases/`, validados antes de qualqu
   aparece no relatório mas não entra na conta).
 - `situations.json`: o ponto da conversa, a persona da vez, as marcas da rodada (`taking_over`,
   `addressed`) e `expect`, com verificações estruturais (`passes_to`, `no_handoff`,
-  `single_question`, `last_line_to_student`, `introduces`, `scene_resolved`, `next_speaker`) e
-  perguntas de sim ou não para o juiz (`{"judge": "..."}`).
+  `single_question`, `last_line_to_student`, `introduces`, `scene_resolved`, `next_speaker`,
+  `speaker`, que confere quem diz a primeira fala da rodada) e perguntas de sim ou não para o juiz (`{"judge": "..."}`).
 - `students.json`: o perfil do aluno simulado e as instruções por fala (`beats`).
 - `targets.json`: a meta de cada métrica, no mínimo (`min`) ou no máximo (`max`).
 

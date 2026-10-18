@@ -13,6 +13,7 @@ _CHECK_TEXT = {
     "last_line_to_student": "a última fala é dirigida ao aluno",
     "scene_resolved": "estado de cena resolvida como esperado",
     "next_speaker": "a próxima persona da vez é a esperada",
+    "speaker": "a fala é dita pela persona esperada",
 }
 MAX_EXAMPLES = 3
 
