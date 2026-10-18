@@ -16,7 +16,10 @@ class ScenarioRole(models.Model):
     `scene_function`, `traits`, `resistance`, `concession` e `extra_instruction`
     descrevem a persona para a cena, como o objetivo e o contexto do cenário: ficam em
     português. `scaffolding_levels` marca em quais níveis este papel apoia o aluno
-    quando ele trava — independente do arquétipo escolhido.
+    quando ele trava — independente do arquétipo escolhido. `decides_outcome` marca o
+    papel que tem poder de decidir o resultado da cena: só ele encerra a cena como
+    resolvida e diz as falas finais. Um cenário sem nenhum papel marcado trata todos como
+    quem decide.
     """
 
     scenario = models.ForeignKey(Scenario, on_delete=models.CASCADE, related_name="roles")
@@ -31,6 +34,15 @@ class ScenarioRole(models.Model):
     resistance = models.TextField()
     concession = models.TextField()
     extra_instruction = models.TextField(blank=True)
+    decides_outcome = models.BooleanField(
+        default=False,
+        verbose_name="decide o resultado da cena",
+        help_text=(
+            "Marque o papel que pode conceder o que o aluno quer e encerrar a cena. "
+            "Um aliado, por exemplo, apoia o aluno mas não decide. Se nenhum papel do "
+            "cenário estiver marcado, todos são tratados como quem decide."
+        ),
+    )
     opening_order = models.PositiveSmallIntegerField()
     scaffolding_levels = models.ManyToManyField(
         Level, blank=True, related_name="scaffolding_roles"

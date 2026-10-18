@@ -33,6 +33,11 @@ class _NobodyAddressed:
         return RoutingDecision(speaker="")
 
 
+class _AlwaysRachel:
+    def invoke(self, messages):
+        return RoutingDecision(speaker="rachel")
+
+
 def _turn(line: str, resolved: bool = False) -> PersonaTurn:
     return PersonaTurn(line=line, pass_to="student", scene_resolved=resolved)
 
@@ -47,13 +52,11 @@ async def _keep_the_test_connection() -> None:
     """
 
 
-def _prepare(monkeypatch, *turns, tutor=None):
+def _prepare(monkeypatch, *turns, tutor=None, router=_NobodyAddressed):
     monkeypatch.setattr("channels.consumer.aclose_old_connections", _keep_the_test_connection)
     persona = _ScriptedPersonaLLM(*turns)
     monkeypatch.setattr(graph_personas, "get_structured_llm", lambda purpose, schema: persona)
-    monkeypatch.setattr(
-        graph_routing, "get_structured_llm", lambda purpose, schema: _NobodyAddressed()
-    )
+    monkeypatch.setattr(graph_routing, "get_structured_llm", lambda purpose, schema: router())
     monkeypatch.setattr(voice_consumers, "transcribe", lambda audio: "I need one more week.")
     monkeypatch.setattr(voice_consumers, "synthesize", lambda text, voice: b"fake-wav-bytes")
     calls = []
@@ -114,6 +117,7 @@ def test_hint_is_answered_counted_once_per_turn_and_marks_the_answer(
         _turn("Why do you need more time?"),
         _turn("And what is your plan?"),
         _turn("Fine, take the week.", resolved=True),
+        router=_AlwaysRachel,
     )
     evaluated = _capture_evaluation(monkeypatch)
 

@@ -39,12 +39,14 @@ def test_extra_instruction_reaches_the_prompt_before_the_critical_rules():
     assert prompt.index(_FACTS) < prompt.index("CRITICAL RULES")
 
 
-def test_facts_block_says_the_facts_are_only_for_answering_and_never_for_own_questions():
+def test_facts_block_lets_the_persona_answer_and_ask_about_experience_but_not_invent():
     prompt = _prompt_with_extra_instruction(_FACTS)
 
     block = prompt[prompt.index("MORE ABOUT YOUR ROLE") : prompt.index(_FACTS)]
     assert "ONLY to answer what the student asks you" in block
-    assert "Never build your own questions from them" in block
+    assert "ask about their own experience when it fits your role" in block
+    assert "never invent a fact that is not here" in block
+    assert "Never build your own questions from them" not in block
 
 
 def test_role_without_extra_instruction_adds_no_block():
@@ -59,11 +61,33 @@ def test_blank_extra_instruction_adds_no_block():
     assert "MORE ABOUT YOUR ROLE" not in prompt
 
 
-def test_technology_rule_restricts_the_persona_questions_not_the_answers():
+def test_technical_questions_are_allowed_but_never_as_an_exam():
     prompt = _prompt_with_extra_instruction(_FACTS)
 
-    assert "into a\n  question you ask them" in prompt
-    assert "you may state the facts you know about the scene" in prompt
+    assert "YOU ARE NOT AN EXAMINER" not in prompt
+    assert "TECHNICAL QUESTIONS" in prompt
+    assert "ask about their technical choices and about alternatives" in prompt
+    assert "never ask whether they know a concept" in prompt
+    assert "did not mention" not in prompt
+
+
+def test_the_persona_is_told_to_use_what_the_student_already_said():
+    prompt = _prompt(3)
+
+    assert "NEVER ASK FOR WHAT YOU ALREADY KNOW" in prompt
+    assert prompt.index("\nCRITICAL RULES\n") < prompt.index("NEVER ASK FOR WHAT YOU ALREADY KNOW")
+    assert 'after "my room 312", never' in prompt
+
+
+def test_asking_if_the_english_is_correct_is_not_a_request_for_correction():
+    prompt = _prompt(3)
+
+    assert "IF THE STUDENT ASKS WHETHER THEIR ENGLISH IS CORRECT" in prompt
+    assert prompt.index("\nCRITICAL RULES\n") < prompt.index("WHETHER THEIR ENGLISH IS CORRECT")
+    assert 'Never say "your English is good /' in prompt
+    assert 'fine / clear / understandable"' in prompt
+    assert "never repeat\n  their sentence in a better form" in prompt
+    assert "say that you understood\n  what they said" in prompt
 
 
 def _prompt(level_order: int = 1, **flags) -> str:
@@ -103,7 +127,8 @@ def test_the_line_that_resolves_the_scene_asks_nothing():
     for level_order in (1, 2, 3):
         prompt = " ".join(_prompt(level_order).split())
 
-        assert 'The only exception is the line that resolves the scene (see "scene_resolved"' in prompt
+        exception = 'The only exception is the line that resolves the scene (see "scene_resolved"'
+        assert exception in prompt
         resolved_rule = prompt[prompt.index('- "scene_resolved"') :]
         assert "close the interaction naturally, with NO question" in resolved_rule
         assert "the session ends right after it" in resolved_rule
@@ -215,3 +240,49 @@ def test_the_notice_says_what_the_transcription_is_and_forbids_commenting_on_it(
     assert "automatic voice transcription" in TRANSCRIPTION_NOTICE
     assert '"I won" for "I want"' in TRANSCRIPTION_NOTICE
     assert "Never mention, correct or comment on the transcription" in TRANSCRIPTION_NOTICE
+
+
+def _deadline_prompt(role_key: str, level_order: int = 3) -> str:
+    content = load_scenario_content(
+        Scenario.objects.get(slug="negociar-prazo"), Level.objects.get(order=level_order)
+    )
+    return build_system_prompt(content, content.role(role_key), memory="")
+
+
+def test_the_prompt_carries_the_archetype_with_its_description():
+    prompt = _deadline_prompt("tom")
+
+    assert "Your interactional role in this scene: Aliado." in prompt
+    assert "apoia quando o argumento é bom" in prompt
+
+
+def test_the_role_that_decides_is_told_to_concede_when_the_condition_is_met():
+    prompt = _deadline_prompt("rachel")
+
+    assert "You decide this." in prompt
+    assert "resistance ENDS the moment" in prompt
+    assert "CONCESSION CHECK: split what makes you concede into its parts" in prompt
+    assert 'Fill "condition_met" first' in prompt
+    assert "concede in THAT very line" in prompt
+    assert 'set "scene_resolved" to true and ask NO question' in prompt
+    assert "Concede as soon as the student meets what makes you concede" in prompt
+    assert "Do not hand it over easily" not in prompt
+
+
+def test_the_role_that_does_not_decide_never_grants_or_confirms_the_outcome():
+    prompt = _deadline_prompt("tom")
+
+    assert "You do NOT decide this: Rachel (key: rachel) does." in prompt
+    assert 'always answer "condition_met": false and "scene_resolved":\nfalse' in prompt
+    assert "CONCESSION CHECK" not in prompt
+    assert "Concede as soon as" not in prompt
+    assert "Do not hand it over easily" not in prompt
+
+
+def test_in_a_scenario_where_both_roles_decide_both_get_the_deciders_block():
+    content = _content()
+
+    for role in content.roles:
+        prompt = build_system_prompt(content, role, memory="")
+
+        assert "You decide this." in prompt

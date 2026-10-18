@@ -27,6 +27,8 @@ class Role:
     name: str
     voice: str
     archetype: str
+    archetype_description: str
+    decides_outcome: bool
     scene_function: str
     traits: str
     resistance: str
@@ -71,6 +73,18 @@ class ScenarioContent:
     def role_keys(self) -> list[str]:
         return [role.key for role in self.roles]
 
+    def deciders(self) -> list[Role]:
+        """Os papéis que decidem o resultado da cena, na ordem de abertura.
+
+        Um cenário sem nenhum papel marcado trata todos como quem decide: assim um cenário
+        cadastrado sem a marca continua se comportando como antes.
+        """
+        marked = [role for role in self.roles if role.decides_outcome]
+        return marked or list(self.roles)
+
+    def decides(self, key: str) -> bool:
+        return any(role.key == key for role in self.deciders())
+
 
 def load_scenario_content(scenario: Scenario, level: Level) -> ScenarioContent:
     """Monta o conteúdo de execução de um cenário para um nível, a partir do catálogo.
@@ -95,6 +109,8 @@ def load_scenario_content(scenario: Scenario, level: Level) -> ScenarioContent:
             name=scenario_role.persona.name,
             voice=scenario_role.persona.voice,
             archetype=scenario_role.archetype.name,
+            archetype_description=scenario_role.archetype.description,
+            decides_outcome=scenario_role.decides_outcome,
             scene_function=scenario_role.scene_function,
             traits=scenario_role.traits,
             resistance=scenario_role.resistance,
