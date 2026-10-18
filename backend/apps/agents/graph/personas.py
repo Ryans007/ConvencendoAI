@@ -2,6 +2,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from apps.agents.graph.state import ScenarioState
 from apps.agents.services.adaptation import adaptation_hint
+from apps.agents.services.dialogue_lines import addressed_persona
 from apps.agents.services.model_input import conversation_messages
 from apps.agents.services.participation import scene_participation
 from apps.agents.services.round_trace import record_round_event
@@ -115,6 +116,13 @@ def make_persona_node(content: ScenarioContent, memory: str):
     - Quando o aluno chamou a persona (`addressed_by_student`), ela responde ao que ele
       disse e fecha a rodada. A marca também é desligada depois da fala, em todos os
       caminhos de saída, e `redirect_to` junto com ela.
+    - Uma rodada nunca termina dirigida a outra persona: se a última fala tem o vocativo da
+      colega logo no começo, a colega fala em seguida, responde e pergunta ao aluno, no máximo
+      uma fala a mais, e o evento `dangling_answered` fica no registro. Se essa fala também
+      termina dirigida à outra, a rodada termina assim e `dangling_unresolved` registra a falha.
+      Isso cobre os três caminhos em que a persona escrevia para a colega e ninguém respondia:
+      a passagem devolvida, a persona que assume pelo equilíbrio ou pelo assunto, e a persona
+      chamada pelo aluno.
     - Quando a persona resolve a cena (`scene_resolved`), a sessão termina logo depois da
       fala, então uma pergunta nela ficaria sem resposta. O prompt completo manda perguntar
       em toda rodada e manda fechar a interação, e o modelo obedece às duas: marca a cena
@@ -200,31 +208,48 @@ def make_persona_node(content: ScenarioContent, memory: str):
         speaker = role
         resolved = _accepted_resolution(content, role, turn.scene_resolved)
 
-        next_key = key
-        if redirect_role and not from_fallback and not resolved:
-            other = redirect_role
-            other_participation = scene_participation(content, other.key, history + lines)
+        def speak_after(other: Role, previous: Role) -> bool:
+            """Faz `other` falar na mesma rodada, depois de `previous`; devolve se resolveu a cena."""
             other_system = build_system_prompt(
                 content,
                 other,
                 memory,
                 adaptation_line,
-                other_participation,
-                received_from=role,
+                scene_participation(content, other.key, history + lines),
+                received_from=previous,
             )
             other_llm = get_structured_llm(ModelPurpose.PERSONA, PersonaTurn)
             other_turn, other_text, _ = _generate_turn(
                 other_llm, conversation_messages(other_system, history + lines), other, history
             )
             _speak(other, other_text)
-            record_round_event("handoff", origin=key, target=other.key)
             lines.append(AIMessage(content=f"[{other.name}] {other_text}"))
-            speaker = other
-            next_key = other.key
-            resolved = resolved or _accepted_resolution(
-                content, other, other_turn.scene_resolved
+            return _accepted_resolution(content, other, other_turn.scene_resolved)
+
+        next_key = key
+        if redirect_role and not from_fallback and not resolved:
+            record_round_event("handoff", origin=key, target=redirect_role.key)
+            resolved = speak_after(redirect_role, role) or resolved
+            speaker = redirect_role
+            next_key = redirect_role.key
+            print(f"[routing] passagem de {role.name} para {redirect_role.name}; {resolved=}")
+
+        names = [candidate.name for candidate in content.roles]
+        target_name = None if resolved else addressed_persona(
+            lines[-1].content, speaker.name, names
+        )
+        if target_name is not None:
+            target = next(candidate for candidate in content.roles if candidate.name == target_name)
+            print(
+                f"[routing] fala de {speaker.name} dirigida a {target.name}; "
+                f"{target.name} responde na mesma rodada"
             )
-            print(f"[routing] passagem de {role.name} para {other.name}; resolved={resolved}")
+            record_round_event("dangling_answered", speaker=speaker.key, target=target.key)
+            resolved = speak_after(target, speaker) or resolved
+            speaker = target
+            next_key = target.key
+            if addressed_persona(lines[-1].content, speaker.name, names) is not None:
+                record_round_event("dangling_unresolved", speaker=speaker.key)
 
         if resolved and "?" in lines[-1].content:
             print(
