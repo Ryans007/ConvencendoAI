@@ -3,14 +3,10 @@ from typing import Any
 
 from apps.agents.evaluation import judge
 from apps.agents.evaluation.case_loader import Expectation, Situation
-from apps.agents.evaluation.metrics import (
-    introduces_self,
-    is_addressed_to_another,
-    question_count,
-    speaker_and_text,
-)
+from apps.agents.evaluation.metrics import introduces_self, question_count
 from apps.agents.evaluation.output import captured_output
 from apps.agents.graph.personas import make_persona_node
+from apps.agents.services.dialogue_lines import is_addressed_to_another, speaker_and_text
 from apps.agents.services.round_trace import collect_round_events
 from apps.agents.services.scenario_content import ScenarioContent
 
