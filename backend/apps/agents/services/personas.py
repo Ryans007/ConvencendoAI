@@ -83,6 +83,14 @@ right person for that, and address {name} by name. {name} answers right after yo
 same turn. Do not answer the subject yourself and do not give an opinion about it.
 """
 
+_DEBUT_TEXT = """
+THIS IS YOUR FIRST LINE IN THE CONVERSATION
+You have not spoken yet. Start your line by introducing yourself in a few words: your name
+and your role in this scene ({function}, said in English), for example
+"Hi, I'm {name}, the <your role in English>." Then react briefly to what the student said
+and ask this turn's question.
+"""
+
 _RECEIVED_TEXT = """
 {name} JUST HANDED THIS TO YOU
 The student's last message is about your area in this scene, and {name} passed it to you in
@@ -131,6 +139,13 @@ def build_system_prompt(
     aluno diz vale mesmo sem a marca, porque uma pergunta feita sem nomear ninguém (por
     exemplo, sobre os próximos passos) também é dirigida a quem está falando com ele; a
     marca só reforça o caso em que há certeza.
+
+    A persona que ainda não falou na conversa recebe o aviso de estreia e se apresenta, por
+    qualquer motivo que a tenha trazido à cena (equilíbrio, assunto, chamado do aluno ou
+    passagem de vez). Medido com o modelo real, sem o aviso o Tom entrava e se apresentava em 0
+    de 6 vezes: o prompt dizia quantas vezes a OUTRA já tinha falado, mas nunca que ela mesma
+    estava estreando. A abertura, que não recebe a participação, e a persona que só
+    redireciona, que fala uma frase sem pergunta, ficam de fora.
 
     Com `redirect_to`, o aluno chamou esta persona para um assunto que é da função de
     outro personagem: ela diz numa frase, sem pergunta, que é com ele, e quem recebe a passagem
@@ -206,6 +221,14 @@ YOU ARE THE STUDENT'S SUPPORT IN THIS SCENE
         else ""
     )
     received_text = _RECEIVED_TEXT.format(name=received_from.name) if received_from else ""
+    debut = (
+        participation is not None
+        and redirect_to is None
+        and participation.lines_by_role.get(role.key, 0) == 0
+    )
+    debut_text = (
+        _DEBUT_TEXT.format(name=role.name, function=role.scene_function) if debut else ""
+    )
 
     return f"""You are {role.name}, {role.scene_function}.
 Your interactional role in this scene: {role.archetype}.
@@ -249,7 +272,7 @@ NEVER REPEAT A QUESTION
   the conversation to a different subject. Never ask the same question a third
   time, even reworded.
 
-{participation_text}{taking_over_text}{addressed_text}{redirect_text}{received_text}
+{participation_text}{taking_over_text}{addressed_text}{redirect_text}{received_text}{debut_text}
 IF THE STUDENT ASKS FOR HELP
 If they ask how to say something, ask you to repeat, to speak more slowly, or
 say they did not understand: help them immediately and warmly, in character.
