@@ -17,6 +17,10 @@ class ScenarioState(TypedDict):
     `addressed_by_student` fica ligado só na rodada em que o roteador reconheceu que o
     aluno falou com uma persona específica, inclusive a que já era a da vez: quem foi
     chamado responde ao que ele disse e fecha a rodada.
+
+    `redirect_to` fica preenchido só na rodada em que o aluno chamou uma persona para um
+    assunto que é de outro personagem: é a chave de quem recebe a passagem de vez, feita pelo
+    sistema e não pela persona.
     """
 
     messages: Annotated[Sequence[BaseMessage], add_messages]
@@ -26,3 +30,4 @@ class ScenarioState(TypedDict):
     should_end: bool
     taking_over: bool
     addressed_by_student: bool
+    redirect_to: str

@@ -75,6 +75,30 @@ hand the floor to the other character.
 """
 
 
+_REDIRECT_TEXT = """
+THIS SUBJECT IS NOT YOUR AREA
+The student's last message is about {name}'s area in this scene ({function}), not yours.
+Your line is ONE short sentence in your own words, with NO question: say that {name} is the
+right person for that, and address {name} by name. {name} answers right after you, in this
+same turn. Do not answer the subject yourself and do not give an opinion about it.
+"""
+
+_DEBUT_TEXT = """
+THIS IS YOUR FIRST LINE IN THE CONVERSATION
+You have not spoken yet. Start your line by introducing yourself in a few words: your name
+and your role in this scene ({function}, said in English), for example
+"Hi, I'm {name}, the <your role in English>." Then react briefly to what the student said
+and ask this turn's question.
+"""
+
+_RECEIVED_TEXT = """
+{name} JUST HANDED THIS TO YOU
+The student's last message is about your area in this scene, and {name} passed it to you in
+this same turn. Answer what the student said or asked first, then ask this turn's question
+to the student yourself. Do not hand the floor back in this line.
+"""
+
+
 TRANSCRIPTION_NOTICE = """
 HOW YOU RECEIVE WHAT THE STUDENT SAYS
 The student speaks, and what you read is an automatic voice transcription, so a word may
@@ -93,6 +117,8 @@ def build_system_prompt(
     participation: SceneParticipation | None = None,
     taking_over: bool = False,
     addressed_by_student: bool = False,
+    redirect_to: Role | None = None,
+    received_from: Role | None = None,
 ) -> str:
     """Monta o system prompt do papel para esta execução.
 
@@ -113,6 +139,19 @@ def build_system_prompt(
     aluno diz vale mesmo sem a marca, porque uma pergunta feita sem nomear ninguém (por
     exemplo, sobre os próximos passos) também é dirigida a quem está falando com ele; a
     marca só reforça o caso em que há certeza.
+
+    A persona que ainda não falou na conversa recebe o aviso de estreia e se apresenta, por
+    qualquer motivo que a tenha trazido à cena (equilíbrio, assunto, chamado do aluno ou
+    passagem de vez). Medido com o modelo real, sem o aviso o Tom entrava e se apresentava em 0
+    de 6 vezes: o prompt dizia quantas vezes a OUTRA já tinha falado, mas nunca que ela mesma
+    estava estreando. A abertura, que não recebe a participação, e a persona que só
+    redireciona, que fala uma frase sem pergunta, ficam de fora.
+
+    Com `redirect_to`, o aluno chamou esta persona para um assunto que é da função de
+    outro personagem: ela diz numa frase, sem pergunta, que é com ele, e quem recebe a passagem
+    (`received_from`) responde primeiro e pergunta. A passagem de vez não é mais uma escolha da
+    persona: medido com o modelo real, ela nunca passava a vez por conta própria (0 das 20
+    trocas de 5 sessões), então o sistema decide e a persona só escreve a fala.
 
     A instrução extra do papel, cadastrada no admin, entra num bloco próprio antes das
     regras: é onde o cenário dá à persona os fatos que ela precisa para responder ao
@@ -148,11 +187,6 @@ def build_system_prompt(
             "a fact that contradicts them, and never invent a fact that is not here.\n"
             f"{extra_instruction}\n"
         )
-    areas_text = "\n".join(
-        f"- {content.role(key).name} (key: {key}): {content.role(key).scene_function}"
-        for key in other_keys
-    ) or "- nobody else"
-
     memory_text = ""
     if memory:
         memory_text = f"""
@@ -181,7 +215,20 @@ YOU ARE THE STUDENT'S SUPPORT IN THIS SCENE
         )
         outcome_text = _NOT_DECIDER_OUTCOME.format(deciders=deciders)
         concession_text = ""
-    valid_keys = " | ".join(f'"{key}"' for key in other_keys) or "null"
+    redirect_text = (
+        _REDIRECT_TEXT.format(name=redirect_to.name, function=redirect_to.scene_function)
+        if redirect_to
+        else ""
+    )
+    received_text = _RECEIVED_TEXT.format(name=received_from.name) if received_from else ""
+    debut = (
+        participation is not None
+        and redirect_to is None
+        and participation.lines_by_role.get(role.key, 0) == 0
+    )
+    debut_text = (
+        _DEBUT_TEXT.format(name=role.name, function=role.scene_function) if debut else ""
+    )
 
     return f"""You are {role.name}, {role.scene_function}.
 Your interactional role in this scene: {role.archetype}.
@@ -225,20 +272,7 @@ NEVER REPEAT A QUESTION
   the conversation to a different subject. Never ask the same question a third
   time, even reworded.
 
-SHARING THE CONVERSATION
-This is a conversation among all the characters and the student. Each other
-character has their own area in this scene:
-{areas_text}
-- When the conversation reaches another character's area, hand them the
-  floor: set "pass_to" to their key and address your own line to THEM — a
-  short remark in your own words, using their name, that invites them to take
-  over, with no question for the student. Vary it every time; never reuse a
-  line you or anyone already said. They speak immediately after you and ask
-  this turn's question to the student.
-- Never let both of you ask the student something in the same turn. If your
-  line is addressed to the other character, it must not also pose a question
-  to the student — leave that entirely to whoever speaks last this turn.
-{participation_text}{taking_over_text}{addressed_text}
+{participation_text}{taking_over_text}{addressed_text}{redirect_text}{received_text}{debut_text}
 IF THE STUDENT ASKS FOR HELP
 If they ask how to say something, ask you to repeat, to speak more slowly, or
 say they did not understand: help them immediately and warmly, in character.
@@ -248,8 +282,8 @@ scene. This is never a reason to be impatient.
 CRITICAL RULES
 - QUESTION FORMAT (this overrides how you resist and what you ask for):
   {content.questions} This limit is per TURN, not per line: either you ask
-  this turn's question yourself, or you hand the floor to the other character
-  and THEY ask it. Express your resistance and your conditions to concede
+  this turn's question yourself, or the other character takes the floor right
+  after you and THEY ask it. Express your resistance and your conditions to concede
   ONLY within this format. An invitation to the student to go on (for example,
   "Anything else you'd like to know?") counts as this turn's question. The only
   exception is the line that resolves the scene (see "scene_resolved" below):
@@ -279,16 +313,12 @@ CRITICAL RULES
   answer. Your line is only YOUR part of the conversation.
 - Stay in character. You are NOT an English teacher and you never grade or
   correct the student's grammar or vocabulary.
-- Speak DIRECTLY to the student (use "you") in every line, UNLESS you are
-  handing the floor to the other character this turn — that is the only
-  case where your line addresses them instead (see "pass_to" below).
+- Speak DIRECTLY to the student (use "you") in every line, UNLESS a block above
+  tells you to address the other character this turn.
 - Your spoken line is English only.
 - Never reveal what the student must do to succeed. Do not coach the task.
 - Speak ONLY as {role.name}.
 
-- "pass_to": "student" when this line is addressed to the student; one of
-  {valid_keys} when this line is addressed to that character instead, and they
-  should respond right now, in this same turn.
 - "scene_resolved": true ONLY when the student already obtained what they
   wanted from you and there is nothing left to negotiate. Your line should
   then close the interaction naturally, with NO question: the session ends

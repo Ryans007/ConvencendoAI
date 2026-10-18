@@ -3,11 +3,11 @@ import pytest
 from apps.agents.evaluation.metrics import (
     change_causes,
     introduces_self,
-    is_addressed_to_another,
     question_count,
     session_metrics,
     split_rounds,
 )
+from apps.agents.services.dialogue_lines import is_addressed_to_another
 from apps.agents.services.scenario_content import load_scenario_content
 from apps.catalog.models import Level, Scenario
 

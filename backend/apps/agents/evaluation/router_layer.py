@@ -6,6 +6,7 @@ from langchain_core.messages import HumanMessage
 from apps.agents.evaluation.case_loader import NO_ADDRESSEE, RouterCase
 from apps.agents.evaluation.output import captured_output
 from apps.agents.graph.routing import make_routing_node
+from apps.agents.services.round_trace import collect_round_events
 from apps.agents.services.scenario_content import ScenarioContent
 
 _ROUTER_FAILURE_MARK = "falha ao decidir roteamento"
@@ -22,6 +23,18 @@ class NeutralDraw:
         return upper
 
 
+def _topic_owner(events: list[dict[str, Any]]) -> str:
+    """O dono do assunto que o modelo do diretor respondeu, lido do evento `direction`.
+
+    É a resposta do modelo, antes das regras do código (o aliado não assume pelo assunto): a
+    camada mede o acerto do modelo, e a regra de quem assume é medida nas situações.
+    """
+    for event in events:
+        if event["kind"] == "direction":
+            return event["topic_owner"]
+    return NO_ADDRESSEE
+
+
 def run_router_layer(
     cases: list[RouterCase],
     contents: dict[tuple[str, int], ScenarioContent],
@@ -33,6 +46,8 @@ def run_router_layer(
     O nó do roteador trata uma falha do modelo em silêncio (segue "sem destinatário"), o que
     faria uma falha parecer um erro de acerto. Por isso a saída do nó é inspecionada, e a
     decisão vira `error` quando ele conta que falhou.
+
+    O dono do assunto sai do evento `direction` do nó, que guarda o que o modelo respondeu.
     """
     results = []
     for case in cases:
@@ -42,7 +57,7 @@ def run_router_layer(
                 "messages": [*case.history, HumanMessage(content=case.line)],
                 "current_speaker": case.current,
             }
-            with captured_output() as output:
+            with captured_output() as output, collect_round_events() as events:
                 decision = node(state)
             failed = _ROUTER_FAILURE_MARK in output.getvalue()
             if decision.get("addressed_by_student"):
@@ -50,6 +65,8 @@ def run_router_layer(
             else:
                 routed = NO_ADDRESSEE
             accepted = sorted(case.accepted) if case.accepted is not None else None
+            topic_routed = _topic_owner(events)
+            topic_accepted = sorted(case.topic) if case.topic is not None else None
             results.append(
                 {
                     "id": case.id,
@@ -61,6 +78,11 @@ def run_router_layer(
                     "repetition": repetition,
                     "routed": routed,
                     "correct": None if accepted is None else routed in accepted,
+                    "topic_routed": topic_routed,
+                    "topic_accepted": topic_accepted,
+                    "topic_correct": (
+                        None if topic_accepted is None else topic_routed in topic_accepted
+                    ),
                     "error": output.getvalue().strip() if failed else "",
                 }
             )
@@ -77,7 +99,11 @@ def summarize_router(results: list[dict[str, Any]]) -> dict[str, Any]:
     scored = [r for r in results if r["correct"] is not None and not r["error"]]
     named = [r for r in scored if r["kind"] == "named"]
     answers = [r for r in scored if r["kind"] == "answer"]
+    topic = [r for r in results if r.get("topic_correct") is not None and not r["error"]]
     return {
+        "topic_total": len(topic),
+        "topic_correct": sum(1 for r in topic if r["topic_correct"]),
+        "topic_errors": [r for r in topic if not r["topic_correct"]],
         "named_total": len(named),
         "named_correct": sum(1 for r in named if r["correct"]),
         "answer_total": len(answers),

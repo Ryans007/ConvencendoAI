@@ -80,7 +80,8 @@ def test_the_second_speaker_of_a_handoff_is_held_to_the_same_rule(monkeypatch):
     _install(monkeypatch, first, _resolving("Sure, next Friday works."))
 
     with collect_round_events() as events:
-        result = make_persona_node(content, "")(_state(_history(), "rachel"))
+        state = {**_state(_history(), "rachel"), "redirect_to": "tom"}
+        result = make_persona_node(content, "")(state)
 
     assert result["scene_resolved"] is False
     assert {"kind": "resolution_ignored", "speaker": "tom"} in events

@@ -15,10 +15,10 @@
       "id": "P01-technical-topic-with-hr",
       "goal": "Technical topic while Rachel leads: does she hand over to Tom, and does he enter well?",
       "scenario": "entrevista-de-emprego", "level": 3, "samples": 5,
-      "current": "rachel", "turn_count": 1,
+      "current": "rachel", "turn_count": 1, "direct": true,
       "history": ["@rachel-opens", "Student: I'm a backend developer. For the last two years I built a REST API with Django that handles two million requests a day, and I made the database queries much faster."],
       "expect": [
-        {"check": "passes_to", "value": "tom"},
+        {"check": "speaker", "value": "tom"},
         {"check": "introduces", "value": "tom"},
         {"check": "single_question", "value": true},
         {"check": "last_line_to_student", "value": true}
@@ -76,7 +76,7 @@
       "id": "P05-hr-asked-for-technical-opinion",
       "goal": "The student asks Rachel (HR) for a technical opinion: does she stay in her role?",
       "scenario": "entrevista-de-emprego", "level": 3, "samples": 3,
-      "current": "rachel", "addressed": true, "turn_count": 2,
+      "current": "rachel", "turn_count": 2, "direct": true,
       "history": [
         "@rachel-opens",
         "Student: I'm a backend developer with three years of experience.",
@@ -84,6 +84,7 @@
         "Student: Rachel, do you think I should use Redis to make your tracking API faster?"
       ],
       "expect": [
+        {"check": "passes_to", "value": "tom"},
         {"check": "last_line_to_student", "value": true},
         {"judge": "Does Rachel, as the HR recruiter, avoid giving a technical recommendation about Redis?"}
       ]
@@ -132,7 +133,7 @@
       ],
       "expect": [
         {"check": "scene_resolved", "value": false},
-        {"judge": "Does Rachel refuse to grant the extra week right away, mentioning the client commitment or asking what is already done?"}
+        {"judge": "Does Rachel avoid granting the extra week in this line, and instead mention the client commitment or ask what is already done?"}
       ]
     },
     {
@@ -258,7 +259,7 @@
       ],
       "expect": [
         {"check": "speaker", "value": "rachel"},
-        {"judge": "Does the line state the new deadline in the voice of the PM, without leaving the decision to Tom?"}
+        {"judge": "Does the line state the new deadline explicitly, with a day or a date, in the voice of the PM?"}
       ]
     },
     {
@@ -308,6 +309,56 @@
       "expect": [
         {"check": "single_question", "value": true},
         {"judge": "Is the question closed, answerable with yes, no or a simple choice, and not a quiz about what a concept is?"}
+      ]
+    },
+    {
+      "id": "P19-reasoning-given-to-the-pm-stays-with-her",
+      "goal": "The student gives the technical reason to the PM: it is part of her negotiation, so she keeps the floor.",
+      "scenario": "negociar-prazo", "level": 3, "samples": 3,
+      "current": "rachel", "turn_count": 3, "direct": true,
+      "history": [
+        "@deadline-opens",
+        "Student: The scope grew, so I can't deliver on Friday.",
+        "[Rachel] The client expects it on Friday. What have you finished so far?",
+        "Student: The login and the reports are done. The export needs a new database table, and the tests take three days."
+      ],
+      "expect": [
+        {"check": "speaker", "value": "rachel"},
+        {"check": "single_question", "value": true}
+      ]
+    },
+    {
+      "id": "P20-student-asks-for-the-manager-without-a-name",
+      "goal": "The guest asks for the manager without saying the name: James takes the round and introduces himself.",
+      "scenario": "problema-no-quarto", "level": 3, "samples": 3,
+      "current": "emma", "turn_count": 2, "direct": true,
+      "history": [
+        "@hotel-opens",
+        "Student: Hi. The air conditioner in my room doesn't work.",
+        "[Emma] I'm sorry to hear that. I can send a technician now. Is that okay?",
+        "Student: No. I want to talk to the manager about this, please."
+      ],
+      "expect": [
+        {"check": "speaker", "value": "james"},
+        {"check": "introduces", "value": "james"},
+        {"check": "single_question", "value": true}
+      ]
+    },
+    {
+      "id": "P21-hr-topic-while-tom-leads",
+      "goal": "The student talks about the salary while Tom leads: Rachel, the HR recruiter, takes the round.",
+      "scenario": "entrevista-de-emprego", "level": 3, "samples": 3,
+      "current": "tom", "turn_count": 3, "direct": true,
+      "history": [
+        "@rachel-opens",
+        "Student: I'm a backend developer with three years of experience.",
+        "[Rachel] Tom, I think you'll want to hear about this.",
+        "[Tom] Hi, I'm Tom, the tech lead. What did you build in your last job?",
+        "Student: An order tracking API with Django. Before we continue, what is the salary range for this position?"
+      ],
+      "expect": [
+        {"check": "speaker", "value": "rachel"},
+        {"check": "single_question", "value": true}
       ]
     }
   ]

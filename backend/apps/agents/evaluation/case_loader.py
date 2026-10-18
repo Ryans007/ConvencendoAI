@@ -34,7 +34,11 @@ class CaseError(ValueError):
 
 @dataclass(frozen=True)
 class RouterCase:
-    """Uma fala do aluno rotulada, para medir o acerto do roteador."""
+    """Uma fala do aluno rotulada, para medir o acerto do roteador.
+
+    `accepted` são os destinatários aceitos e `topic`, quando declarado, os donos de assunto
+    aceitos; `none` significa "ninguém" nos dois. Sem `topic`, o assunto não é medido.
+    """
 
     id: str
     scenario: str
@@ -43,6 +47,7 @@ class RouterCase:
     current: str
     line: str
     accepted: frozenset[str] | None
+    topic: frozenset[str] | None = None
 
     @property
     def kind(self) -> str:
@@ -63,7 +68,11 @@ class Expectation:
 
 @dataclass(frozen=True)
 class Situation:
-    """Um ponto fixo da conversa, para gerar a rodada da persona várias vezes."""
+    """Um ponto fixo da conversa, para gerar a rodada da persona várias vezes.
+
+    Com `direct`, a rodada passa antes pelo diretor de cena real, com o sorteio do equilíbrio
+    neutralizado, e as marcas da situação (`taking_over`, `addressed`) são as que ele decidir.
+    """
 
     id: str
     goal: str
@@ -76,6 +85,7 @@ class Situation:
     turn_count: int
     history: list[BaseMessage]
     expectations: list[Expectation]
+    direct: bool = False
 
 
 @dataclass(frozen=True)
@@ -203,8 +213,16 @@ def _router_cases(directory: Path, resolver: _Resolver) -> list[RouterCase]:
                 if key != NO_ADDRESSEE:
                     resolver.persona(case_id, content, key)
             accepted = frozenset(accepted)
+        topic = raw.get("topic")
+        if topic is not None:
+            for key in topic:
+                if key != NO_ADDRESSEE:
+                    resolver.persona(case_id, content, key)
+            topic = frozenset(topic)
         cases.append(
-            RouterCase(case_id, raw["scenario"], level, history, current, raw["line"], accepted)
+            RouterCase(
+                case_id, raw["scenario"], level, history, current, raw["line"], accepted, topic
+            )
         )
     return cases
 
@@ -255,6 +273,7 @@ def _situations(directory: Path, resolver: _Resolver) -> list[Situation]:
                 expectations=[
                     _expectation(case_id, item, content, resolver) for item in raw["expect"]
                 ],
+                direct=bool(raw.get("direct", False)),
             )
         )
     return situations

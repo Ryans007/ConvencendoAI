@@ -240,3 +240,15 @@ def test_the_scene_resolved_and_speaker_checks_have_their_own_rates():
 
     assert values["scene_resolved_rate"] == 0.5
     assert values["speaker_rate"] == 1.0
+
+
+def test_the_topic_accuracy_is_a_metric_of_its_own():
+    router = [
+        {"id": "a", "kind": "answer", "correct": True, "error": "", "topic_correct": True},
+        {"id": "b", "kind": "answer", "correct": True, "error": "", "topic_correct": False},
+        {"id": "c", "kind": "answer", "correct": True, "error": "", "topic_correct": None},
+    ]
+
+    values = metric_values(router, [], [])
+
+    assert values["router_topic_accuracy"] == 0.5

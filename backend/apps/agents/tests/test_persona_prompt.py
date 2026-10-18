@@ -286,3 +286,72 @@ def test_in_a_scenario_where_both_roles_decide_both_get_the_deciders_block():
         prompt = build_system_prompt(content, role, memory="")
 
         assert "You decide this." in prompt
+
+
+def _interview_prompt(role_key: str, history: list, **flags) -> str:
+    from apps.agents.services.participation import scene_participation
+
+    content = load_scenario_content(
+        Scenario.objects.get(slug="entrevista-de-emprego"), Level.objects.get(order=3)
+    )
+    participation = scene_participation(content, role_key, history)
+    return build_system_prompt(
+        content, content.role(role_key), memory="", participation=participation, **flags
+    )
+
+
+_RACHEL_ONLY = [
+    AIMessage(content="[Rachel] Hi, I'm Rachel from HR. Can you tell me about yourself?"),
+    HumanMessage(content="I built a REST API with Django."),
+]
+
+
+def test_a_persona_that_has_not_spoken_yet_is_told_to_introduce_herself():
+    prompt = _interview_prompt("tom", _RACHEL_ONLY, taking_over=True)
+
+    assert "THIS IS YOUR FIRST LINE IN THE CONVERSATION" in prompt
+    assert 'introducing yourself in a few words: your name' in prompt
+    assert "Hi, I'm Tom, the <your role in English>." in prompt
+    assert "tech lead do time de backend" in prompt
+
+
+def test_a_persona_that_already_spoke_is_not_told_to_introduce_herself_again():
+    history = [
+        *_RACHEL_ONLY,
+        AIMessage(content="[Tom] Hi, I'm Tom, the tech lead. What did you build?"),
+        HumanMessage(content="An order tracking API."),
+    ]
+
+    assert "FIRST LINE IN THE CONVERSATION" not in _interview_prompt("tom", history)
+    assert "FIRST LINE IN THE CONVERSATION" not in _interview_prompt("rachel", history)
+
+
+def test_the_debut_notice_does_not_depend_on_why_the_persona_entered():
+    for flags in ({}, {"taking_over": True}, {"addressed_by_student": True}):
+        prompt = _interview_prompt("tom", _RACHEL_ONLY, **flags)
+
+        assert "FIRST LINE IN THE CONVERSATION" in prompt
+
+
+def test_the_persona_that_receives_the_topic_is_also_told_to_introduce_herself():
+    content = load_scenario_content(
+        Scenario.objects.get(slug="entrevista-de-emprego"), Level.objects.get(order=3)
+    )
+    prompt = _interview_prompt("tom", _RACHEL_ONLY, received_from=content.role("rachel"))
+
+    assert "Rachel JUST HANDED THIS TO YOU" in prompt
+    assert "FIRST LINE IN THE CONVERSATION" in prompt
+
+
+def test_the_persona_that_only_redirects_gets_no_debut_notice():
+    content = load_scenario_content(
+        Scenario.objects.get(slug="entrevista-de-emprego"), Level.objects.get(order=3)
+    )
+    prompt = _interview_prompt("tom", _RACHEL_ONLY, redirect_to=content.role("rachel"))
+
+    assert "THIS SUBJECT IS NOT YOUR AREA" in prompt
+    assert "FIRST LINE IN THE CONVERSATION" not in prompt
+
+
+def test_the_opening_line_gets_no_debut_notice():
+    assert "FIRST LINE IN THE CONVERSATION" not in _prompt(3)

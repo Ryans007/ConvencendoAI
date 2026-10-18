@@ -3,6 +3,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from apps.agents.graph import routing as graph_routing
 from apps.agents.graph.routing import NO_ADDRESSEE, make_routing_node
+from apps.agents.services.round_trace import collect_round_events
 from apps.agents.services.scenario_content import load_scenario_content
 from apps.agents.services.schemas import RoutingDecision
 from apps.catalog.models import Level, Scenario
@@ -270,5 +271,164 @@ def test_router_prompt_separates_thanking_by_name_from_calling_someone(monkeypat
     system = fake.received[0][0].content
     assert "A name used only to thank or greet someone" in system
     assert "is also NOT addressing them" in system
-    assert "the key of the one who receives the student's request or question" in system
-    assert "never the one who is only\nbeing thanked" in system
+    assert "answer with the key of the one who receives" in system
+    assert "the student's request or question, never the one who is only being thanked" in system
+
+
+def _director_says(monkeypatch, speaker: str, topic_owner: str) -> None:
+    monkeypatch.setattr(
+        graph_routing,
+        "get_structured_llm",
+        lambda purpose, schema: _FakeRoutingLLM(
+            RoutingDecision(speaker=speaker, topic_owner=topic_owner)
+        ),
+    )
+
+
+def _interview():
+    return load_scenario_content(
+        Scenario.objects.get(slug="entrevista-de-emprego"), Level.objects.get(order=3)
+    )
+
+
+def test_a_topic_of_the_other_character_hands_them_the_round_without_calling(monkeypatch):
+    content = _interview()
+    rachel, tom = content.role_keys()
+    _director_says(monkeypatch, NO_ADDRESSEE, tom)
+
+    with collect_round_events() as events:
+        result = make_routing_node(content, _FixedDraw(3))(_state(rachel, _history("Rachel", 1)))
+
+    assert result == {"current_speaker": tom, "taking_over": True}
+    assert {"kind": "topic_takeover", "speaker": tom, "previous": rachel} in events
+    assert {
+        "kind": "direction",
+        "speaker": NO_ADDRESSEE,
+        "topic_owner": tom,
+        "leader": rachel,
+    } in events
+
+
+def test_an_ally_does_not_take_the_round_only_because_of_the_topic(monkeypatch):
+    content = _content()
+    rachel, tom = content.role_keys()
+    _director_says(monkeypatch, NO_ADDRESSEE, tom)
+
+    with collect_round_events() as events:
+        result = make_routing_node(content, _FixedDraw(3))(_state(rachel, _history("Rachel", 1)))
+
+    assert result == {}
+    assert not [e for e in events if e["kind"] == "topic_takeover"]
+    assert {
+        "kind": "direction",
+        "speaker": NO_ADDRESSEE,
+        "topic_owner": tom,
+        "leader": rachel,
+    } in events
+
+
+def test_the_one_who_decides_takes_the_round_when_the_ally_leads_and_the_topic_is_hers(
+    monkeypatch,
+):
+    content = _content()
+    rachel, tom = content.role_keys()
+    _director_says(monkeypatch, NO_ADDRESSEE, rachel)
+
+    result = make_routing_node(content, _FixedDraw(3))(_state(tom, _history("Tom", 1)))
+
+    assert result == {"current_speaker": rachel, "taking_over": True}
+
+
+def test_an_ally_called_by_the_student_still_answers(monkeypatch):
+    content = _content()
+    rachel, tom = content.role_keys()
+    _director_says(monkeypatch, tom, tom)
+
+    result = make_routing_node(content, _FixedDraw(3))(_state(rachel, _history("Rachel", 1)))
+
+    assert result["current_speaker"] == tom
+    assert result["addressed_by_student"] is True
+
+
+def test_a_topic_of_the_current_speaker_changes_nothing(monkeypatch):
+    content = _content()
+    rachel, tom = content.role_keys()
+    _director_says(monkeypatch, NO_ADDRESSEE, rachel)
+
+    result = make_routing_node(content, _FixedDraw(3))(_state(rachel, _history("Rachel", 1)))
+
+    assert result == {}
+
+
+def test_a_general_topic_leaves_the_decision_to_the_balance(monkeypatch):
+    content = _content()
+    rachel, tom = content.role_keys()
+    _director_says(monkeypatch, NO_ADDRESSEE, NO_ADDRESSEE)
+
+    result = make_routing_node(content, _FixedDraw(2))(_state(rachel, _history("Rachel", 2)))
+
+    assert result == {"current_speaker": tom, "taking_over": True}
+
+
+def test_calling_a_persona_for_the_topic_of_the_other_marks_the_redirect(monkeypatch):
+    content = _content()
+    rachel, tom = content.role_keys()
+    _director_says(monkeypatch, rachel, tom)
+
+    with collect_round_events() as events:
+        result = make_routing_node(content, _FixedDraw(3))(_state(rachel, _history("Rachel", 1)))
+
+    assert result == {"addressed_by_student": True, "redirect_to": tom}
+    assert {"kind": "topic_redirect", "speaker": rachel, "target": tom} in events
+
+
+def test_calling_the_other_persona_for_the_topic_of_a_third_keeps_the_redirect(monkeypatch):
+    content = _content()
+    rachel, tom = content.role_keys()
+    _director_says(monkeypatch, tom, rachel)
+
+    result = make_routing_node(content, _FixedDraw(3))(_state(rachel, _history("Rachel", 1)))
+
+    assert result == {
+        "current_speaker": tom,
+        "taking_over": False,
+        "addressed_by_student": True,
+        "redirect_to": rachel,
+    }
+
+
+def test_calling_a_persona_for_their_own_topic_marks_no_redirect(monkeypatch):
+    content = _content()
+    rachel, tom = content.role_keys()
+    _director_says(monkeypatch, tom, tom)
+
+    result = make_routing_node(content, _FixedDraw(3))(_state(rachel, _history("Rachel", 1)))
+
+    assert "redirect_to" not in result
+    assert result["current_speaker"] == tom
+
+
+def test_the_topic_of_an_unknown_key_is_ignored(monkeypatch):
+    content = _content()
+    rachel, tom = content.role_keys()
+    _director_says(monkeypatch, NO_ADDRESSEE, "nobody")
+
+    result = make_routing_node(content, _FixedDraw(3))(_state(rachel, _history("Rachel", 1)))
+
+    assert result == {}
+
+
+def test_the_director_prompt_carries_who_leads_and_what_each_role_covers(monkeypatch):
+    content = _content()
+    rachel, tom = content.role_keys()
+    fake = _ReadsTheTranscript({})
+    monkeypatch.setattr(graph_routing, "get_structured_llm", lambda purpose, schema: fake)
+
+    make_routing_node(content, _FixedDraw(3))(_state(rachel, _history("Rachel", 1)))
+
+    system = fake.received[0][0].content
+    assert f"{content.role(rachel).name} is leading now" in system
+    assert f"- {content.role(tom).name} (key: {tom}): {content.role(tom).scene_function}" in system
+    assert '"topic_owner"' in system
+    assert "is the leader's subject" not in system
+    assert f"is {content.role(rachel).name}'s subject" in system

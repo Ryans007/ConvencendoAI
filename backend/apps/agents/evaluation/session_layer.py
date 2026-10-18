@@ -5,7 +5,8 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from apps.agents.evaluation import judge
 from apps.agents.evaluation.case_loader import StudentProfile
-from apps.agents.evaluation.metrics import session_metrics, speaker_and_text
+from apps.agents.evaluation.metrics import session_metrics
+from apps.agents.services.dialogue_lines import speaker_and_text
 from apps.agents.evaluation.output import captured_output
 from apps.agents.evaluation.simulated_student import SimulatedStudent
 from apps.agents.graph.builder import build_scenario_graph

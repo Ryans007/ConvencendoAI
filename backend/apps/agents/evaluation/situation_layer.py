@@ -3,14 +3,12 @@ from typing import Any
 
 from apps.agents.evaluation import judge
 from apps.agents.evaluation.case_loader import Expectation, Situation
-from apps.agents.evaluation.metrics import (
-    introduces_self,
-    is_addressed_to_another,
-    question_count,
-    speaker_and_text,
-)
+from apps.agents.evaluation.metrics import introduces_self, question_count
 from apps.agents.evaluation.output import captured_output
+from apps.agents.evaluation.router_layer import NeutralDraw
 from apps.agents.graph.personas import make_persona_node
+from apps.agents.graph.routing import make_routing_node
+from apps.agents.services.dialogue_lines import is_addressed_to_another, speaker_and_text
 from apps.agents.services.round_trace import collect_round_events
 from apps.agents.services.scenario_content import ScenarioContent
 
@@ -78,17 +76,22 @@ def run_situation_layer(
 
     Cada amostra guarda as falas, os eventos, o resultado de cada expectativa e, com o juiz
     ligado, o veredito das perguntas semânticas e da lista de verificação de cada fala. Uma
-    falha ao gerar a rodada fica registrada na amostra, sem interromper as demais.
+    falha ao gerar a rodada fica registrada na amostra, sem interromper as demais. Uma situação
+    `direct` passa antes pelo diretor de cena, para medir de ponta a ponta quem conduz a rodada.
     """
     results = []
     for situation in situations:
         content = contents[(situation.scenario, situation.level)]
         node = make_persona_node(content, memory="")
+        director = make_routing_node(content, rng=NeutralDraw()) if situation.direct else None
         for sample in range(samples or situation.samples):
             entry: dict[str, Any] = {"situation": situation.id, "sample": sample, "error": ""}
             try:
+                state = _sample_state(situation)
                 with captured_output(), collect_round_events() as events:
-                    out = node(_sample_state(situation))
+                    if director is not None:
+                        state = {**state, **director(state)}
+                    out = node(state)
             except Exception as exc:
                 entry["error"] = f"{type(exc).__name__}: {exc}"
                 results.append(entry)

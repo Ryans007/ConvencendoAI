@@ -2,6 +2,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from apps.agents.graph.state import ScenarioState
 from apps.agents.services.adaptation import adaptation_hint
+from apps.agents.services.dialogue_lines import addressed_persona
 from apps.agents.services.model_input import conversation_messages
 from apps.agents.services.participation import scene_participation
 from apps.agents.services.round_trace import record_round_event
@@ -29,22 +30,23 @@ def _speak(role: Role, text: str) -> None:
 
 def _generate_turn(
     llm, messages: list, role: Role, history: list
-) -> tuple[PersonaTurn, str, str]:
+) -> tuple[PersonaTurn, str, bool]:
     """Gera a fala da persona; se vier vazia, tenta uma vez mais e depois usa o fallback.
 
     Medido em teste real: a fala vazia vem do modelo preenchendo o schema com `line`
     vazio, não de resposta sem schema — por isso a nova tentativa fica aqui, e não só
-    na fábrica. Devolve o turno, o texto a falar e o `pass_to` efetivo, que é
-    `"student"` quando o fallback é usado, porque uma fala de fallback nunca passa a vez.
+    na fábrica. Devolve o turno, o texto a falar e se foi usado o fallback: uma fala de
+    fallback é uma pergunta ao aluno e nunca passa a vez, então o chamador não a faz seguir
+    de uma passagem de vez.
     """
     for attempt in range(2):
         turn = llm.invoke(messages)
         text = sanitize_line(turn.line)
         if text:
-            return turn, text, turn.pass_to
+            return turn, text, False
         print(f"[warning] {role.name} returned an empty line (attempt {attempt + 1}).")
     print(f"[warning] {role.name}: using fallback line.")
-    return turn, fallback_line(role, history), "student"
+    return turn, fallback_line(role, history), True
 
 
 def make_opening_node(content: ScenarioContent, memory: str):
@@ -95,23 +97,32 @@ def _accepted_resolution(content: ScenarioContent, role: Role, resolved: bool) -
 
 
 def make_persona_node(content: ScenarioContent, memory: str):
-    """Nó que faz o papel da vez responder, falar e decidir o próximo passo.
+    """Nó que faz o papel da vez responder e falar, e que fecha a rodada.
 
     - Na última fala do cenário, a persona encerra em vez de perguntar, senão a sessão
       termina com uma pergunta no ar.
     - Dois turnos antes do fim, a cena abre a oportunidade para os próprios critérios,
       uma vez só.
-    - Na passagem de vez, o outro personagem entra na mesma rodada. Se ele só falasse
-      na rodada seguinte, a fala da persona atual seria apenas um aviso de troca, e o
-      aluno ficaria sem nada para responder.
-    - Quando o equilíbrio de turno entrega a vez (`taking_over`), a persona que entra
-      recebe a instrução de reagir à resposta do aluno e perguntar, e a passagem de vez
-      dela nessa fala é ignorada: senão o aluno poderia ficar sem pergunta na rodada. A
-      marca é desligada depois da fala.
+    - A passagem de vez é decidida pelo diretor de cena, não pela persona: o `pass_to` que
+      ela devolve é ignorado e fica no registro como `handoff_ignored`. Só há passagem quando
+      o aluno chamou uma persona para o assunto de outro personagem (`redirect_to`): a
+      persona chamada diz numa frase que é com ele, e ele entra na mesma rodada, responde e
+      pergunta. Se ele só falasse na rodada seguinte, a fala da persona chamada seria apenas
+      um aviso de troca, e o aluno ficaria sem nada para responder. Uma fala de fallback nunca
+      é seguida de passagem de vez.
+    - Quando o equilíbrio de turno ou o assunto entrega a vez (`taking_over`), a persona que
+      entra recebe a instrução de reagir à resposta do aluno e perguntar. A marca é
+      desligada depois da fala.
     - Quando o aluno chamou a persona (`addressed_by_student`), ela responde ao que ele
-      disse e fecha a rodada: passar a vez deixaria a resposta ao aluno no meio da rodada,
-      com a pergunta vindo de um personagem que ele não chamou. A marca também é
-      desligada depois da fala, em todos os caminhos de saída.
+      disse e fecha a rodada. A marca também é desligada depois da fala, em todos os
+      caminhos de saída, e `redirect_to` junto com ela.
+    - Uma rodada nunca termina dirigida a outra persona: se a última fala tem o vocativo da
+      colega logo no começo, a colega fala em seguida, responde e pergunta ao aluno, no máximo
+      uma fala a mais, e o evento `dangling_answered` fica no registro. Se essa fala também
+      termina dirigida à outra, a rodada termina assim e `dangling_unresolved` registra a falha.
+      Isso cobre os três caminhos em que a persona escrevia para a colega e ninguém respondia:
+      a passagem devolvida, a persona que assume pelo equilíbrio ou pelo assunto, e a persona
+      chamada pelo aluno.
     - Quando a persona resolve a cena (`scene_resolved`), a sessão termina logo depois da
       fala, então uma pergunta nela ficaria sem resposta. O prompt completo manda perguntar
       em toda rodada e manda fechar a interação, e o modelo obedece às duas: marca a cena
@@ -137,6 +148,10 @@ def make_persona_node(content: ScenarioContent, memory: str):
         adaptation_line = adaptation_hint(history)
         taking_over = bool(state.get("taking_over"))
         addressed = bool(state.get("addressed_by_student"))
+        redirect_key = state.get("redirect_to") or ""
+        redirect_role = (
+            content.role(redirect_key) if redirect_key in keys and redirect_key != key else None
+        )
 
         if state.get("turn_count", 0) >= max_turns:
             final_role = final_speaker(content, role)
@@ -149,6 +164,7 @@ def make_persona_node(content: ScenarioContent, memory: str):
                 "scene_resolved": True,
                 "taking_over": False,
                 "addressed_by_student": False,
+                "redirect_to": "",
             }
 
         if state.get("turn_count", 0) == max_turns - 2 and content.closing_hint:
@@ -162,6 +178,7 @@ def make_persona_node(content: ScenarioContent, memory: str):
                     "current_speaker": final_role.key,
                     "taking_over": False,
                     "addressed_by_student": False,
+                    "redirect_to": "",
                 }
 
         participation = scene_participation(content, key, history)
@@ -173,56 +190,66 @@ def make_persona_node(content: ScenarioContent, memory: str):
             participation,
             taking_over=taking_over,
             addressed_by_student=addressed,
+            redirect_to=redirect_role,
         )
         messages = conversation_messages(system, history)
 
         llm = get_structured_llm(ModelPurpose.PERSONA, PersonaTurn)
-        turn, text, pass_to = _generate_turn(llm, messages, role, history)
-        if taking_over and pass_to in keys:
-            print(f"[routing] {role.name} acabou de assumir; passagem de vez ignorada")
-            record_round_event("handoff_ignored", speaker=key, reason="taking_over")
-            pass_to = "student"
-        elif addressed and pass_to in keys:
-            print(f"[routing] {role.name} foi chamado pelo aluno; passagem de vez ignorada")
-            record_round_event("handoff_ignored", speaker=key, reason="addressed")
-            pass_to = "student"
+        turn, text, from_fallback = _generate_turn(llm, messages, role, history)
+        directed = redirect_role.key if redirect_role else key
+        if turn.pass_to in keys and turn.pass_to not in (key, directed):
+            print(f"[routing] {role.name} tentou passar a vez; quem decide e o diretor de cena")
+            record_round_event("handoff_ignored", speaker=key, reason="director_decides")
 
         _speak(role, text)
-        print(
-            f"[routing] current_speaker={key} pass_to={pass_to} "
-            f"scene_resolved={turn.scene_resolved}"
-        )
+        print(f"[routing] current_speaker={key} scene_resolved={turn.scene_resolved}")
 
         lines = [AIMessage(content=f"[{role.name}] {text}")]
         speaker = role
         resolved = _accepted_resolution(content, role, turn.scene_resolved)
 
-        next_key = pass_to
-        if next_key in keys and next_key != key and not resolved:
-            other = content.role(next_key)
-            other_participation = scene_participation(content, next_key, history + lines)
+        def speak_after(other: Role, previous: Role) -> bool:
+            """Faz `other` falar na mesma rodada, depois de `previous`; devolve se resolveu a cena."""
             other_system = build_system_prompt(
-                content, other, memory, adaptation_line, other_participation
+                content,
+                other,
+                memory,
+                adaptation_line,
+                scene_participation(content, other.key, history + lines),
+                received_from=previous,
             )
             other_llm = get_structured_llm(ModelPurpose.PERSONA, PersonaTurn)
-            other_turn, other_text, other_pass_to = _generate_turn(
+            other_turn, other_text, _ = _generate_turn(
                 other_llm, conversation_messages(other_system, history + lines), other, history
             )
             _speak(other, other_text)
-            record_round_event("handoff", origin=key, target=next_key)
             lines.append(AIMessage(content=f"[{other.name}] {other_text}"))
-            speaker = other
-            resolved = resolved or _accepted_resolution(
-                content, other, other_turn.scene_resolved
-            )
+            return _accepted_resolution(content, other, other_turn.scene_resolved)
+
+        next_key = key
+        if redirect_role and not from_fallback and not resolved:
+            record_round_event("handoff", origin=key, target=redirect_role.key)
+            resolved = speak_after(redirect_role, role) or resolved
+            speaker = redirect_role
+            next_key = redirect_role.key
+            print(f"[routing] passagem de {role.name} para {redirect_role.name}; {resolved=}")
+
+        names = [candidate.name for candidate in content.roles]
+        target_name = None if resolved else addressed_persona(
+            lines[-1].content, speaker.name, names
+        )
+        if target_name is not None:
+            target = next(candidate for candidate in content.roles if candidate.name == target_name)
             print(
-                f"[routing] handoff current_speaker={next_key} "
-                f"pass_to={other_pass_to} scene_resolved={resolved}"
+                f"[routing] fala de {speaker.name} dirigida a {target.name}; "
+                f"{target.name} responde na mesma rodada"
             )
-            if other_pass_to in keys:
-                next_key = other_pass_to
-        else:
-            next_key = next_key if next_key in keys else key
+            record_round_event("dangling_answered", speaker=speaker.key, target=target.key)
+            resolved = speak_after(target, speaker) or resolved
+            speaker = target
+            next_key = target.key
+            if addressed_persona(lines[-1].content, speaker.name, names) is not None:
+                record_round_event("dangling_unresolved", speaker=speaker.key)
 
         if resolved and "?" in lines[-1].content:
             print(
@@ -245,6 +272,7 @@ def make_persona_node(content: ScenarioContent, memory: str):
             "scene_resolved": resolved,
             "taking_over": False,
             "addressed_by_student": False,
+            "redirect_to": "",
         }
 
     return node_persona

@@ -2,15 +2,8 @@ import re
 from collections import Counter
 from typing import Any
 
+from apps.agents.services.dialogue_lines import is_addressed_to_another, speaker_and_text
 from apps.agents.services.scenario_content import ScenarioContent
-
-_SPEAKER = re.compile(r"^\[([^\]]+)\]\s*(.*)$", re.DOTALL)
-
-
-def speaker_and_text(line: str) -> tuple[str, str] | None:
-    """Separa a fala de persona "[Nome] texto" no nome e no texto; `None` para outra linha."""
-    match = _SPEAKER.match(line)
-    return (match.group(1), match.group(2)) if match else None
 
 
 def split_rounds(transcript: list[str]) -> list[list[str]]:
@@ -27,23 +20,6 @@ def split_rounds(transcript: list[str]) -> list[list[str]]:
 def question_count(lines: list[str]) -> int:
     """Quantos pontos de interrogação há nas falas: cada um conta como uma pergunta ao aluno."""
     return sum(line.count("?") for line in lines)
-
-
-def is_addressed_to_another(line: str, speaker_name: str, names: list[str]) -> bool:
-    """A fala se dirige a outra persona, pelo nome, logo no começo.
-
-    Considera só o vocativo nas primeiras palavras ("Tom, this one is yours." ou "Good
-    question. Rachel, can you answer?"), que é como uma persona passa a vez. É uma heurística:
-    o relatório lista as falas apontadas para a pessoa conferir.
-    """
-    parsed = speaker_and_text(line)
-    text = parsed[1] if parsed else line
-    for name in names:
-        if name == speaker_name:
-            continue
-        if re.match(rf"^\W*(?:\w+[,.!]?\s+){{0,2}}{re.escape(name)}\s*[,?]", text):
-            return True
-    return False
 
 
 def introduces_self(line: str, name: str) -> bool:
@@ -88,7 +64,15 @@ def change_causes(events: list[dict[str, Any]]) -> Counter:
         if kind == "addressed":
             same = event["speaker"] == event["previous"]
             causes["student_same" if same else "student_directed"] += 1
-        elif kind in ("balance_takeover", "handoff", "handoff_ignored"):
+        elif kind in (
+            "balance_takeover",
+            "topic_takeover",
+            "topic_redirect",
+            "handoff",
+            "handoff_ignored",
+            "dangling_answered",
+            "dangling_unresolved",
+        ):
             causes[kind] += 1
     return causes
 

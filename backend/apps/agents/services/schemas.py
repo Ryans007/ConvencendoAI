@@ -46,11 +46,14 @@ class PersonaTurn(BaseModel):
 
 
 class RoutingDecision(BaseModel):
-    """Saída estruturada do roteador: a qual persona o aluno se dirigiu, se a alguma.
+    """Saída estruturada do diretor de cena: a quem o aluno se dirigiu e de quem é o assunto.
 
-    `"none"` quando o aluno não se dirige a ninguém em especial: separar esse caso de "o
-    aluno chamou a persona atual" é o que permite ao equilíbrio de turno valer só quando
-    a escolha não foi do aluno.
+    `speaker` é `"none"` quando o aluno não se dirige a ninguém em especial: separar esse caso
+    de "o aluno chamou a persona atual" é o que permite ao equilíbrio de turno valer só quando
+    a escolha não foi do aluno. `topic_owner` é o personagem cuja função na cena cobre o
+    assunto da fala, ou `"none"` quando o assunto é geral ou cabe em quem conduz. As duas
+    respostas saem da mesma chamada: o modelo de roteamento acertou as duas em 28 de 28 falas
+    medidas, então o assunto não custou uma chamada a mais por rodada.
     """
 
     speaker: str = Field(
@@ -58,6 +61,14 @@ class RoutingDecision(BaseModel):
         description=(
             "Key of the character the student's last message clearly addresses, "
             'or "none" if it does not address one specific character'
+        ),
+    )
+    topic_owner: str = Field(
+        default="none",
+        description=(
+            "Key of the character whose role in the scene covers the subject of the "
+            "student's last message, or \"none\" if the subject is general or fits whoever "
+            "is leading now"
         ),
     )
 

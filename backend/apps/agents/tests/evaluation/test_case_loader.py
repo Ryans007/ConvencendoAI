@@ -26,10 +26,10 @@ def _edit(directory, name, change):
 def test_the_cases_shipped_with_the_project_are_valid():
     loaded = load_cases()
 
-    assert len(loaded.router) == 21
-    assert len(loaded.situations) == 19
+    assert len(loaded.router) == 34
+    assert len(loaded.situations) == 22
     assert len(loaded.students) == 5
-    assert len(loaded.targets) == 14
+    assert len(loaded.targets) == 15
     assert ("entrevista-de-emprego", 3) in loaded.contents
 
 
@@ -215,3 +215,25 @@ def test_a_file_that_is_not_json_is_reported(cases_dir):
 
     with pytest.raises(CaseError, match="não é um JSON válido"):
         load_cases(cases_dir)
+
+
+def test_a_router_case_can_declare_the_owner_of_the_topic():
+    cases = {case.id: case for case in load_cases().router}
+
+    assert cases["R26"].topic == frozenset({"tom"})
+    assert cases["R22"].topic == frozenset({"rachel"})
+    assert cases["R01"].topic is None
+
+
+def test_a_topic_owner_outside_the_scenario_stops_the_run(cases_dir):
+    _edit(cases_dir, "router.json", lambda data: data["cases"][0].update(topic=["emma"]))
+
+    with pytest.raises(CaseError, match="R01.*'emma'"):
+        load_cases(cases_dir)
+
+
+def test_a_situation_can_run_through_the_director_first():
+    situations = {s.id: s for s in load_cases().situations}
+
+    assert situations["P01-technical-topic-with-hr"].direct is True
+    assert situations["P02-hr-topic-with-hr"].direct is False
