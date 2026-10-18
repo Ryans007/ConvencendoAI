@@ -18,7 +18,11 @@ character, in a role-play conversation with {roster}.
 Look ONLY at the student's most recent message. Answer with a character's key ONLY if the
 student explicitly turns to that character — calling them by name, or clearly speaking to
 them instead of to whoever asked last. Simply answering the question that was just asked
-is NOT addressing anyone: answer "{none}". Answer "{none}" also whenever you are not sure.
+is NOT addressing anyone: answer "{none}". A name used only to thank or greet someone
+("Thanks, Rachel. I built REST APIs...") is also NOT addressing them: it still answers the
+question that was just asked. When the message names more than one character, answer with
+the key of the one who receives the student's request or question, never the one who is only
+being thanked. Answer "{none}" also whenever you are not sure.
 
 Answer with exactly one of: {valid_keys} | "{none}"."""
 
@@ -37,6 +41,10 @@ def make_routing_node(content: ScenarioContent, rng: random.Random | None = None
     não muda o estado da conversa, então ele é registrado no log: sem o registro, um
     equilíbrio de turnos que demora mais que o esperado não deixa saber se foi sorteio ou se
     a fala foi lida como dirigida à persona da vez.
+
+    O prompt do roteador separa agradecer de chamar: medido com o modelo real, "Thanks, Rachel.
+    I built REST APIs..." (resposta à pergunta do Tom) era lida como chamado à Rachel, e "Thanks
+    for the support, Tom. Rachel, I need one more week." não era lida como chamado a ninguém.
 
     Sem modelo de roteamento configurado, ou se a chamada falhar por qualquer motivo, o
     nó trata como "sem destinatário" — o equilíbrio continua valendo, e a execução nunca

@@ -256,3 +256,19 @@ def test_nothing_is_logged_for_the_student_when_nobody_is_addressed(monkeypatch,
     logged = capsys.readouterr().out
     assert "aluno falou com" not in logged
     assert "aluno direcionou" not in logged
+
+
+def test_router_prompt_separates_thanking_by_name_from_calling_someone(monkeypatch):
+    content = _content()
+    current = content.role_keys()[0]
+    fake = _ReadsTheTranscript({})
+    monkeypatch.setattr(graph_routing, "get_structured_llm", lambda purpose, schema: fake)
+
+    history = _long_history(content, "Yes, I did.")
+    make_routing_node(content, _FixedDraw(3))(_state(current, history))
+
+    system = fake.received[0][0].content
+    assert "A name used only to thank or greet someone" in system
+    assert "is also NOT addressing them" in system
+    assert "the key of the one who receives the student's request or question" in system
+    assert "never the one who is only\nbeing thanked" in system
