@@ -81,7 +81,7 @@ def test_a_handoff_round_records_the_handoff_and_the_end_of_the_round(monkeypatc
     ]
 
     with collect_round_events() as events:
-        _persona_round(monkeypatch, content, turns)
+        _persona_round(monkeypatch, content, turns, {"redirect_to": "tom"})
 
     kinds = [event["kind"] for event in events]
     assert kinds == ["handoff", "round_end"]
@@ -90,13 +90,15 @@ def test_a_handoff_round_records_the_handoff_and_the_end_of_the_round(monkeypatc
 
 
 def test_an_ignored_handoff_is_recorded_with_the_reason(monkeypatch, content):
-    turns = [PersonaTurn(line="Rachel, you go on.", pass_to="rachel")]
+    turns = [PersonaTurn(line="What did you build?", pass_to="rachel")]
 
     with collect_round_events() as events:
         _persona_round(monkeypatch, content, turns, {"current_speaker": "tom", "taking_over": True})
 
     ignored = [event for event in events if event["kind"] == "handoff_ignored"]
-    assert ignored == [{"kind": "handoff_ignored", "speaker": "tom", "reason": "taking_over"}]
+    assert ignored == [
+        {"kind": "handoff_ignored", "speaker": "tom", "reason": "director_decides"}
+    ]
 
 
 def test_the_opening_is_recorded(monkeypatch, content):
@@ -120,7 +122,10 @@ def test_the_student_choosing_a_persona_is_recorded(monkeypatch, content):
     with collect_round_events() as events:
         node({"messages": _history(), "current_speaker": "rachel"})
 
-    assert events == [{"kind": "addressed", "speaker": "tom", "previous": "rachel"}]
+    assert events == [
+        {"kind": "direction", "speaker": "tom", "topic_owner": "none", "leader": "rachel"},
+        {"kind": "addressed", "speaker": "tom", "previous": "rachel"},
+    ]
 
 
 def test_the_balance_takeover_is_recorded(monkeypatch, content):
@@ -145,7 +150,8 @@ def test_the_balance_takeover_is_recorded(monkeypatch, content):
         node({"messages": history, "current_speaker": "rachel"})
 
     assert events == [
-        {"kind": "balance_takeover", "leader": "tom", "previous": "rachel", "rounds_led": 2}
+        {"kind": "direction", "speaker": "none", "topic_owner": "none", "leader": "rachel"},
+        {"kind": "balance_takeover", "leader": "tom", "previous": "rachel", "rounds_led": 2},
     ]
 
 

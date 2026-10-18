@@ -100,13 +100,28 @@ def test_a_situation_round_is_checked_against_what_it_expects(loaded, monkeypatc
     models.set(
         PERSONA,
         "PersonaTurn",
-        [
-            PersonaTurn(line="Tom, this one is yours.", pass_to="tom"),
-            PersonaTurn(
-                line="Hi, I'm Tom, the tech lead. Which query did you improve?",
-                pass_to="student",
-            ),
-        ],
+        PersonaTurn(line="Do you prefer remote or hybrid work?", pass_to="student"),
+    )
+
+    results = run_situation_layer(
+        [_situation(loaded, "P02-hr-topic-with-hr")],
+        loaded.contents,
+        samples=1,
+        use_judge=False,
+    )
+
+    sample = results[0]
+    assert sample["round"] == ["[Rachel] Do you prefer remote or hybrid work?"]
+    outcomes = {item["check"]: item["ok"] for item in sample["expectations"]}
+    assert outcomes == {"no_handoff": True, "single_question": True}
+
+
+def test_a_persona_that_tries_to_hand_over_alone_is_not_followed(loaded, monkeypatch):
+    models = FakeModels().install(monkeypatch)
+    models.set(
+        PERSONA,
+        "PersonaTurn",
+        PersonaTurn(line="Which query did you improve?", pass_to="tom"),
     )
 
     results = run_situation_layer(
@@ -116,15 +131,9 @@ def test_a_situation_round_is_checked_against_what_it_expects(loaded, monkeypatc
         use_judge=False,
     )
 
-    sample = results[0]
-    assert sample["round"][0].startswith("[Rachel] Tom, this one")
-    outcomes = {item["check"]: item["ok"] for item in sample["expectations"]}
-    assert outcomes == {
-        "passes_to": True,
-        "introduces": True,
-        "single_question": True,
-        "last_line_to_student": True,
-    }
+    outcomes = {item["check"]: item["ok"] for item in results[0]["expectations"]}
+    assert outcomes["passes_to"] is False
+    assert len(results[0]["round"]) == 1
 
 
 def test_a_round_that_ends_dangling_fails_the_check(loaded, monkeypatch):

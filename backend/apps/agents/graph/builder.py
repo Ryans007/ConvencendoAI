@@ -52,5 +52,6 @@ def run_scenario(content: ScenarioContent, memory: str = "") -> dict:
         "should_end": False,
         "taking_over": False,
         "addressed_by_student": False,
+        "redirect_to": "",
     }
     return graph.invoke(initial_state, config={"recursion_limit": 200})
