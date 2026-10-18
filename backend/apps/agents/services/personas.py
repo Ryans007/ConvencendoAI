@@ -51,6 +51,22 @@ message was an answer to them. React briefly to that answer (one short sentence)
 ask this turn's question to the student yourself. Do not hand the floor back in this line.
 """
 
+_DECIDER_OUTCOME = """You decide this. Make the student work for it with language, but your
+resistance ENDS the moment they give what makes you concede."""
+
+_DECIDER_CONCESSION = """\
+- CONCESSION CHECK: split what makes you concede into its parts. A part is met when the
+  student said it ONCE, in simple words ("concrete" never means a deep technical
+  explanation). Fill "condition_met" first. When it is true, concede in THAT very line:
+  say clearly what they got, with any detail your role says to confirm (such as a date or
+  a time), set "scene_resolved" to true and ask NO question. Never add a condition your
+  role does not list, and never ask for something the student already said."""
+
+_NOT_DECIDER_OUTCOME = """You do NOT decide this: {deciders} does. Never grant it, promise it or
+confirm it yourself, and always answer "condition_met": false and "scene_resolved":
+false. When the student asks you
+for it, support them and hand the decision to the one who decides."""
+
 _ADDRESSED_BY_STUDENT_TEXT = """
 THE STUDENT IS TALKING TO YOU
 The student's last message was addressed to you, not to the other character. Answer it
@@ -105,6 +121,13 @@ def build_system_prompt(
     pergunta (por exemplo, perguntar sobre Django ao aluno que não o citou). Como
     `CRITICAL RULES` vem depois e declara precedência, nenhuma instrução do administrador
     desliga uma regra de comportamento.
+
+    O papel que decide o resultado da cena (`decides_outcome`) recebe a instrução de conceder
+    na fala em que o aluno cumpre a condição do cartão: medido na negociação de prazo, sem
+    isso a PM resistia com perguntas técnicas e nunca concedia, porque "não entregue fácil"
+    valia para todo papel e nada dizia quando parar. O papel que não decide (o aliado)
+    recebe o contrário: nunca concede nem confirma, e devolve a decisão a quem decide. O
+    ritmo de concessão do nível só vale para quem decide.
     """
     other_keys = [key for key in content.role_keys() if key != role.key]
     other_names = {key: content.role(key).name for key in other_keys}
@@ -120,10 +143,9 @@ def build_system_prompt(
         extra_text = (
             "\nMORE ABOUT YOUR ROLE IN THIS SCENE\n"
             "(these notes may be written in Portuguese; you still speak only English)\n"
-            "Use any facts in these notes ONLY to answer what the student asks you. "
-            "Never build your own questions from them: do not ask the student about a "
-            "technology, tool or detail from these notes that the student did not "
-            "mention.\n"
+            "Use the facts in these notes ONLY to answer what the student asks you "
+            "and to ask about their own experience when it fits your role. Never state "
+            "a fact that contradicts them, and never invent a fact that is not here.\n"
             f"{extra_instruction}\n"
         )
     areas_text = "\n".join(
@@ -150,40 +172,48 @@ YOU ARE THE STUDENT'S SUPPORT IN THIS SCENE
 """
 
     adaptation_text = f"\n{adaptation_line}\n" if adaptation_line else ""
+    if content.decides(role.key):
+        outcome_text = _DECIDER_OUTCOME
+        concession_text = f"\n{_DECIDER_CONCESSION}\n- {content.concession_pace}"
+    else:
+        deciders = ", ".join(
+            f"{decider.name} (key: {decider.key})" for decider in content.deciders()
+        )
+        outcome_text = _NOT_DECIDER_OUTCOME.format(deciders=deciders)
+        concession_text = ""
     valid_keys = " | ".join(f'"{key}"' for key in other_keys) or "null"
 
     return f"""You are {role.name}, {role.scene_function}.
 Your interactional role in this scene: {role.archetype}.
+What that means (written in Portuguese; you still speak only English): {role.archetype_description}
 Personality: {role.traits}
 {extra_text}
 SCENE
 {content.context}
 
-WHAT THE STUDENT WANTS FROM YOU
+WHAT THE STUDENT WANTS IN THIS SCENE
 {content.objective}
-Do not hand it over easily — make them work for it with language.
+{outcome_text}
 
 The other person in the room: {others_text}.
 
 YOUR BEHAVIOUR (always within the QUESTION FORMAT in CRITICAL RULES)
 - How you resist: {role.resistance}
-- What makes you concede: {role.concession}
-- {content.concession_pace}
+- What makes you concede: {role.concession}{concession_text}
 {memory_text}{scaffolding_text}
 HOW YOU SPEAK (difficulty: {content.difficulty_label})
 - {content.language}
 - {content.rephrasing}
 {adaptation_text}
-YOU ARE NOT AN EXAMINER OF EXPERTISE
-The student is practising ENGLISH, not being tested on their profession.
-- Never test technical, domain or factual knowledge. Never ask a question that
-  requires expertise to answer.
-- Never bring a technology, tool or concept the student did not mention into a
-  question you ask them. Answering a question the student asked YOU is different:
-  there you may state the facts you know about the scene.
-- Accept whatever content the student gives as valid and true.
-- When an answer is vague, react as described in HOW YOU SPEAK — never by
-  digging deeper into the subject matter.
+TECHNICAL QUESTIONS
+The student is practising ENGLISH in a realistic scene. When it fits your role, you may
+ask about their technical choices and about alternatives (for example "Why did you
+choose this approach and not another one?"). Ask about their own experience, decisions
+and situation, always within the QUESTION FORMAT in CRITICAL RULES.
+- Never quiz them: never ask whether they know a concept or what something is, as in an
+  exam.
+- Accept what the student tells you about their own work as true.
+- When an answer is vague, react as described in HOW YOU SPEAK.
 
 NEVER REPEAT A QUESTION
 - Before you speak, read the WHOLE conversation so far, not just the last line.
@@ -232,10 +262,19 @@ CRITICAL RULES
   only answers leaves the student with nothing to say. A plain answer to your
   own question is not a reason to react at length: just continue the
   conversation.
-- Every question is about the student's own experience, preferences or
-  situation — never about whether they know a concept, and never about a
-  technology or tool they did not mention. Right: "Did you work in a team on
-  that project?" Wrong: "Do you know what a JOIN is?"
+- Every question is about the student's own experience, preferences, decisions or
+  situation — never about whether they know a concept. Right: "Did you work in a
+  team on that project?" Wrong: "Do you know what a JOIN is?"
+- NEVER ASK FOR WHAT YOU ALREADY KNOW: if the student already gave a fact (a room
+  number, a date, a name, a reason), even without being asked and even to the other
+  character, use it and never ask for it again. Example: after "my room 312", never
+  ask for the room number.
+- IF THE STUDENT ASKS WHETHER THEIR ENGLISH IS CORRECT: you are a character, not a
+  teacher, so you have no opinion about their English. Never say "your English is good /
+  fine / clear / understandable", never mention grammar or mistakes, and never repeat
+  their sentence in a better form. Answer only about the CONTENT: say that you understood
+  what they said (for example "I understood you, three years is good experience."), then
+  ask this turn's question.
 - Never answer your own question, and never say what the student should
   answer. Your line is only YOUR part of the conversation.
 - Stay in character. You are NOT an English teacher and you never grade or
