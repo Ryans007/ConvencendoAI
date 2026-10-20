@@ -49,7 +49,7 @@ def _state(current_speaker: str, history: list | None = None) -> dict:
         "turn_count": 1,
         "scene_resolved": False,
         "should_end": False,
-        "taking_over": False,
+        "hand_floor_to": "",
     }
 
 
@@ -61,7 +61,7 @@ def _router_says(monkeypatch, speaker: str) -> None:
     )
 
 
-def test_student_addressing_the_other_character_switches_without_taking_over(monkeypatch):
+def test_student_addressing_the_other_character_switches_without_handing_the_floor(monkeypatch):
     content = _content()
     current, other = content.role_keys()
     _router_says(monkeypatch, other)
@@ -70,7 +70,6 @@ def test_student_addressing_the_other_character_switches_without_taking_over(mon
 
     assert result == {
         "current_speaker": other,
-        "taking_over": False,
         "addressed_by_student": True,
     }
 
@@ -109,7 +108,7 @@ def test_nobody_addressed_below_the_drawn_limit_keeps_the_current_character(monk
     assert result == {}
 
 
-def test_nobody_addressed_at_the_drawn_limit_hands_over_and_marks_taking_over(monkeypatch):
+def test_nobody_addressed_at_the_drawn_limit_marks_who_gets_the_floor(monkeypatch):
     content = _content()
     current, other = content.role_keys()
     name = content.role(current).name
@@ -117,7 +116,7 @@ def test_nobody_addressed_at_the_drawn_limit_hands_over_and_marks_taking_over(mo
 
     result = make_routing_node(content, _FixedDraw(2))(_state(current, _history(name, 2)))
 
-    assert result == {"current_speaker": other, "taking_over": True}
+    assert result == {"hand_floor_to": other}
 
 
 def test_router_not_configured_still_applies_the_balance(monkeypatch):
@@ -133,7 +132,7 @@ def test_router_not_configured_still_applies_the_balance(monkeypatch):
     node = make_routing_node(content, _FixedDraw(3))
     result = node(_state(current, _history(name, content.max_consecutive_turns)))
 
-    assert result == {"current_speaker": other, "taking_over": True}
+    assert result == {"hand_floor_to": other}
 
 
 def test_router_not_configured_below_the_limit_changes_nothing(monkeypatch):
@@ -202,7 +201,6 @@ def test_student_calling_the_other_character_in_a_long_conversation_switches(mon
 
     assert result == {
         "current_speaker": other,
-        "taking_over": False,
         "addressed_by_student": True,
     }
 
@@ -299,7 +297,7 @@ def test_a_topic_of_the_other_character_hands_them_the_round_without_calling(mon
     with collect_round_events() as events:
         result = make_routing_node(content, _FixedDraw(3))(_state(rachel, _history("Rachel", 1)))
 
-    assert result == {"current_speaker": tom, "taking_over": True}
+    assert result == {"hand_floor_to": tom}
     assert {"kind": "topic_takeover", "speaker": tom, "previous": rachel} in events
     assert {
         "kind": "direction",
@@ -336,7 +334,7 @@ def test_the_one_who_decides_takes_the_round_when_the_ally_leads_and_the_topic_i
 
     result = make_routing_node(content, _FixedDraw(3))(_state(tom, _history("Tom", 1)))
 
-    assert result == {"current_speaker": rachel, "taking_over": True}
+    assert result == {"hand_floor_to": rachel}
 
 
 def test_an_ally_called_by_the_student_still_answers(monkeypatch):
@@ -367,7 +365,7 @@ def test_a_general_topic_leaves_the_decision_to_the_balance(monkeypatch):
 
     result = make_routing_node(content, _FixedDraw(2))(_state(rachel, _history("Rachel", 2)))
 
-    assert result == {"current_speaker": tom, "taking_over": True}
+    assert result == {"hand_floor_to": tom}
 
 
 def test_calling_a_persona_for_the_topic_of_the_other_marks_the_redirect(monkeypatch):
@@ -391,7 +389,6 @@ def test_calling_the_other_persona_for_the_topic_of_a_third_keeps_the_redirect(m
 
     assert result == {
         "current_speaker": tom,
-        "taking_over": False,
         "addressed_by_student": True,
         "redirect_to": rachel,
     }

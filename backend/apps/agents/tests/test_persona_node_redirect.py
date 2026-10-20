@@ -67,10 +67,11 @@ def test_the_called_persona_sends_the_topic_to_the_other_and_the_other_answers(m
     assert result["current_speaker"] == "tom"
     assert result["redirect_to"] == ""
     assert result["addressed_by_student"] is False
-    assert {"kind": "handoff", "origin": "rachel", "target": "tom"} in events
+    handoff = next(event for event in events if event["kind"] == "handoff")
+    assert (handoff["origin"], handoff["target"], handoff["reason"]) == ("rachel", "tom", "student")
     assert "THIS SUBJECT IS NOT YOUR AREA" in recording.prompts[0]
     assert "Tom's area in this scene" in recording.prompts[0]
-    assert "Rachel JUST HANDED THIS TO YOU" in recording.prompts[1]
+    assert "Rachel JUST HANDED THE FLOOR TO YOU" in recording.prompts[1]
     assert "THIS SUBJECT IS NOT YOUR AREA" not in recording.prompts[1]
 
 

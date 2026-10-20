@@ -27,7 +27,7 @@ def test_the_cases_shipped_with_the_project_are_valid():
     loaded = load_cases()
 
     assert len(loaded.router) == 34
-    assert len(loaded.situations) == 24
+    assert len(loaded.situations) == 26
     assert len(loaded.students) == 5
     assert len(loaded.targets) == 14
     assert ("entrevista-de-emprego", 3) in loaded.contents

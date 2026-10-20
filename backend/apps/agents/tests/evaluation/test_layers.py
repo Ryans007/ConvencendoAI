@@ -262,7 +262,8 @@ def test_a_full_session_runs_to_the_end_and_is_measured(loaded, monkeypatch):
     assert session["metrics"]["rounds"] == max_turns + 1
     assert session["metrics"]["dangling_rounds"] == []
     assert [event["kind"] for event in session["events"]].count("student_turn") == max_turns
-    assert len(session["roles"]) == max_turns + 1
+    persona_lines = [line for line in session["transcript"] if not line.startswith("Student:")]
+    assert len(session["roles"]) == len(persona_lines)
     assert session["roles"][0]["items"]["stays_in_function"]["answer"] == "yes"
 
 
@@ -287,7 +288,7 @@ def _topic_router(owner: str, speaker: str = "none"):
     return decide
 
 
-def test_a_situation_through_the_director_gives_the_round_to_the_owner_of_the_topic(
+def test_a_situation_through_the_director_hands_the_floor_to_the_owner_of_the_topic(
     loaded, monkeypatch
 ):
     models = FakeModels().install(monkeypatch)
@@ -295,7 +296,12 @@ def test_a_situation_through_the_director_gives_the_round_to_the_owner_of_the_to
     models.set(
         PERSONA,
         "PersonaTurn",
-        PersonaTurn(line="Hi, I'm Tom, the tech lead. Which query did you improve?", pass_to="student"),
+        [
+            PersonaTurn(line="Good, thanks. Tom, this one is for you.", pass_to="student"),
+            PersonaTurn(
+                line="Hi, I'm Tom, the tech lead. Which query did you improve?", pass_to="student"
+            ),
+        ],
     )
 
     results = run_situation_layer(
@@ -306,9 +312,11 @@ def test_a_situation_through_the_director_gives_the_round_to_the_owner_of_the_to
     )
 
     outcomes = {item["check"]: item["ok"] for item in results[0]["expectations"]}
-    assert results[0]["round"][0].startswith("[Tom] Hi, I'm Tom")
+    assert results[0]["round"][0].startswith("[Rachel] Good, thanks.")
+    assert results[0]["round"][1].startswith("[Tom] Hi, I'm Tom")
     assert outcomes == {
         "speaker": True,
+        "passes_to": True,
         "introduces": True,
         "single_question": True,
         "last_line_to_student": True,
@@ -335,7 +343,7 @@ def test_a_situation_through_the_director_fails_when_the_topic_stays_with_the_le
     )
 
     outcomes = {item["check"]: item["ok"] for item in results[0]["expectations"]}
-    assert outcomes["speaker"] is False
+    assert outcomes["passes_to"] is False
 
 
 def test_a_called_persona_for_the_colleagues_topic_passes_the_round(loaded, monkeypatch):

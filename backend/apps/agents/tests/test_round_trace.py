@@ -85,7 +85,8 @@ def test_a_handoff_round_records_the_handoff_and_the_end_of_the_round(monkeypatc
 
     kinds = [event["kind"] for event in events]
     assert kinds == ["handoff", "round_end"]
-    assert events[0] == {"kind": "handoff", "origin": "rachel", "target": "tom"}
+    assert events[0]["origin"] == "rachel" and events[0]["target"] == "tom"
+    assert events[0]["reason"] == "student"
     assert events[1]["speaker"] == "tom" and events[1]["next_speaker"] == "tom"
 
 
@@ -93,7 +94,7 @@ def test_an_ignored_handoff_is_recorded_with_the_reason(monkeypatch, content):
     turns = [PersonaTurn(line="What did you build?", pass_to="rachel")]
 
     with collect_round_events() as events:
-        _persona_round(monkeypatch, content, turns, {"current_speaker": "tom", "taking_over": True})
+        _persona_round(monkeypatch, content, turns, {"current_speaker": "tom"})
 
     ignored = [event for event in events if event["kind"] == "handoff_ignored"]
     assert ignored == [

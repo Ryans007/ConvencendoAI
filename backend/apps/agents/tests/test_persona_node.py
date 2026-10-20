@@ -113,33 +113,47 @@ def test_empty_line_never_triggers_a_same_round_handoff(monkeypatch):
     assert result["current_speaker"] == key
 
 
-def test_persona_taking_over_gets_the_entering_instruction_and_keeps_the_floor(monkeypatch):
+def test_persona_handing_the_floor_reacts_and_the_colleague_speaks_right_after(monkeypatch):
     content = _content()
     rachel, tom = content.role_keys()
     rachel_name = content.role(rachel).name
+    tom_name = content.role(tom).name
     history = [
         AIMessage(content=f"[{rachel_name}] Did you work in a team on that project?"),
         HumanMessage(content="Yes, I did."),
     ]
     prompts = []
+    turns = iter([
+        PersonaTurn(line=f"Good to hear that. {tom_name}, it is your turn.", pass_to="student"),
+        PersonaTurn(line="Nice. Did you also write the tests?", pass_to="student"),
+    ])
 
     class _RecordingLLM:
         def invoke(self, messages):
             prompts.append(messages[0].content)
-            return PersonaTurn(line="Nice. Did you also write the tests?", pass_to=rachel)
+            return next(turns)
 
     monkeypatch.setattr(graph_personas, "get_structured_llm", lambda purpose, schema: _RecordingLLM())
-    state = {**_state(history, tom), "taking_over": True}
+    state = {**_state(history, rachel), "hand_floor_to": tom}
 
-    result = make_persona_node(content, "")(state)
+    with collect_round_events() as events:
+        result = make_persona_node(content, "")(state)
 
-    assert "YOU ARE TAKING THE LEAD NOW" in prompts[0]
-    assert len(prompts) == 1
+    assert f"YOU HAND THE FLOOR TO {tom_name} NOW" in prompts[0]
+    assert f"{rachel_name} JUST HANDED THE FLOOR TO YOU" in prompts[1]
+    assert [m.content for m in result["messages"]] == [
+        f"[{rachel_name}] Good to hear that. {tom_name}, it is your turn.",
+        f"[{tom_name}] Nice. Did you also write the tests?",
+    ]
     assert result["current_speaker"] == tom
-    assert result["taking_over"] is False
+    assert result["hand_floor_to"] == ""
+    handoff = next(event for event in events if event["kind"] == "handoff")
+    assert handoff["origin"] == rachel
+    assert handoff["target"] == tom
+    assert handoff["reason"] == "hand_floor"
 
 
-def test_persona_not_taking_over_gets_no_entering_instruction(monkeypatch):
+def test_persona_without_a_handoff_gets_no_handoff_instruction(monkeypatch):
     content = _content()
     key = content.role_keys()[0]
     prompts = []
@@ -153,7 +167,59 @@ def test_persona_not_taking_over_gets_no_entering_instruction(monkeypatch):
 
     make_persona_node(content, "")(_state([HumanMessage(content="Hi.")], key))
 
-    assert "YOU ARE TAKING THE LEAD NOW" not in prompts[0]
+    assert "HAND THE FLOOR" not in prompts[0]
+
+
+def test_the_persona_that_hands_the_floor_never_asks_the_student(monkeypatch):
+    content = _content()
+    rachel, tom = content.role_keys()
+    rachel_name = content.role(rachel).name
+    tom_name = content.role(tom).name
+    history = [
+        AIMessage(content=f"[{rachel_name}] Did you work in a team on that project?"),
+        HumanMessage(content="Yes, I did."),
+    ]
+    turns = iter([
+        PersonaTurn(
+            line=f"Good to hear. {tom_name}, it is your turn. What was the hardest part?",
+            pass_to="student",
+        ),
+        PersonaTurn(line="Nice. Did you also write the tests?", pass_to="student"),
+    ])
+
+    class _ScriptedLLM:
+        def invoke(self, messages):
+            return next(turns)
+
+    monkeypatch.setattr(graph_personas, "get_structured_llm", lambda purpose, schema: _ScriptedLLM())
+
+    with collect_round_events() as events:
+        result = make_persona_node(content, "")({**_state(history, rachel), "hand_floor_to": tom})
+
+    assert result["messages"][0].content == (
+        f"[{rachel_name}] Good to hear. {tom_name}, it is your turn."
+    )
+    assert {"kind": "handoff_question_dropped", "speaker": rachel} in events
+
+
+def test_a_fallback_line_is_never_followed_by_the_handoff(monkeypatch):
+    content = _content()
+    rachel, tom = content.role_keys()
+    rachel_name = content.role(rachel).name
+    history = [
+        AIMessage(content=f"[{rachel_name}] Did you use Python?"),
+        HumanMessage(content="Yes, I did."),
+    ]
+    monkeypatch.setattr(
+        graph_personas,
+        "get_structured_llm",
+        lambda purpose, schema: _FakeStructuredLLM(PersonaTurn(line="", pass_to="student")),
+    )
+
+    result = make_persona_node(content, "")({**_state(history, rachel), "hand_floor_to": tom})
+
+    assert len(result["messages"]) == 1
+    assert result["current_speaker"] == rachel
 
 
 def test_the_persona_prompt_no_longer_asks_the_persona_to_choose_who_speaks_next(monkeypatch):
@@ -232,7 +298,7 @@ def test_second_persona_of_a_handoff_also_receives_text_with_the_handover_line(m
     assert len(second) == 2
     assert not any(isinstance(message, AIMessage) for message in second)
     assert f"[{rachel_name}] Tom, would you like to take over?" in second[1].content
-    assert f"{rachel_name} JUST HANDED THIS TO YOU" in second[0].content
+    assert f"{rachel_name} JUST HANDED THE FLOOR TO YOU" in second[0].content
 
 
 def _recording_llm(prompts: list, turn: PersonaTurn):

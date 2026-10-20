@@ -196,7 +196,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             "turn_count": 0,
             "scene_resolved": False,
             "should_end": False,
-            "taking_over": False,
+            "hand_floor_to": "",
             "addressed_by_student": False,
             "redirect_to": "",
         }

@@ -9,6 +9,7 @@ from apps.agents.services.transcript import transcript_text
 from apps.llm.constants import ModelPurpose
 from apps.llm.services.factory import get_structured_llm
 
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 _LEADING_PREFIX = re.compile(r"^\s*\[?([A-Z][a-zA-Z.\s]{0,20})\]?:\s*")
 _BRACKET_NAME = re.compile(r"^\s*\[[^\]]+\]\s*")
 
@@ -18,6 +19,19 @@ def sanitize_line(text: str) -> str:
     text = _BRACKET_NAME.sub("", (text or "").strip())
     text = _LEADING_PREFIX.sub("", text)
     return text.strip()
+
+
+def without_questions(text: str) -> str:
+    """Tira da fala as frases que são pergunta, se sobrar alguma frase.
+
+    Quem passa a palavra ao colega não pergunta ao aluno: a pergunta da rodada é de quem recebe.
+    Medido com o modelo real, mesmo com o bloco de passagem pedindo uma fala sem pergunta, o
+    modelo ainda terminava com uma em cerca de 1 de cada 5 passagens, e o aluno recebia duas
+    perguntas na mesma rodada. Uma fala que é só pergunta fica como veio, porque trocá-la por
+    nada deixaria a persona muda.
+    """
+    kept = [part for part in _SENTENCE_END.split(text.strip()) if part and "?" not in part]
+    return " ".join(kept) if kept else text
 
 
 def _participation_text(
@@ -44,11 +58,12 @@ def _participation_text(
     return "\nSCENE PARTICIPATION SO FAR\n" + "\n".join(facts) + "\n"
 
 
-_TAKING_OVER_TEXT = """
-YOU ARE TAKING THE LEAD NOW
-Until now the other character was leading the conversation, and the student's last
-message was an answer to them. React briefly to that answer (one short sentence), then
-ask this turn's question to the student yourself. Do not hand the floor back in this line.
+_HANDOFF_TEXT = """
+YOU HAND THE FLOOR TO {name} NOW
+{name} takes over the conversation right after you, in this same turn. Your line is at most
+two short sentences, with NO question: react to what the student just said, then hand the
+floor to {name} by name, in your own words. Never reuse a sentence you or anyone already said
+to hand over the floor. Do not ask the student anything: {name} asks this turn's question.
 """
 
 _DECIDER_OUTCOME = """You decide this."""
@@ -82,10 +97,10 @@ and ask this turn's question.
 """
 
 _RECEIVED_TEXT = """
-{name} JUST HANDED THIS TO YOU
-The student's last message is about your area in this scene, and {name} passed it to you in
-this same turn. Answer what the student said or asked first, then ask this turn's question
-to the student yourself. Do not hand the floor back in this line.
+{name} JUST HANDED THE FLOOR TO YOU
+{name} handed the conversation to you in this same turn. Answer or react to what the student
+said first, then ask this turn's question to the student yourself. Do not hand the floor back
+in this line.
 """
 
 
@@ -105,9 +120,9 @@ def build_system_prompt(
     memory: str,
     adaptation_line: str = "",
     participation: SceneParticipation | None = None,
-    taking_over: bool = False,
     addressed_by_student: bool = False,
     redirect_to: Role | None = None,
+    hand_floor_to: Role | None = None,
     received_from: Role | None = None,
 ) -> str:
     """Monta o system prompt do papel para esta execução.
@@ -121,8 +136,11 @@ def build_system_prompt(
     para as regras continuarem sendo a última coisa lida. Sem ele, medido com o modelo real,
     4 de 8 falas tratavam "I won a wood floor" como uma vitória; com ele, 0 de 8.
 
-    Com `taking_over`, a persona está assumindo a conversa pelo equilíbrio de turno: a
-    última fala do aluno respondeu a outro personagem, e é ela quem faz a transição.
+    Com `hand_floor_to`, o equilíbrio de turno ou o assunto trocou quem conduz: esta persona
+    reage numa frase ao que o aluno disse e passa a palavra ao colega pelo nome, sem pergunta, e
+    o colega responde primeiro e pergunta (`received_from`). Quem sai conduz a passagem porque,
+    medido numa sessão real, a entrada direta de quem chegava fazia quem tinha acabado de
+    perguntar sumir da rodada.
 
     Com `addressed_by_student`, o roteador reconheceu que o aluno falou com esta persona:
     ela responde primeiro e fecha a rodada, sem passar a vez. A regra de responder ao que o
@@ -162,7 +180,6 @@ def build_system_prompt(
     if not others_text:
         others_text = "nobody else"
     participation_text = _participation_text(content, role, participation)
-    taking_over_text = _TAKING_OVER_TEXT if taking_over else ""
     addressed_text = _ADDRESSED_BY_STUDENT_TEXT if addressed_by_student else ""
     extra_instruction = role.extra_instruction.strip()
     extra_text = ""
@@ -206,10 +223,12 @@ YOU ARE THE STUDENT'S SUPPORT IN THIS SCENE
         if redirect_to
         else ""
     )
+    handoff_text = _HANDOFF_TEXT.format(name=hand_floor_to.name) if hand_floor_to else ""
     received_text = _RECEIVED_TEXT.format(name=received_from.name) if received_from else ""
     debut = (
         participation is not None
         and redirect_to is None
+        and hand_floor_to is None
         and participation.lines_by_role.get(role.key, 0) == 0
     )
     debut_text = (
@@ -258,7 +277,7 @@ NEVER REPEAT A QUESTION
   the conversation to a different subject. Never ask the same question a third
   time, even reworded.
 
-{participation_text}{taking_over_text}{addressed_text}{redirect_text}{received_text}{debut_text}
+{participation_text}{addressed_text}{redirect_text}{handoff_text}{received_text}{debut_text}
 IF THE STUDENT ASKS FOR HELP
 If they ask how to say something, ask you to repeat, to speak more slowly, or
 say they did not understand: help them immediately and warmly, in character.
@@ -277,7 +296,9 @@ CRITICAL RULES
   it. Never skip it to ask your next question. How you do it at this level:
   {content.reply_to_student} Then ALWAYS
   finish the line with this turn's question (or the invitation): a line that
-  only answers leaves the student with nothing to say. A plain answer to your
+  only answers leaves the student with nothing to say, UNLESS a block above tells you
+  to hand the floor to the other character: then your line has no question at all,
+  because the other character asks it. A plain answer to your
   own question is not a reason to react at length: just continue the
   conversation.
 - Every question is about the student's own experience, preferences, decisions or

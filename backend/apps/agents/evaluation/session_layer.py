@@ -72,7 +72,7 @@ def run_session_layer(
             "turn_count": 0,
             "scene_resolved": False,
             "should_end": False,
-            "taking_over": False,
+            "hand_floor_to": "",
             "addressed_by_student": False,
         }
         entry: dict[str, Any] = {

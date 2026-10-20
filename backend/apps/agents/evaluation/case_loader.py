@@ -70,7 +70,7 @@ class Situation:
     """Um ponto fixo da conversa, para gerar a rodada da persona várias vezes.
 
     Com `direct`, a rodada passa antes pelo diretor de cena real, com o sorteio do equilíbrio
-    neutralizado, e as marcas da situação (`taking_over`, `addressed`) são as que ele decidir.
+    neutralizado, e as marcas da situação (`hand_floor_to`, `addressed`) são as que ele decidir.
     """
 
     id: str
@@ -79,7 +79,7 @@ class Situation:
     level: int
     samples: int
     current: str
-    taking_over: bool
+    hand_floor_to: str
     addressed: bool
     turn_count: int
     history: list[BaseMessage]
@@ -265,7 +265,11 @@ def _situations(directory: Path, resolver: _Resolver) -> list[Situation]:
                 level=raw["level"],
                 samples=int(raw["samples"]),
                 current=resolver.persona(case_id, content, raw["current"]),
-                taking_over=bool(raw.get("taking_over", False)),
+                hand_floor_to=(
+                    resolver.persona(case_id, content, raw["hand_floor_to"])
+                    if raw.get("hand_floor_to")
+                    else ""
+                ),
                 addressed=bool(raw.get("addressed", False)),
                 turn_count=int(raw.get("turn_count", 1)),
                 history=_history(case_id, list(raw["history"]), named, content),
