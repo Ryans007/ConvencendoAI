@@ -215,6 +215,37 @@ describe("continuar depois do resultado", () => {
     expect(state.finished[0].kind).toBe("back");
   });
 
+  it("o segundo erro na etapa 1 encerra o item, sem etapa 2, e ele volta amanhã", () => {
+    const miss = judged({
+      correct: false,
+      revealed_correct: "correto 1",
+      next: null,
+      result: { outcome: "failed", interval_days: 1, due_on: "2026-10-09", mastered: false },
+    });
+    const atResult = run([loaded(item(1, { attempt: 2 }), item(2)), ...answer(miss)]);
+
+    expect(atResult.reference).toBe("correto 1");
+    expect(resultActionLabel(atResult)).toBe("Próximo item");
+
+    const next = roundReducer(atResult, { type: "continue" });
+
+    expect(next).toMatchObject({ phase: "idle", index: 1, step: 1, attempt: 1 });
+    expect(next.finished[0]).toMatchObject({ kind: "back", intervalDays: 1 });
+  });
+
+  it("o segundo erro na etapa 1 do último item leva ao resumo", () => {
+    const miss = judged({
+      correct: false,
+      revealed_correct: "correto 1",
+      next: null,
+      result: { outcome: "failed", interval_days: 1, due_on: "2026-10-09", mastered: false },
+    });
+    const atResult = run([loaded(item(1)), ...answer(miss)]);
+
+    expect(resultActionLabel(atResult)).toBe("Ver resumo");
+    expect(roundReducer(atResult, { type: "continue" }).phase).toBe("summary");
+  });
+
   it("não continua sem um resultado para continuar", () => {
     const state = run([loaded(item(1))]);
 
