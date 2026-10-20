@@ -32,7 +32,7 @@ def _auth(token) -> str:
 def _fake_session(monkeypatch) -> None:
     class _Persona:
         def invoke(self, messages):
-            return PersonaTurn(line="Hello there.", pass_to="student", scene_resolved=False)
+            return PersonaTurn(line="Hello there.", pass_to="student")
 
     class _Router:
         def invoke(self, messages):

@@ -13,6 +13,7 @@ from apps.agents.services.schemas import PersonaTurn, RoutingDecision
 from apps.catalog.models import Level, Scenario
 from apps.voice import consumers as voice_consumers
 from apps.voice.routing import websocket_urlpatterns
+from apps.voice.tests.scene_end import end_after_the_first_turn
 from apps.voice.tests.session_client import SessionCommunicator
 
 pytestmark = pytest.mark.django_db
@@ -28,11 +29,12 @@ def _run_session(django_user_model, monkeypatch) -> None:
     token = str(AccessToken.for_user(user))
     scenario = Scenario.objects.get(slug="negociar-prazo")
     level = Level.objects.get(order=3)
+    end_after_the_first_turn(monkeypatch, PERSONA_REPLY)
 
     turns = iter(
         [
-            PersonaTurn(line=PERSONA_OPENING, pass_to="student", scene_resolved=False),
-            PersonaTurn(line=PERSONA_REPLY, pass_to="student", scene_resolved=True),
+            PersonaTurn(line=PERSONA_OPENING, pass_to="student"),
+            PersonaTurn(line=PERSONA_REPLY, pass_to="student"),
         ]
     )
 

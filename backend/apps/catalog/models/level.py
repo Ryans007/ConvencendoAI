@@ -8,7 +8,7 @@ class Level(models.Model):
     comportamento da persona, os dois acoplados por construção, não por escolha
     independente.
 
-    `language`, `questions`, `rephrasing`, `concession_pace` e `reply_to_student` são
+    `language`, `questions`, `rephrasing` e `reply_to_student` são
     instrução dirigida ao modelo de linguagem e ficam em inglês, porque compõem o prompt
     da persona. Os demais
     campos de texto do catálogo — objetivo, contexto, critério, traço — descrevem a cena
@@ -21,7 +21,6 @@ class Level(models.Model):
     language = models.TextField()
     questions = models.TextField()
     rephrasing = models.TextField()
-    concession_pace = models.TextField()
     reply_to_student = models.TextField(
         verbose_name="como responder ao aluno",
         help_text=(

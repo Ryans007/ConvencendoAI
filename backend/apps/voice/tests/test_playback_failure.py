@@ -14,8 +14,8 @@ from apps.voice.tests.session_client import SessionCommunicator
 
 pytestmark = pytest.mark.django_db
 
-_OPENING = PersonaTurn(line="Hello, let's talk.", pass_to="student", scene_resolved=False)
-_REPLY = PersonaTurn(line="Understood, go on.", pass_to="student", scene_resolved=False)
+_OPENING = PersonaTurn(line="Hello, let's talk.", pass_to="student")
+_REPLY = PersonaTurn(line="Understood, go on.", pass_to="student")
 
 
 class _ScriptedPersonaLLM:

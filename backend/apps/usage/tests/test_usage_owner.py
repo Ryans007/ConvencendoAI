@@ -27,6 +27,7 @@ from apps.usage.models import ModelUsage
 from apps.usage.services.recording import record_speech_call, record_transcription_call
 from apps.voice import consumers as voice_consumers
 from apps.voice.routing import websocket_urlpatterns
+from apps.voice.tests.scene_end import end_after_the_first_turn
 from apps.voice.tests.session_client import SessionCommunicator
 from apps.voice.services import stt, tts
 
@@ -90,13 +91,14 @@ def test_every_model_call_of_a_live_session_is_attributed_to_the_student_and_the
     monkeypatch.setattr(voice_consumers, "session_access_denial", lambda user, scenario, level: None)
     scenario = Scenario.objects.get(slug="negociar-prazo")
     level = Level.objects.get(order=3)
+    end_after_the_first_turn(monkeypatch, "Understood, let's proceed.")
 
     persona = _agent(
         chat,
         "persona",
         PersonaTurn,
         PersonaTurn(line="Hello, let's talk about the deadline.", pass_to="student"),
-        PersonaTurn(line="Understood, let's proceed.", pass_to="student", scene_resolved=True),
+        PersonaTurn(line="Understood, let's proceed.", pass_to="student"),
     )
     router = _agent(chat, "router", RoutingDecision, RoutingDecision(speaker=""))
     judge = _agent(

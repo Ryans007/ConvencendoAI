@@ -59,7 +59,7 @@ def _refusal(token: str) -> tuple[dict, int]:
 def _fake_session(monkeypatch) -> None:
     class _Persona:
         def invoke(self, messages):
-            return PersonaTurn(line="Hello there.", pass_to="student", scene_resolved=False)
+            return PersonaTurn(line="Hello there.", pass_to="student")
 
     class _Router:
         def invoke(self, messages):

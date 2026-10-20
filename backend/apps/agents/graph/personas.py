@@ -62,7 +62,7 @@ def make_opening_node(content: ScenarioContent, memory: str):
         system = build_system_prompt(content, role, memory)
         instruction = (
             "Open the scene: say the one line that starts this interaction. "
-            'Set scene_resolved to false and pass_to to "student".'
+            'Set pass_to to "student".'
         )
 
         llm = get_structured_llm(ModelPurpose.PERSONA, PersonaTurn)
@@ -85,15 +85,6 @@ def final_speaker(content: ScenarioContent, role: Role) -> Role:
     if content.decides(role.key):
         return role
     return content.deciders()[0]
-
-
-def _accepted_resolution(content: ScenarioContent, role: Role, resolved: bool) -> bool:
-    """Só vale a cena resolvida indicada por um papel que decide; as outras são registradas."""
-    if resolved and not content.decides(role.key):
-        print(f"[routing] {role.name} nao decide a cena; cena resolvida ignorada")
-        record_round_event("resolution_ignored", speaker=role.key)
-        return False
-    return resolved
 
 
 def make_persona_node(content: ScenarioContent, memory: str):
@@ -123,19 +114,11 @@ def make_persona_node(content: ScenarioContent, memory: str):
       Isso cobre os três caminhos em que a persona escrevia para a colega e ninguém respondia:
       a passagem devolvida, a persona que assume pelo equilíbrio ou pelo assunto, e a persona
       chamada pelo aluno.
-    - Quando a persona resolve a cena (`scene_resolved`), a sessão termina logo depois da
-      fala, então uma pergunta nela ficaria sem resposta. O prompt completo manda perguntar
-      em toda rodada e manda fechar a interação, e o modelo obedece às duas: marca a cena
-      como resolvida e pergunta mesmo assim. Por isso, se a última fala da rodada tem
-      pergunta, ela é trocada pelo fechamento do limite de turnos, que usa um prompt próprio
-      que proíbe pergunta.
-
-    - Só um papel que decide o resultado da cena (`decides_outcome`) encerra a cena como
-      resolvida e diz as falas finais. Um aliado que indica `scene_resolved` é ignorado, e o
-      evento `resolution_ignored` fica no registro: medido numa negociação, o aliado
-      confirmava um prazo que só a PM podia conceder. A fala que abre a oportunidade dos
-      critérios e o fechamento do limite de turnos são ditos por `final_speaker`: a persona
-      da vez, se ela decide, ou a primeira que decide pela ordem de abertura.
+    - Nenhuma persona encerra a cena: o modelo não tem campo para isso. A cena termina no
+      limite de turnos, na fala de fechamento, ou a pedido do aluno, feito fora deste nó. O fechamento e a fala que abre
+      a oportunidade dos critérios são ditos por `final_speaker`: a persona da vez, se ela
+      decide, ou a primeira que decide pela ordem de abertura. Medido numa negociação, o
+      aliado confirmava um prazo que só a PM podia conceder.
     """
     keys = content.role_keys()
     max_turns = content.max_turns
@@ -202,14 +185,13 @@ def make_persona_node(content: ScenarioContent, memory: str):
             record_round_event("handoff_ignored", speaker=key, reason="director_decides")
 
         _speak(role, text)
-        print(f"[routing] current_speaker={key} scene_resolved={turn.scene_resolved}")
+        print(f"[routing] current_speaker={key}")
 
         lines = [AIMessage(content=f"[{role.name}] {text}")]
         speaker = role
-        resolved = _accepted_resolution(content, role, turn.scene_resolved)
 
-        def speak_after(other: Role, previous: Role) -> bool:
-            """Faz `other` falar na mesma rodada, depois de `previous`; devolve se resolveu a cena."""
+        def speak_after(other: Role, previous: Role) -> None:
+            """Faz `other` falar na mesma rodada, depois de `previous`."""
             other_system = build_system_prompt(
                 content,
                 other,
@@ -219,25 +201,22 @@ def make_persona_node(content: ScenarioContent, memory: str):
                 received_from=previous,
             )
             other_llm = get_structured_llm(ModelPurpose.PERSONA, PersonaTurn)
-            other_turn, other_text, _ = _generate_turn(
+            _, other_text, _ = _generate_turn(
                 other_llm, conversation_messages(other_system, history + lines), other, history
             )
             _speak(other, other_text)
             lines.append(AIMessage(content=f"[{other.name}] {other_text}"))
-            return _accepted_resolution(content, other, other_turn.scene_resolved)
 
         next_key = key
-        if redirect_role and not from_fallback and not resolved:
+        if redirect_role and not from_fallback:
             record_round_event("handoff", origin=key, target=redirect_role.key)
-            resolved = speak_after(redirect_role, role) or resolved
+            speak_after(redirect_role, role)
             speaker = redirect_role
             next_key = redirect_role.key
-            print(f"[routing] passagem de {role.name} para {redirect_role.name}; {resolved=}")
+            print(f"[routing] passagem de {role.name} para {redirect_role.name}")
 
         names = [candidate.name for candidate in content.roles]
-        target_name = None if resolved else addressed_persona(
-            lines[-1].content, speaker.name, names
-        )
+        target_name = addressed_persona(lines[-1].content, speaker.name, names)
         if target_name is not None:
             target = next(candidate for candidate in content.roles if candidate.name == target_name)
             print(
@@ -245,31 +224,18 @@ def make_persona_node(content: ScenarioContent, memory: str):
                 f"{target.name} responde na mesma rodada"
             )
             record_round_event("dangling_answered", speaker=speaker.key, target=target.key)
-            resolved = speak_after(target, speaker) or resolved
+            speak_after(target, speaker)
             speaker = target
             next_key = target.key
             if addressed_persona(lines[-1].content, speaker.name, names) is not None:
                 record_round_event("dangling_unresolved", speaker=speaker.key)
 
-        if resolved and "?" in lines[-1].content:
-            print(
-                f"[routing] cena resolvida com pergunta na fala de {speaker.name}; "
-                "trocando por fechamento"
-            )
-            closing = generate_closing_line(content, speaker, history + lines[:-1])
-            _speak(speaker, closing)
-            record_round_event("closing_swap", speaker=speaker.key)
-            lines[-1] = AIMessage(content=f"[{speaker.name}] {closing}")
-
         print(f"[routing] next round current_speaker={next_key}")
-        record_round_event(
-            "round_end", speaker=speaker.key, next_speaker=next_key, scene_resolved=resolved
-        )
+        record_round_event("round_end", speaker=speaker.key, next_speaker=next_key)
 
         return {
             "messages": lines,
             "current_speaker": next_key,
-            "scene_resolved": resolved,
             "taking_over": False,
             "addressed_by_student": False,
             "redirect_to": "",

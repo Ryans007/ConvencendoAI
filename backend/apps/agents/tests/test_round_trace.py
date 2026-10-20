@@ -165,4 +165,3 @@ def test_the_round_is_the_same_with_and_without_a_collection(monkeypatch, conten
 
     assert [m.content for m in plain["messages"]] == [m.content for m in collected["messages"]]
     assert plain["current_speaker"] == collected["current_speaker"]
-    assert plain["scene_resolved"] == collected["scene_resolved"]
