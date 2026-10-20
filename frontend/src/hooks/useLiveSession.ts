@@ -20,6 +20,7 @@ const INITIAL_STATE: LiveSessionState = {
   noSpeechNotice: false,
   audioTooLargeNotice: false,
   studentHasSpoken: false,
+  speakerName: null,
   hint: NO_HINT,
 };
 

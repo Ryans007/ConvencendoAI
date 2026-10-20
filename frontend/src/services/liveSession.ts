@@ -37,6 +37,7 @@ export interface LiveSessionState {
   noSpeechNotice: boolean;
   audioTooLargeNotice: boolean;
   studentHasSpoken: boolean;
+  speakerName: string | null;
   hint: SessionHint;
 }
 
@@ -45,7 +46,15 @@ export const NO_HINT: SessionHint = { status: "idle", text: null };
 type Listener = (state: LiveSessionState) => void;
 
 interface ControlMessage {
-  type: "session_ended" | "error" | "no_speech" | "audio_too_large" | "evaluating" | "hint" | "hint_unavailable";
+  type:
+    | "session_ended"
+    | "error"
+    | "no_speech"
+    | "audio_too_large"
+    | "evaluating"
+    | "hint"
+    | "hint_unavailable"
+    | "speaker";
   attempt_id?: number;
   final_score?: number;
   passed?: boolean;
@@ -53,6 +62,12 @@ interface ControlMessage {
   code?: string;
   retry_after_seconds?: number;
   text?: string;
+  name?: string;
+}
+
+interface QueuedAudio {
+  blob: Blob;
+  speaker: string | null;
 }
 
 interface PendingOutcome {
@@ -85,10 +100,12 @@ export class LiveSession {
     noSpeechNotice: false,
     audioTooLargeNotice: false,
     studentHasSpoken: false,
+    speakerName: null,
     hint: NO_HINT,
   };
 
-  private readonly audioQueue: Blob[] = [];
+  private readonly audioQueue: QueuedAudio[] = [];
+  private announcedSpeaker: string | null = null;
   private playingAudio = false;
   private pendingOutcome: PendingOutcome | null = null;
   private evaluationStarted = false;
@@ -154,6 +171,10 @@ export class LiveSession {
         this.setState({ hint: { status: "shown", text: payload.text ?? null } });
         return;
       }
+      if (payload.type === "speaker") {
+        this.announcedSpeaker = payload.name ?? null;
+        return;
+      }
       if (payload.type === "hint_unavailable") {
         this.setState({ hint: { status: "unavailable", text: null } });
         return;
@@ -181,7 +202,11 @@ export class LiveSession {
       return;
     }
 
-    this.audioQueue.push(new Blob([event.data], { type: "audio/wav" }));
+    this.audioQueue.push({
+      blob: new Blob([event.data], { type: "audio/wav" }),
+      speaker: this.announcedSpeaker,
+    });
+    this.announcedSpeaker = null;
     this.playNextAudio();
   }
 
@@ -189,6 +214,10 @@ export class LiveSession {
    * Toca o proximo audio da fila, um de cada vez. Uma falha de reproducao (bloqueio de
    * autoplay, aba em segundo plano) e registrada no console antes de avancar a fila —
    * sem isso, ela avancava em silencio, como se a fala tivesse sido ouvida.
+   *
+   * O nome de quem fala vira estado quando o audio dele comeca a tocar, e nao quando chega:
+   * numa rodada com duas falas os dois audios chegam juntos, e o nome da segunda so pode
+   * aparecer depois que a primeira terminou.
    */
   private playNextAudio(): void {
     if (this.playingAudio || this.audioQueue.length === 0) {
@@ -196,20 +225,18 @@ export class LiveSession {
       return;
     }
     this.playingAudio = true;
-    if (this.state.phase !== "persona-speaking") {
-      this.setState({ phase: "persona-speaking" });
-    }
 
-    const blob = this.audioQueue.shift();
-    if (!blob) {
+    const queued = this.audioQueue.shift();
+    if (!queued) {
       this.playingAudio = false;
       return;
     }
+    this.setState({ phase: "persona-speaking", speakerName: queued.speaker });
     const advance = () => {
       this.playingAudio = false;
       this.playNextAudio();
     };
-    this.player.play(blob).then(advance, (cause) => {
+    this.player.play(queued.blob).then(advance, (cause) => {
       console.error("Falha ao reproduzir audio da persona:", cause);
       this.reportPlaybackFailure(cause);
       advance();
@@ -243,10 +270,11 @@ export class LiveSession {
       const outcome = this.pendingOutcome;
       this.pendingOutcome = null;
       if (outcome.phase === "ended") {
-        this.setState({ phase: "ended", result: outcome.result ?? null });
+        this.setState({ phase: "ended", result: outcome.result ?? null, speakerName: null });
       } else {
         this.setState({
           phase: "error",
+          speakerName: null,
           errorMessage: outcome.errorMessage ?? null,
           errorCode: outcome.errorCode ?? null,
           errorRetryAfterSeconds: outcome.errorRetryAfterSeconds ?? null,
@@ -257,13 +285,17 @@ export class LiveSession {
 
     if (this.evaluationStarted) {
       if (this.state.phase !== "evaluating") {
-        this.setState({ phase: "evaluating" });
+        this.setState({ phase: "evaluating", speakerName: null });
       }
       return;
     }
 
     if (this.state.phase === "persona-speaking") {
-      this.setState({ phase: "student-turn", turnCount: this.state.turnCount + 1 });
+      this.setState({
+        phase: "student-turn",
+        turnCount: this.state.turnCount + 1,
+        speakerName: null,
+      });
     }
   }
 
@@ -314,7 +346,12 @@ export class LiveSession {
     }
     const buffer = await recording.blob.arrayBuffer();
     this.socket.send(buffer);
-    this.setState({ phase: "persona-speaking", hint: NO_HINT, studentHasSpoken: true });
+    this.setState({
+      phase: "persona-speaking",
+      hint: NO_HINT,
+      studentHasSpoken: true,
+      speakerName: null,
+    });
   }
 
   /**

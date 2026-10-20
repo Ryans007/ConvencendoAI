@@ -8,6 +8,7 @@ import { sessionErrorMessage } from "../../services/sessionErrors";
 import type { ReportContext } from "../relatorio/reportContext";
 import { endActionState } from "./endAction";
 import { HintPanel } from "./HintPanel";
+import { speakingLabel } from "./speakingLabel";
 
 const ENDED_TRANSITION_MS = 1400;
 
@@ -16,7 +17,8 @@ const ENDED_TRANSITION_MS = 1400;
  *
  * Em caso de erro, o motivo tecnico vai so para o console, para quem esta depurando — o
  * aluno ve a mensagem correspondente ao codigo do erro. Com as dicas ligadas no briefing,
- * a vez do aluno oferece a dica, unico texto que a tela mostra durante a sessao.
+ * a vez do aluno oferece a dica. Os unicos textos da sessao sao a dica e o nome de quem esta
+ * falando, nunca o texto de uma fala.
  *
  * Alem de sair sem relatorio, o aluno pode encerrar a conversa e pedir o relatorio, depois da
  * primeira resposta e na vez dele, com uma confirmacao antes de valer: nenhuma persona decide o
@@ -47,6 +49,7 @@ export default function SessaoAoVivoPage() {
     noSpeechNotice,
     audioTooLargeNotice,
     studentHasSpoken,
+    speakerName,
     hint,
     startRecording,
     stopRecording,
@@ -113,7 +116,7 @@ export default function SessaoAoVivoPage() {
           <div className="flex min-h-[76px] flex-col items-center gap-5">
             <span className={`text-center text-[22px] font-medium ${recording ? "text-brand-strong" : "text-ink"}`}>
               {phase === "connecting" && "Conectando..."}
-              {personaSpeaking && "A persona esta falando..."}
+              {personaSpeaking && speakingLabel(speakerName)}
               {studentTurn && !recording && "Sua vez de falar"}
               {recording && "Gravando..."}
             </span>
