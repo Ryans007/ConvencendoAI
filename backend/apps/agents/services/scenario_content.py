@@ -134,7 +134,11 @@ def load_scenario_content(scenario: Scenario, level: Level) -> ScenarioContent:
         objective=scenario.objective,
         context=scenario.context,
         closing_hint=closing_hint,
-        max_turns=level.max_turns,
+        max_turns=(
+            scenario.max_turns
+            if scenario.max_turns is not None
+            else level.max_turns
+        ),
         max_consecutive_turns=scenario.max_consecutive_turns,
         difficulty_label=level.name,
         expected_production=level.expected_production,

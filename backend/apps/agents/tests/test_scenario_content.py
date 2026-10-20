@@ -85,3 +85,13 @@ def test_load_scenario_content_scopes_criteria_to_comprehension_level():
     content = load_scenario_content(scenario, level)
 
     assert {c.code for c in content.criteria} == {"c5"}
+
+
+def test_load_scenario_content_prefers_scenario_max_turns():
+    scenario = Scenario.objects.get(slug="negociar-prazo")
+    scenario.max_turns = 7
+    level = Level.objects.get(order=3)
+
+    content = load_scenario_content(scenario, level)
+
+    assert content.max_turns == 7
