@@ -22,8 +22,8 @@ class AnswerLike(Protocol):
 class ItemProgress:
     """Onde a revisão de um item está: a etapa e a tentativa da próxima resposta.
 
-    Quando `finished` é verdadeiro, a etapa 2 já terminou e `step` e `attempt` descrevem a
-    última resposta dada.
+    Quando `finished` é verdadeiro, a revisão do item terminou, na etapa 2 ou na etapa 1 sem
+    acerto, e `step` e `attempt` descrevem a última resposta dada.
     """
 
     step: int
@@ -45,17 +45,23 @@ def item_progress(answers: Sequence[AnswerLike]) -> ItemProgress:
 
     O estado nunca é guardado: derivá-lo das respostas gravadas faz o item retomado continuar
     exatamente de onde parou, e impede o cliente de pedir uma etapa ou uma tentativa que o
-    servidor não deu. A etapa 2 acontece mesmo quando a etapa 1 termina sem acerto.
+    servidor não deu.
+
+    A etapa 2 só acontece depois de um acerto na etapa 1. Uma etapa 1 sem acerto já decide o
+    resultado do item como erro, então pedir uma frase nova depois dela era um treino que não
+    mudava nada no calendário, e a tela não avisava. Com duas tentativas erradas, a revisão
+    termina ali, com a forma correta à mostra, e o item volta amanhã.
     """
-    for step in STEPS:
-        step_answers = _step_answers(answers, step)
-        if not _step_ended(step_answers):
-            return ItemProgress(step=step, attempt=len(step_answers) + 1, finished=False)
-    return ItemProgress(
-        step=STEP_NEW_SENTENCE,
-        attempt=len(_step_answers(answers, STEP_NEW_SENTENCE)),
-        finished=True,
-    )
+    first = _step_answers(answers, STEP_REPEAT_CORRECTED)
+    if not _step_ended(first):
+        return ItemProgress(step=STEP_REPEAT_CORRECTED, attempt=len(first) + 1, finished=False)
+    if not any(answer.correct for answer in first):
+        return ItemProgress(step=STEP_REPEAT_CORRECTED, attempt=len(first), finished=True)
+
+    second = _step_answers(answers, STEP_NEW_SENTENCE)
+    if not _step_ended(second):
+        return ItemProgress(step=STEP_NEW_SENTENCE, attempt=len(second) + 1, finished=False)
+    return ItemProgress(step=STEP_NEW_SENTENCE, attempt=len(second), finished=True)
 
 
 def item_outcome(answers: Sequence[AnswerLike]) -> ReviewOutcome:

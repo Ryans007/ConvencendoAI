@@ -124,9 +124,9 @@ def answer_item(item: ReviewItem, audio: bytes, today: date) -> AnsweredItem:
     e o progresso conferido de novo, para um envio duplicado, que terminaria a mesma
     tentativa duas vezes, ser recusado com `ProgressChanged` em vez de gravar em dobro. Uma
     fala sem texto devolve `NOT_HEARD` e nada é gravado, e uma falha do provedor levanta
-    `AnswerFailed` também sem gravar, então nenhuma das duas gasta a tentativa. Ao fim da
-    etapa 2 o resultado é gravado na mesma transação da resposta, e a revisão do item
-    termina ali, sem esperar o fim da rodada.
+    `AnswerFailed` também sem gravar, então nenhuma das duas gasta a tentativa. Quando a revisão
+    do item termina, na etapa 1 sem acerto ou ao fim da etapa 2, o resultado é gravado na mesma
+    transação da resposta, sem esperar o fim da rodada.
     """
     progress = item_progress(_open_answers(item))
     if progress.finished:

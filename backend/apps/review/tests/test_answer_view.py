@@ -141,15 +141,53 @@ def test_a_first_miss_gives_a_hint_without_the_correct_form(client, student, tea
     assert answer.revealed_correct == ""
 
 
-def test_two_misses_in_step_one_reveal_the_form_and_move_on(client, student, teacher):
-    item = _item(student)
+def test_two_misses_in_step_one_reveal_the_form_and_end_the_review(client, student, teacher):
+    item = _item(student, box=3)
     teacher.verdicts = [MISS, MISS]
 
     _send(client, item)
     data = _send(client, item).data
 
     assert data["revealed_correct"] == CORRECT_FORM
+    assert data["next"] is None
+    assert data["result"] == {
+        "outcome": "failed",
+        "interval_days": 1,
+        "due_on": (TODAY + timedelta(days=1)).isoformat(),
+        "mastered": False,
+    }
+    item.refresh_from_db()
+    assert (item.box, item.due_on) == (0, TODAY + timedelta(days=1))
+    result = item.results.get()
+    assert (result.outcome, result.box_before, result.box_after) == (
+        ReviewResultKind.FAILED, 3, 0,
+    )
+    assert set(item.answers.values_list("result_id", flat=True)) == {result.pk}
+
+
+def test_a_miss_in_step_one_followed_by_a_hit_still_moves_to_step_two(
+    client, student, teacher
+):
+    item = _item(student)
+    teacher.verdicts = [MISS, HIT]
+
+    _send(client, item)
+    data = _send(client, item).data
+
+    assert data["revealed_correct"] == CORRECT_FORM
     assert data["next"] == {"step": 2, "attempt": 1}
+    assert data["result"] is None
+
+
+def test_an_item_that_failed_step_one_does_not_accept_another_answer(client, student, teacher):
+    item = _item(student)
+    teacher.verdicts = [MISS, MISS, HIT]
+    _send(client, item)
+    _send(client, item)
+
+    response = _send(client, item)
+
+    assert response.status_code == 404
 
 
 def test_both_steps_on_the_first_try_raise_the_box_and_set_the_new_due_date(
@@ -189,9 +227,9 @@ def test_a_second_attempt_in_step_two_keeps_the_box(client, student, teacher):
     assert (item.box, item.due_on) == (1, TODAY + timedelta(days=3))
 
 
-def test_a_step_without_a_hit_sends_the_item_back_to_the_first_box(client, student, teacher):
+def test_step_two_without_a_hit_sends_the_item_back_to_the_first_box(client, student, teacher):
     item = _item(student, box=3)
-    teacher.verdicts = [MISS, MISS, HIT]
+    teacher.verdicts = [HIT, MISS, MISS]
 
     for _ in range(3):
         data = _send(client, item).data

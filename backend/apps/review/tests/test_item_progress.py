@@ -38,10 +38,10 @@ def test_a_wrong_first_attempt_stays_in_the_step_for_a_second_attempt():
     assert progress == ItemProgress(step=1, attempt=2, finished=False)
 
 
-def test_two_wrong_attempts_still_move_on_to_step_two():
+def test_two_wrong_attempts_end_the_review_without_step_two():
     progress = item_progress(_answers((1, 1, False), (1, 2, False)))
 
-    assert progress == ItemProgress(step=2, attempt=1, finished=False)
+    assert progress == ItemProgress(step=1, attempt=2, finished=True)
 
 
 def test_a_correct_second_attempt_ends_the_step():
@@ -62,10 +62,11 @@ def test_step_two_first_attempt_wrong_asks_for_the_second():
         ((1, 1, True), (2, 1, True)),
         ((1, 1, True), (2, 1, False), (2, 2, True)),
         ((1, 1, True), (2, 1, False), (2, 2, False)),
-        ((1, 1, False), (1, 2, False), (2, 1, True)),
+        ((1, 1, False), (1, 2, False)),
+        ((1, 1, False), (1, 2, True), (2, 1, True)),
     ],
 )
-def test_the_item_is_finished_when_step_two_ends(answers):
+def test_the_item_is_finished_when_the_review_ends(answers):
     assert item_progress(_answers(*answers)).finished is True
 
 
@@ -91,8 +92,8 @@ def test_a_second_attempt_in_step_two_is_a_second_try_outcome():
     assert item_outcome(answers) is ReviewOutcome.SECOND_TRY
 
 
-def test_a_step_without_a_correct_answer_is_a_failure_even_if_the_other_was_right():
-    answers = _answers((1, 1, False), (1, 2, False), (2, 1, True))
+def test_step_one_without_a_correct_answer_is_a_failure():
+    answers = _answers((1, 1, False), (1, 2, False))
 
     assert item_outcome(answers) is ReviewOutcome.FAILED
 
