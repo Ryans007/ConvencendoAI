@@ -56,7 +56,8 @@ def run_session_layer(
 ) -> list[dict[str, Any]]:
     """Roda uma sessão completa por perfil, com o aluno simulado e o grafo real.
 
-    A sessão termina como uma real (cena resolvida ou limite de turnos). Cada resultado guarda
+    A sessão termina como uma real que o aluno não encerrou: no limite de turnos, porque nenhuma
+    persona decide o fim da cena. Cada resultado guarda
     a transcrição, os eventos de cada rodada, as métricas de troca e, com o juiz ligado, a lista
     de verificação de cada fala de persona. Uma falha numa sessão fica registrada nela.
     """
@@ -94,7 +95,6 @@ def run_session_layer(
             {
                 "transcript": transcript,
                 "events": events,
-                "scene_resolved": bool(final.get("scene_resolved")),
                 "turn_count": final.get("turn_count", 0),
                 "metrics": session_metrics(transcript, events, content),
                 "roles": _judge_persona_lines(content, messages) if use_judge else [],

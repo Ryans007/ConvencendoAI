@@ -19,7 +19,6 @@ STRUCTURAL_CHECKS = {
     "single_question": "flag",
     "last_line_to_student": "flag",
     "introduces": "persona",
-    "scene_resolved": "flag",
     "next_speaker": "persona",
     "speaker": "persona",
 }

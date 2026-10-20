@@ -42,8 +42,6 @@ def check_structural(
             for parsed in (speaker_and_text(line) for line in round_lines)
             if parsed and parsed[0] == name
         )
-    if check == "scene_resolved":
-        return bool(_round_end(events).get("scene_resolved", False)) == value
     if check == "next_speaker":
         return _round_end(events).get("next_speaker") == value
     if check == "speaker":

@@ -220,17 +220,15 @@ def test_a_file_nobody_reviewed_has_no_agreement(tmp_path):
     assert calibration.read_agreement(path)["agreement"] is None
 
 
-def test_the_scene_resolved_and_speaker_checks_have_their_own_rates():
+def test_the_speaker_check_has_its_own_rate():
     situations = [
         {
             "expectations": [
-                {"check": "scene_resolved", "ok": True},
                 {"check": "speaker", "ok": True},
             ]
         },
         {
             "expectations": [
-                {"check": "scene_resolved", "ok": False},
                 {"check": "speaker", "ok": True},
             ]
         },
@@ -238,7 +236,7 @@ def test_the_scene_resolved_and_speaker_checks_have_their_own_rates():
 
     values = metric_values([], situations, [])
 
-    assert values["scene_resolved_rate"] == 0.5
+    assert "concedes_rate" not in values
     assert values["speaker_rate"] == 1.0
 
 

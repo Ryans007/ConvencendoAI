@@ -220,18 +220,6 @@ def test_a_failing_node_is_recorded_in_the_sample_without_stopping_the_others(lo
     assert results[1]["error"] == ""
 
 
-def test_a_scene_resolved_expectation_reads_the_end_of_the_round():
-    content_free = Expectation(check="scene_resolved", value=False)
-    events = [
-        {"kind": "round_end", "speaker": "tom", "next_speaker": "tom", "scene_resolved": True}
-    ]
-
-    class _Content:
-        roles: list = []
-
-    assert check_structural(content_free, ["[Tom] Done."], events, _Content()) is False
-
-
 def test_a_speaker_expectation_reads_who_said_the_first_line(loaded):
     content = loaded.contents[("negociar-prazo", 3)]
     expects_rachel = Expectation(check="speaker", value="rachel")
@@ -255,7 +243,6 @@ def test_a_full_session_runs_to_the_end_and_is_measured(loaded, monkeypatch):
             PersonaTurn(
                 line="Good, you have a plan. The new deadline is next Friday.",
                 pass_to="student",
-                scene_resolved=True,
             ),
         ],
     )
@@ -268,13 +255,14 @@ def test_a_full_session_runs_to_the_end_and_is_measured(loaded, monkeypatch):
     results = run_session_layer([profile], loaded.contents, use_judge=True)
 
     session = results[0]
+    max_turns = loaded.contents[("negociar-prazo", 3)].max_turns
     assert session["error"] == ""
-    assert session["scene_resolved"] is True
+    assert session["turn_count"] == max_turns
     assert session["transcript"][1] == "Student: Yes, I need one more week."
-    assert session["metrics"]["rounds"] == 2
+    assert session["metrics"]["rounds"] == max_turns + 1
     assert session["metrics"]["dangling_rounds"] == []
-    assert [event["kind"] for event in session["events"]].count("student_turn") == 1
-    assert len(session["roles"]) == 2
+    assert [event["kind"] for event in session["events"]].count("student_turn") == max_turns
+    assert len(session["roles"]) == max_turns + 1
     assert session["roles"][0]["items"]["stays_in_function"]["answer"] == "yes"
 
 
