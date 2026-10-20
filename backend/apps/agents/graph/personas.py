@@ -55,21 +55,34 @@ def make_opening_node(content: ScenarioContent, memory: str):
 
     Evita a paralisia da primeira frase (o aluno não precisa puxar assunto) e
     força listening desde o começo.
+
+    A abertura é dita ao aluno: se o modelo a dirige à outra persona pelo vocativo ("Tom, the
+    client expects..."), ele tenta de novo uma vez, e se a segunda também vier assim usa uma
+    saudação fixa. Medido numa avaliação com o modelo real, 1 de 5 aberturas saía assim e ficava
+    sem resposta, porque a guarda da última fala só vale para as rodadas seguintes.
     """
     key = content.role_keys()[0]
+    names = [candidate.name for candidate in content.roles]
 
     def node_opening(state: ScenarioState) -> dict:
         role = content.role(key)
         system = build_system_prompt(content, role, memory)
         instruction = (
             "Open the scene: say the one line that starts this interaction. "
+            "Speak to the student, never to the other character. "
             'Set pass_to to "student".'
         )
 
         llm = get_structured_llm(ModelPurpose.PERSONA, PersonaTurn)
-        turn = llm.invoke([SystemMessage(content=system), HumanMessage(content=instruction)])
-
-        text = sanitize_line(turn.line) or "Hello. Let's get started."
+        text = ""
+        for attempt in range(2):
+            turn = llm.invoke([SystemMessage(content=system), HumanMessage(content=instruction)])
+            text = sanitize_line(turn.line)
+            if text and addressed_persona(text, role.name, names) is None:
+                break
+            record_round_event("opening_retried", speaker=key, attempt=attempt + 1)
+            text = ""
+        text = text or "Hello. Let's get started."
         _speak(role, text)
         record_round_event("opening", speaker=key)
 
