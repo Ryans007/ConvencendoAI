@@ -79,9 +79,9 @@ def _run_session(django_user_model, monkeypatch) -> None:
         )
         connected, _ = await communicator.connect()
         assert connected
-        await communicator.receive_from()
+        await communicator.receive_persona_line()
         await communicator.send_to(bytes_data=b"raw-student-audio")
-        await communicator.receive_from()
+        await communicator.receive_persona_line()
         await communicator.receive_from()
         assert json.loads(await communicator.receive_from())["type"] == "session_ended"
         await communicator.disconnect()

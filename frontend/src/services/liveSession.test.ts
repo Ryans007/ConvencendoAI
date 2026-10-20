@@ -720,3 +720,100 @@ describe("LiveSession encerrando a pedido do aluno", () => {
     expect(requests).toHaveLength(1);
   });
 });
+
+describe("LiveSession e o nome de quem fala", () => {
+  beforeEach(() => {
+    vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
+    vi.stubGlobal("navigator", {
+      mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }) },
+    });
+  });
+
+  async function speak(session: LiveSession): Promise<void> {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    await session.startRecording();
+    vi.advanceTimersByTime(800);
+    session.stopRecording();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    vi.useRealTimers();
+  }
+
+  function speaker(socket: FakeWebSocket, name: string): void {
+    socket.dispatch("message", { data: JSON.stringify({ type: "speaker", name }) });
+  }
+
+  it("mostra o nome da persona quando o audio dela comeca a tocar", () => {
+    const session = new LiveSession("problema-no-quarto", 3);
+    const socket = FakeWebSocket.instances[0];
+    const states = collectStates(session);
+    socket.dispatch("open", {});
+
+    speaker(socket, "James");
+    expect(states.at(-1)?.speakerName).toBeNull();
+
+    socket.dispatch("message", { data: new ArrayBuffer(4) });
+
+    expect(states.at(-1)?.phase).toBe("persona-speaking");
+    expect(states.at(-1)?.speakerName).toBe("James");
+  });
+
+  it("numa rodada com duas falas, o segundo nome so aparece quando o segundo audio comeca", async () => {
+    const session = new LiveSession("negociar-prazo", 3);
+    const socket = FakeWebSocket.instances[0];
+    const states = collectStates(session);
+    socket.dispatch("open", {});
+
+    speaker(socket, "Rachel");
+    socket.dispatch("message", { data: new ArrayBuffer(4) });
+    speaker(socket, "Tom");
+    socket.dispatch("message", { data: new ArrayBuffer(4) });
+
+    expect(states.at(-1)?.speakerName).toBe("Rachel");
+
+    await endAudio();
+
+    expect(states.at(-1)?.speakerName).toBe("Tom");
+  });
+
+  it("na vez do aluno o nome some", async () => {
+    const session = new LiveSession("negociar-prazo", 3);
+    const socket = FakeWebSocket.instances[0];
+    const states = collectStates(session);
+    socket.dispatch("open", {});
+
+    speaker(socket, "Rachel");
+    socket.dispatch("message", { data: new ArrayBuffer(4) });
+    await endAudio();
+
+    expect(states.at(-1)?.phase).toBe("student-turn");
+    expect(states.at(-1)?.speakerName).toBeNull();
+  });
+
+  it("um audio sem nome anunciado nao herda o nome da fala anterior", async () => {
+    const session = new LiveSession("negociar-prazo", 3);
+    const socket = FakeWebSocket.instances[0];
+    const states = collectStates(session);
+    socket.dispatch("open", {});
+
+    speaker(socket, "Rachel");
+    socket.dispatch("message", { data: new ArrayBuffer(4) });
+    socket.dispatch("message", { data: new ArrayBuffer(4) });
+    await endAudio();
+
+    expect(states.at(-1)?.phase).toBe("persona-speaking");
+    expect(states.at(-1)?.speakerName).toBeNull();
+  });
+
+  it("depois de o aluno responder, o nome some ate a proxima fala comecar", async () => {
+    const { session, socket } = await studentTurn(false);
+    const states = collectStates(session);
+    speaker(socket, "Rachel");
+    socket.dispatch("message", { data: new ArrayBuffer(4) });
+    await endAudio();
+
+    await speak(session);
+
+    expect(states.at(-1)?.phase).toBe("persona-speaking");
+    expect(states.at(-1)?.speakerName).toBeNull();
+  });
+});

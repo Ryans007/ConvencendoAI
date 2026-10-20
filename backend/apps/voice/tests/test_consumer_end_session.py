@@ -79,7 +79,7 @@ async def _connect(token):
     )
     connected, _ = await communicator.connect()
     assert connected
-    assert await communicator.receive_from() == b"fake-wav-bytes"
+    await communicator.receive_persona_audio()
     return communicator
 
 
@@ -100,7 +100,7 @@ def test_the_student_ends_the_session_in_the_middle_and_gets_the_report(
     async def run() -> None:
         communicator = await _connect(token)
         await communicator.send_to(bytes_data=b"first-answer")
-        assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.receive_persona_audio()
 
         await communicator.send_to(text_data=_END_SESSION)
 
@@ -151,7 +151,7 @@ def test_a_session_that_reaches_the_limit_records_the_turn_limit(django_user_mod
     async def run() -> None:
         communicator = await _connect(token)
         await communicator.send_to(bytes_data=b"only-answer")
-        assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.receive_persona_audio()
         assert json.loads(await communicator.receive_from()) == {"type": "evaluating"}
         assert json.loads(await communicator.receive_from())["type"] == "session_ended"
         attempt = await sync_to_async(_attempt)(user)
@@ -171,7 +171,7 @@ def test_the_request_after_the_scene_ended_is_ignored(django_user_model, monkeyp
         await communicator.send_to(bytes_data=b"only-answer")
         await communicator.send_to(text_data=_END_SESSION)
 
-        assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.receive_persona_audio()
         assert json.loads(await communicator.receive_from()) == {"type": "evaluating"}
         assert json.loads(await communicator.receive_from())["type"] == "session_ended"
         assert (await communicator.receive_output())["type"] == "websocket.close"
@@ -200,7 +200,7 @@ def test_the_request_that_arrives_during_a_round_waits_for_the_round(
         await communicator.send_to(bytes_data=b"first-answer")
         await communicator.send_to(text_data=_END_SESSION)
 
-        assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.receive_persona_audio()
         assert json.loads(await communicator.receive_from()) == {"type": "evaluating"}
         assert json.loads(await communicator.receive_from())["type"] == "session_ended"
         attempt = await sync_to_async(_attempt)(user)

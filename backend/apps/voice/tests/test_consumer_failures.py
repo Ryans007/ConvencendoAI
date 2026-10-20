@@ -115,7 +115,7 @@ def test_rate_limit_while_the_persona_speaks_ends_the_session_with_a_code(
 
     async def run() -> None:
         communicator = await _connect(token)
-        assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.receive_persona_audio()
         await communicator.send_to(bytes_data=b"student-turn")
 
         await _expect_error(communicator, "provider_rate_limited")
@@ -133,7 +133,7 @@ def test_provider_that_does_not_answer_ends_the_session_as_unavailable(
 
     async def run() -> None:
         communicator = await _connect(token)
-        assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.receive_persona_audio()
         await communicator.send_to(bytes_data=b"student-turn")
 
         await _expect_error(communicator, "provider_unavailable")
@@ -150,7 +150,7 @@ def test_unexpected_error_is_reported_and_logged_with_its_traceback(
 
     async def run() -> None:
         communicator = await _connect(token)
-        assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.receive_persona_audio()
         await communicator.send_to(bytes_data=b"student-turn")
 
         await _expect_error(communicator, "unexpected", forbidden_text="defeito no código")
@@ -178,10 +178,10 @@ def test_evaluation_failure_after_the_scene_is_reported_as_report_failed(
 
     async def run() -> None:
         communicator = await _connect(token)
-        assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.receive_persona_audio()
         await communicator.send_to(bytes_data=b"student-turn")
 
-        assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.receive_persona_audio()
         assert json.loads(await communicator.receive_from()) == {"type": "evaluating"}
         await _expect_error(communicator, "report_failed")
         await sync_to_async(_attempt_stayed_open)(user)
@@ -200,7 +200,7 @@ def test_transcription_failure_carries_the_code_too(django_user_model, monkeypat
 
     async def run() -> None:
         communicator = await _connect(token)
-        assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.receive_persona_audio()
         await communicator.send_to(bytes_data=b"student-turn")
 
         await _expect_error(communicator, "provider_rate_limited")
@@ -253,14 +253,14 @@ def test_an_audio_the_provider_refuses_as_empty_asks_the_student_to_speak_again(
 
     async def run() -> None:
         communicator = await _connect(token)
-        assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.receive_persona_audio()
 
         await communicator.send_to(bytes_data=b"RIFF....WAVEempty")
         assert json.loads(await communicator.receive_from()) == {"type": "no_speech"}
         await sync_to_async(_attempt_stayed_open)(user)
 
         await communicator.send_to(bytes_data=b"real-speech")
-        assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.receive_persona_audio()
         await communicator.disconnect()
 
     async_to_sync(run)()
@@ -272,7 +272,7 @@ def test_an_empty_audio_frame_asks_the_student_to_speak_again(django_user_model,
 
     async def run() -> None:
         communicator = await _connect(token)
-        assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.receive_persona_audio()
 
         await communicator.send_input({"type": "websocket.receive", "bytes": b""})
         assert json.loads(await communicator.receive_from()) == {"type": "no_speech"}
@@ -298,7 +298,7 @@ def test_a_bad_request_that_is_not_about_the_audio_still_ends_the_session(
 
     async def run() -> None:
         communicator = await _connect(token)
-        assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.receive_persona_audio()
         await communicator.send_to(bytes_data=b"student-turn")
 
         await _expect_error(communicator, "provider_unavailable", forbidden_text="model_not_found")
