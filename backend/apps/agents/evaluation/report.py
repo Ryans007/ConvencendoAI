@@ -3,7 +3,7 @@ from typing import Any
 from apps.agents.evaluation.router_layer import summarize_router
 from apps.agents.evaluation.schemas import ROLE_ITEMS
 
-_COUNT_METRICS = ("_rounds", "_runs")
+_COUNT_METRICS = ("_rounds", "_runs", "_handoffs")
 _STATUS_MARK = {"ok": "✔", "falhou": "✘", "sem dados": "—"}
 _CHECK_TEXT = {
     "passes_to": "passa a vez à persona esperada",
@@ -128,7 +128,11 @@ def _session_section(sessions: list[dict[str, Any]]) -> list[str]:
             f"(acima do máximo do cenário: {metrics['over_limit_runs']}).",
             f"- Rodadas com mais de uma pergunta: {metrics['multi_question_rounds']}.",
             f"- Apresentações na primeira fala: {metrics['introduced']}.",
+            f"- Passagens de palavra por equilíbrio ou assunto: {metrics['handoffs']}, "
+            f"com {len(metrics['repeated_handoffs'])} frase(s) repetida(s).",
         ]
+        for line in metrics["repeated_handoffs"]:
+            lines.append(f"- **Frase de passagem repetida:** {line}")
         for line in metrics["dangling_rounds"]:
             lines.append(f"- **Rodada terminando dirigida a outra persona:** {line}")
         lines += ["", *_transcript(session), ""]

@@ -24,7 +24,7 @@ from apps.usage.services.owner import usage_owner
 
 ALL_LAYERS = ("router", "situations", "sessions")
 USAGE_LABEL = "avaliação"
-DEFAULT_MAX_CALLS = 1000
+DEFAULT_MAX_CALLS = 1200
 DEFAULT_OUTPUT_DIR = Path(".evaluation")
 
 _PERSONA_CALLS_PER_ROUND = 3

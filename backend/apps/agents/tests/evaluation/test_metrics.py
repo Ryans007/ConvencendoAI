@@ -2,8 +2,10 @@ import pytest
 
 from apps.agents.evaluation.metrics import (
     change_causes,
+    handoff_phrase,
     introduces_self,
     question_count,
+    repeated_handoffs,
     session_metrics,
     split_rounds,
 )
@@ -154,3 +156,40 @@ def test_a_session_where_nobody_new_spoke_has_no_newcomers(content):
 
     assert metrics["newcomers"] == 0
     assert metrics["max_run"] == 2
+
+
+def test_the_handoff_phrase_ignores_names_and_punctuation():
+    names = ["Rachel", "Tom"]
+
+    first = handoff_phrase("Good answer. Tom, this one is your area!", "Tom", names)
+    second = handoff_phrase("Fine. Tom: this one is your area", "Tom", names)
+
+    assert first == second == "this one is your area"
+
+
+def test_a_handoff_phrase_without_the_colleague_name_uses_the_last_sentence():
+    assert handoff_phrase("Good answer. Over to you.", "Tom", ["Rachel", "Tom"]) == "over to you"
+
+
+def _handoff(line, reason="hand_floor", target="tom"):
+    return {"kind": "handoff", "origin": "rachel", "target": target, "reason": reason, "line": line}
+
+
+def test_a_handoff_phrase_that_comes_back_is_counted_as_repeated(content):
+    events = [
+        _handoff("Nice. Tom, this is your area."),
+        _handoff("I see. Tom, this is your area!"),
+        _handoff("Great. Tom, over to you."),
+    ]
+
+    total, repeated = repeated_handoffs(events, content)
+
+    assert total == 3
+    assert repeated == ["I see. Tom, this is your area!"]
+
+
+def test_the_handoffs_the_student_asked_for_are_not_measured(content):
+    events = [_handoff("That one is for Tom.", reason="student")]
+
+    assert repeated_handoffs(events, content) == (0, [])
+

@@ -79,9 +79,11 @@ def test_the_situation_rates_count_only_the_samples_that_ran_the_check():
 def test_the_session_metrics_are_added_up_across_sessions():
     sessions = [
         {"metrics": {"rounds": 10, "dangling_rounds": ["a"], "multi_question_rounds": 1,
-                     "over_limit_runs": 1, "newcomers": 1, "newcomers_introduced": 0}},
+                     "over_limit_runs": 1, "newcomers": 1, "newcomers_introduced": 0,
+                     "repeated_handoffs": ["Tom, this is yours."]}},
         {"metrics": {"rounds": 10, "dangling_rounds": [], "multi_question_rounds": 0,
-                     "over_limit_runs": 0, "newcomers": 1, "newcomers_introduced": 1}},
+                     "over_limit_runs": 0, "newcomers": 1, "newcomers_introduced": 1,
+                     "repeated_handoffs": []}},
         {"error": "quebrou"},
     ]
 
@@ -90,6 +92,7 @@ def test_the_session_metrics_are_added_up_across_sessions():
     assert values["session_dangling_rounds"] == 1
     assert values["session_multi_question_rate"] == 0.05
     assert values["session_over_limit_runs"] == 1
+    assert values["session_repeated_handoffs"] == 1
     assert values["session_intro_rate"] == 0.5
 
 

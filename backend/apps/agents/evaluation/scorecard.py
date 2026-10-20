@@ -69,6 +69,7 @@ def metric_values(
             sum(m["multi_question_rounds"] for m in measured), rounds
         )
         values["session_over_limit_runs"] = sum(m["over_limit_runs"] for m in measured)
+        values["session_repeated_handoffs"] = sum(len(m["repeated_handoffs"]) for m in measured)
         values["session_intro_rate"] = _ratio(
             sum(m["newcomers_introduced"] for m in measured), sum(m["newcomers"] for m in measured)
         )
@@ -77,6 +78,7 @@ def metric_values(
             "session_dangling_rounds",
             "session_multi_question_rate",
             "session_over_limit_runs",
+            "session_repeated_handoffs",
             "session_intro_rate",
         ):
             values[metric] = None

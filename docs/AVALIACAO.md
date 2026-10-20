@@ -5,7 +5,7 @@ Como medir, com os modelos reais, se a **troca entre as personas** é natural e 
 de catálogo ou de modelo, e para ter números (e exemplos reais) para o TCC.
 
 O comando faz chamadas **pagas** a modelos. Toda execução mostra antes, no máximo, quantas
-chamadas fará, e recusa começar acima do teto (`--max-calls`, padrão 1000).
+chamadas fará, e recusa começar acima do teto (`--max-calls`, padrão 1200).
 
 ## O que ele mede
 
@@ -13,7 +13,7 @@ chamadas fará, e recusa começar acima do teto (`--max-calls`, padrão 1000).
 |---|---|---|
 | **1. Roteador** | 21 falas do aluno com o rótulo de quem ele chamou, repetidas 2 vezes | Acerto quando o aluno chama alguém pelo nome e falsos "chamados" quando ele só respondeu |
 | **2. Situações fixas** | 15 pontos da conversa, de 3 a 5 amostras cada, com o nó real da persona | Se passa a vez quando o assunto é da colega, se quem entra se apresenta, uma pergunta só, a última fala dirigida ao aluno e perguntas de sim ou não sobre o papel, respondidas por um juiz |
-| **3. Sessões completas** | 5 sessões do grafo real com um **aluno simulado** (perfil e instruções por fala, como "chame o Tom pelo nome") | Quem conduz cada rodada, por que a condução mudou (o aluno chamou, equilíbrio ou passagem de vez), rodadas com duas perguntas, rodadas que terminam dirigidas a outra persona e apresentação de quem estreia |
+| **3. Sessões completas** | 5 sessões do grafo real com um **aluno simulado** (perfil e instruções por fala, como "chame o Tom pelo nome") | Quem conduz cada rodada, por que a condução mudou (o aluno chamou, equilíbrio ou passagem de vez), rodadas com duas perguntas, rodadas que terminam dirigidas a outra persona, apresentação de quem estreia e frases de passagem de palavra repetidas |
 
 Além disso, um **juiz** (o modelo configurado como avaliador) julga cada fala de persona numa
 lista de verificação: fica na função, age como o arquétipo, usa só os fatos da cena, não corrige

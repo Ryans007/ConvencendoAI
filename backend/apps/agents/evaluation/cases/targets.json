@@ -12,6 +12,7 @@
     {"metric": "session_dangling_rounds", "goal": 0, "direction": "max", "label": "Sessões: rodadas que terminam dirigidas a outra persona"},
     {"metric": "session_multi_question_rate", "goal": 0.05, "direction": "max", "label": "Sessões: rodadas com mais de uma pergunta"},
     {"metric": "session_over_limit_runs", "goal": 0, "direction": "max", "label": "Sessões: persona acima do máximo de rodadas seguidas"},
+    {"metric": "session_repeated_handoffs", "goal": 0, "direction": "max", "label": "Sessões: frases de passagem de palavra repetidas"},
     {"metric": "session_intro_rate", "goal": 0.70, "direction": "min", "label": "Sessões: a persona que estreia se apresenta"},
     {"metric": "role_pass_rate", "goal": 0.90, "direction": "min", "label": "Papel: falas sem falha no julgamento (lista de verificação)"}
   ]
