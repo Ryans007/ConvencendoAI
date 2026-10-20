@@ -436,6 +436,41 @@
         {"check": "speaker", "value": "james"},
         {"check": "single_question", "value": true}
       ]
+    },
+    {
+      "id": "P26-opportunity-line-keeps-the-stage-direction-to-itself",
+      "goal": "Two turns before the limit the manager says what he will do and when, without telling the guest that the conversation is almost over.",
+      "scenario": "problema-no-quarto", "level": 3, "samples": 3,
+      "current": "james", "turn_count": 10,
+      "history": [
+        "@hotel-opens",
+        "Student: The air conditioner in my room doesn't work, and I want to talk to the manager.",
+        "[Emma] I understand. James, the manager, can help you with this.",
+        "[James] Hi, I'm James, the hotel manager. I can move you to room 305 on the third floor. Is that okay?",
+        "Student: Yes, that is okay. How long will it take?"
+      ],
+      "expect": [
+        {"check": "speaker", "value": "james"},
+        {"judge": "Does James avoid telling the guest that the conversation is ending, almost over or running out of time?"},
+        {"judge": "Does James answer how long it will take before or while saying what he will do?"}
+      ]
+    },
+    {
+      "id": "P27-closing-line-answers-the-greeting",
+      "goal": "At the limit the guest greets the manager: the closing line answers the greeting before closing, and has no question.",
+      "scenario": "problema-no-quarto", "level": 3, "samples": 3,
+      "current": "james", "turn_count": 12,
+      "history": [
+        "@hotel-opens",
+        "Student: The air conditioner in my room doesn't work, and I want to talk to the manager.",
+        "[Emma] I understand. James, the manager, can help you with this.",
+        "[James] Hi, I'm James, the hotel manager. I will move you to room 305 in twenty minutes.",
+        "Student: Hey James, how are you?"
+      ],
+      "expect": [
+        {"check": "speaker", "value": "james"},
+        {"judge": "Does James answer or react to the guest's question about how he is before closing the conversation?"}
+      ]
     }
   ]
 }
