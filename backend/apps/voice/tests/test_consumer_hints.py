@@ -101,7 +101,7 @@ async def _connect(token, hints: bool):
     )
     connected, _ = await communicator.connect()
     assert connected
-    assert await communicator.receive_from() == b"fake-wav-bytes"
+    await communicator.receive_persona_audio()
     return communicator
 
 
@@ -134,9 +134,9 @@ def test_hint_is_answered_counted_once_per_turn_and_marks_the_answer(
         assert json.loads(await communicator.receive_from())["text"] == _SUGGESTION
 
         await communicator.send_to(bytes_data=b"answer-after-hint")
-        assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.receive_persona_audio()
         await communicator.send_to(bytes_data=b"answer-without-hint")
-        assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.receive_persona_audio()
         assert json.loads(await communicator.receive_from()) == {"type": "evaluating"}
         assert json.loads(await communicator.receive_from())["type"] == "session_ended"
         attempt = await sync_to_async(_attempt)(user)
@@ -197,7 +197,7 @@ def test_hint_that_cannot_be_generated_is_reported_and_the_session_goes_on(
         assert json.loads(await communicator.receive_from()) == {"type": "hint_unavailable"}
 
         await communicator.send_to(bytes_data=b"student-turn")
-        assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.receive_persona_audio()
         assert (await sync_to_async(_attempt)(user)).hints_used == 0
         await communicator.disconnect()
 

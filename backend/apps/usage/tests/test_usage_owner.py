@@ -124,9 +124,9 @@ def test_every_model_call_of_a_live_session_is_attributed_to_the_student_and_the
         )
         connected, _ = await communicator.connect()
         assert connected
-        await communicator.receive_from()
+        await communicator.receive_persona_line()
         await communicator.send_to(bytes_data=b"raw-student-audio")
-        await communicator.receive_from()
+        await communicator.receive_persona_line()
         assert json.loads(await communicator.receive_from()) == {"type": "evaluating"}
         ended = json.loads(await communicator.receive_from())
         assert ended["type"] == "session_ended"

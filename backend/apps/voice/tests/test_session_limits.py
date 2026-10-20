@@ -102,7 +102,7 @@ def test_a_session_whose_lease_expired_does_not_block_a_new_one(django_user_mode
         )
         connected, _ = await communicator.connect()
         assert connected
-        opening = await communicator.receive_from()
+        _, opening = await communicator.receive_persona_line()
         await communicator.disconnect()
         return opening
 
@@ -120,7 +120,7 @@ def test_leaving_the_session_frees_the_next_one(django_user_model, monkeypatch):
         )
         connected, _ = await communicator.connect()
         assert connected
-        await communicator.receive_from()
+        await communicator.receive_persona_line()
         open_during = await sync_to_async(LiveSessionLease.objects.count)()
         await communicator.disconnect()
         open_after = await sync_to_async(LiveSessionLease.objects.count)()
@@ -159,7 +159,7 @@ def test_a_turn_audio_over_the_limit_is_refused_without_transcribing_or_ending(
         )
         connected, _ = await communicator.connect()
         assert connected
-        await communicator.receive_from()
+        await communicator.receive_persona_line()
         await communicator.send_to(bytes_data=b"x" * 2048)
         payload = json.loads(await communicator.receive_from())
         assert await communicator.receive_nothing()
@@ -180,7 +180,7 @@ def test_a_turn_audio_within_the_limit_is_transcribed_as_before(django_user_mode
         )
         connected, _ = await communicator.connect()
         assert connected
-        await communicator.receive_from()
+        await communicator.receive_persona_line()
         await communicator.send_to(bytes_data=b"x" * 512)
         payload = json.loads(await communicator.receive_from())
         await communicator.disconnect()

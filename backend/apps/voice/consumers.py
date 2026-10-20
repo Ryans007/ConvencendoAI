@@ -383,6 +383,9 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
     async def _speak_new_messages(self, state: dict, started_at: float) -> bool:
         """Sintetiza e envia, em ordem, as falas novas das personas.
 
+        Antes de cada áudio sai uma mensagem `speaker` com o nome de quem fala, para a tela dizer
+        quem é: o nome é o único texto de uma fala que chega ao cliente, e nunca o que foi dito.
+
         Falha do provedor de TTS encerra a sessão com erro explícito, sem fallback de
         síntese local. Devolve `False` nesse caso — a sessão já foi encerrada e quem
         chamou não deve continuar.
@@ -405,6 +408,8 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
                 await self._fail_with_error(exc)
                 return False
             print(f"[timing] tts ({name}): {time.monotonic() - synthesis_started_at:.2f}s")
+            speaker_name = role.name if role else name
+            await self.send(text_data=json.dumps({"type": "speaker", "name": speaker_name}))
             await self.send(bytes_data=audio)
             if not first_audio_sent:
                 first_audio_sent = True

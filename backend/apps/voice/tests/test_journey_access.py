@@ -68,6 +68,8 @@ def _open(slug: str, level: int, token: str) -> tuple[dict | bytes, dict]:
         connected, _ = await communicator.connect()
         assert connected
         first = await communicator.receive_from()
+        if isinstance(first, str) and json.loads(first)["type"] == "speaker":
+            first = await communicator.receive_from()
         state = {
             "attempts": await sync_to_async(Attempt.objects.count)(),
             "leases": await sync_to_async(LiveSessionLease.objects.count)(),

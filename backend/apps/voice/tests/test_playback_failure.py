@@ -54,12 +54,12 @@ def _run_with_playback_report(django_user_model, monkeypatch, report: dict) -> N
         )
         connected, _ = await communicator.connect()
         assert connected
-        assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.receive_persona_audio()
 
         await communicator.send_to(text_data=json.dumps(report))
 
         await communicator.send_to(bytes_data=b"raw-student-audio")
-        assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.receive_persona_audio()
         await communicator.disconnect()
 
     async_to_sync(run)()

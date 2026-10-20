@@ -25,3 +25,18 @@ class SessionCommunicator(WebsocketCommunicator):
         if connected and self.token is not None:
             await self.send_to(text_data=json.dumps({"type": "auth", "token": self.token}))
         return connected, subprotocol
+
+    async def receive_persona_line(self) -> tuple[str, bytes]:
+        """Lê uma fala de persona como o cliente a recebe: o nome de quem fala, depois o áudio.
+
+        Falha se o nome não vier antes do áudio.
+        """
+        announced = json.loads(await self.receive_from())
+        assert announced["type"] == "speaker"
+        return announced["name"], await self.receive_from()
+
+    async def receive_persona_audio(self, audio: bytes = b"fake-wav-bytes") -> str:
+        """Lê uma fala de persona, confere o áudio e devolve o nome de quem falou."""
+        name, received = await self.receive_persona_line()
+        assert received == audio
+        return name

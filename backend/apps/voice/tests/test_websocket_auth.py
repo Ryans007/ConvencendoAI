@@ -82,7 +82,7 @@ def test_the_token_in_the_first_message_starts_the_session(django_user_model, mo
 
     first, state = _run(_PATH, _sender(_auth(_token(user))))
 
-    assert first == b"wav"
+    assert first["type"] == "speaker"
     assert state["attempts"] == 1
 
 
@@ -95,7 +95,7 @@ def test_the_url_never_needs_the_token_to_carry_the_other_parameters(
 
     first, state = _run(f"{_PATH}?hints=1", _sender(_auth(_token(user))))
 
-    assert first == b"wav"
+    assert first["type"] == "speaker"
     assert Attempt.objects.get().hints_enabled is True
 
 
@@ -201,6 +201,7 @@ def test_the_deadline_does_not_cut_a_session_that_authenticated_in_time(
         connected, _ = await communicator.connect()
         assert connected
         await communicator.send_to(text_data=_auth(_token(user)))
+        assert json.loads(await communicator.receive_from())["type"] == "speaker"
         opening = await communicator.receive_from()
         assert await communicator.receive_nothing(timeout=0.6)
         await communicator.disconnect()
@@ -221,6 +222,7 @@ def test_a_second_authentication_message_is_ignored_and_the_session_goes_on(
         connected, _ = await communicator.connect()
         assert connected
         await communicator.send_to(text_data=_auth(_token(user)))
+        assert json.loads(await communicator.receive_from())["type"] == "speaker"
         opening = await communicator.receive_from()
         await communicator.send_to(text_data=_auth(_token(user)))
         quiet = await communicator.receive_nothing(timeout=0.3)

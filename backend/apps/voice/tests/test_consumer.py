@@ -77,13 +77,12 @@ def test_live_session_opens_transcribes_a_turn_and_ends(django_user_model, monke
         connected, _ = await communicator.connect()
         assert connected
 
-        opening_audio = await communicator.receive_from()
-        assert opening_audio == b"fake-wav-bytes"
+        opening_speaker = await communicator.receive_persona_audio()
+        assert opening_speaker == "Rachel"
 
         await communicator.send_to(bytes_data=b"raw-student-audio")
 
-        reply_audio = await communicator.receive_from()
-        assert reply_audio == b"fake-wav-bytes"
+        await communicator.receive_persona_audio()
 
         evaluating = json.loads(await communicator.receive_from())
         assert evaluating == {"type": "evaluating"}
@@ -159,12 +158,12 @@ def test_audio_sent_during_evaluation_is_ignored(django_user_model, monkeypatch)
         )
         connected, _ = await communicator.connect()
         assert connected
-        assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.receive_persona_audio()
 
         await communicator.send_to(bytes_data=b"last-student-turn")
         await communicator.send_to(bytes_data=b"spoken-during-evaluation")
 
-        assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.receive_persona_audio()
         assert json.loads(await communicator.receive_from()) == {"type": "evaluating"}
         assert json.loads(await communicator.receive_from())["type"] == "session_ended"
         assert (await communicator.receive_output())["type"] == "websocket.close"
@@ -201,7 +200,7 @@ def test_empty_transcription_asks_the_student_to_speak_again(django_user_model, 
         )
         connected, _ = await communicator.connect()
         assert connected
-        assert await communicator.receive_from() == b"fake-wav-bytes"
+        await communicator.receive_persona_audio()
 
         await communicator.send_to(bytes_data=b"silent-audio")
 
