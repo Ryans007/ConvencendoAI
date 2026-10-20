@@ -648,3 +648,75 @@ describe("LiveSession gravando a fala do aluno", () => {
     expect(getUserMedia).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("LiveSession encerrando a pedido do aluno", () => {
+  beforeEach(() => {
+    vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
+    vi.stubGlobal("navigator", {
+      mediaDevices: { getUserMedia: async () => ({ getTracks: () => [] }) },
+    });
+  });
+
+  async function speak(session: LiveSession): Promise<void> {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    await session.startRecording();
+    vi.advanceTimersByTime(800);
+    session.stopRecording();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    vi.useRealTimers();
+  }
+
+  it("antes da primeira resposta, pedir o relatorio nao envia nada", async () => {
+    const { session, socket, states } = await studentTurn(false);
+
+    session.endAndReport();
+
+    expect(socket.sent).toEqual([AUTH_MESSAGE]);
+    expect(states.at(-1)?.phase).toBe("student-turn");
+    expect(states.at(-1)?.studentHasSpoken).toBe(false);
+  });
+
+  it("depois de falar e na vez do aluno, avisa o servidor e espera o relatorio", async () => {
+    const { session, socket, states } = await studentTurn(false);
+    await speak(session);
+    socket.dispatch("message", { data: new ArrayBuffer(4) });
+    await endAudio();
+    expect(states.at(-1)?.phase).toBe("student-turn");
+    expect(states.at(-1)?.studentHasSpoken).toBe(true);
+
+    session.endAndReport();
+
+    expect(socket.sent.at(-1)).toBe(JSON.stringify({ type: "end_session" }));
+    expect(states.at(-1)?.phase).toBe("evaluating");
+
+    socket.dispatch("message", {
+      data: JSON.stringify({ type: "session_ended", attempt_id: 7, final_score: 80, passed: true }),
+    });
+
+    expect(states.at(-1)?.phase).toBe("ended");
+    expect(states.at(-1)?.result).toEqual({ attemptId: 7, finalScore: 80, passed: true });
+  });
+
+  it("enquanto a persona fala, pedir o relatorio nao envia nada", async () => {
+    const { session, socket } = await studentTurn(false);
+    await speak(session);
+    const sentBefore = socket.sent.length;
+
+    session.endAndReport();
+
+    expect(socket.sent.length).toBe(sentBefore);
+  });
+
+  it("nao pede o relatorio duas vezes", async () => {
+    const { session, socket } = await studentTurn(false);
+    await speak(session);
+    socket.dispatch("message", { data: new ArrayBuffer(4) });
+    await endAudio();
+
+    session.endAndReport();
+    session.endAndReport();
+
+    const requests = socket.sent.filter((message) => message === JSON.stringify({ type: "end_session" }));
+    expect(requests).toHaveLength(1);
+  });
+});

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { AvatarPlaceholder } from "../../components/AvatarPlaceholder";
@@ -6,6 +6,7 @@ import { LogoutLink } from "../../components/LogoutLink";
 import { useLiveSession } from "../../hooks/useLiveSession";
 import { sessionErrorMessage } from "../../services/sessionErrors";
 import type { ReportContext } from "../relatorio/reportContext";
+import { endActionState } from "./endAction";
 import { HintPanel } from "./HintPanel";
 
 const ENDED_TRANSITION_MS = 1400;
@@ -16,6 +17,10 @@ const ENDED_TRANSITION_MS = 1400;
  * Em caso de erro, o motivo tecnico vai so para o console, para quem esta depurando — o
  * aluno ve a mensagem correspondente ao codigo do erro. Com as dicas ligadas no briefing,
  * a vez do aluno oferece a dica, unico texto que a tela mostra durante a sessao.
+ *
+ * Alem de sair sem relatorio, o aluno pode encerrar a conversa e pedir o relatorio, depois da
+ * primeira resposta e na vez dele, com uma confirmacao antes de valer: nenhuma persona decide o
+ * fim da cena, que vem do limite de turnos ou deste pedido.
  */
 export default function SessaoAoVivoPage() {
   const { scenarioSlug = "", levelOrder = "" } = useParams();
@@ -41,12 +46,15 @@ export default function SessaoAoVivoPage() {
     result,
     noSpeechNotice,
     audioTooLargeNotice,
+    studentHasSpoken,
     hint,
     startRecording,
     stopRecording,
     leaveEarly,
+    endAndReport,
     requestHint,
   } = session;
+  const [confirmingAtTurn, setConfirmingAtTurn] = useState<number | null>(null);
 
   useEffect(() => {
     if (phase !== "ended" || !result) {
@@ -73,6 +81,8 @@ export default function SessaoAoVivoPage() {
   const personaSpeaking = phase === "persona-speaking";
   const studentTurn = phase === "student-turn" || phase === "recording";
   const recording = phase === "recording";
+  const endAction = endActionState(phase, studentHasSpoken);
+  const confirmingEnd = confirmingAtTurn === turnCount && endAction === "available";
 
   return (
     <div className="relative flex min-h-screen flex-col bg-app">
@@ -83,7 +93,7 @@ export default function SessaoAoVivoPage() {
           className="text-aux text-ink-muted hover:text-ink"
           disabled={phase === "connecting" || phase === "evaluating" || phase === "ended"}
         >
-          Sair
+          Sair sem relatório
         </button>
         <span className="text-aux text-ink-muted">
           {maxTurns ? `turno ${Math.min(turnCount, maxTurns)} de ${maxTurns}` : ""}
@@ -142,6 +152,45 @@ export default function SessaoAoVivoPage() {
           {hintsEnabled && studentTurn && (
             <HintPanel hint={hint} canRequest={!recording} onRequest={requestHint} />
           )}
+
+          {endAction !== "hidden" &&
+            (confirmingEnd ? (
+              <div
+                role="group"
+                aria-label="Confirmar o encerramento da sessão"
+                className="flex max-w-[520px] flex-col items-center gap-3 rounded-card border border-brand-line bg-brand-soft px-5 py-4 text-center"
+              >
+                <span className="text-scenario text-ink">
+                  Sua conversa será avaliada até aqui. Quer encerrar e ver o relatório?
+                </span>
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    autoFocus
+                    onClick={endAndReport}
+                    className="rounded-pill bg-brand px-5 py-2 text-scenario font-semibold text-white"
+                  >
+                    Encerrar e ver relatório
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingAtTurn(null)}
+                    className="rounded-pill border border-brand-line px-5 py-2 text-scenario font-medium text-ink-muted hover:text-ink"
+                  >
+                    Continuar a conversa
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmingAtTurn(turnCount)}
+                disabled={endAction === "disabled"}
+                className="text-aux text-ink-muted underline hover:text-ink disabled:text-ink-disabled disabled:no-underline"
+              >
+                Encerrar e ver relatório
+              </button>
+            ))}
         </div>
       )}
 

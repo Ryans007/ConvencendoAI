@@ -6,6 +6,7 @@ export interface UseLiveSessionResult extends LiveSessionState {
   startRecording: () => void;
   stopRecording: () => void;
   leaveEarly: () => void;
+  endAndReport: () => void;
   requestHint: () => void;
 }
 
@@ -18,6 +19,7 @@ const INITIAL_STATE: LiveSessionState = {
   result: null,
   noSpeechNotice: false,
   audioTooLargeNotice: false,
+  studentHasSpoken: false,
   hint: NO_HINT,
 };
 
@@ -49,6 +51,7 @@ export function useLiveSession(
     },
     stopRecording: () => sessionRef.current?.stopRecording(),
     leaveEarly: () => sessionRef.current?.leaveEarly(),
+    endAndReport: () => sessionRef.current?.endAndReport(),
     requestHint: () => sessionRef.current?.requestHint(),
   };
 }
