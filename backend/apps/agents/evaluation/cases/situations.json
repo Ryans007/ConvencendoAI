@@ -132,7 +132,6 @@
         "Student: Rachel, I need one more week to deliver the module, because the scope grew."
       ],
       "expect": [
-        {"check": "scene_resolved", "value": false},
         {"judge": "Does Rachel avoid granting the extra week in this line, and instead mention the client commitment or ask what is already done?"}
       ]
     },
@@ -148,15 +147,14 @@
         "Student: Tom, can you tell Rachel we need one more week? You can decide it with her."
       ],
       "expect": [
-        {"check": "scene_resolved", "value": false},
         {"judge": "Does Tom support the student without deciding the deadline himself and without acting as the student's opponent?"}
       ]
     },
     {
       "id": "P10a-pm-with-a-complete-argument",
-      "goal": "With a technical reason and a phased plan, the PM concedes and confirms the new deadline.",
+      "goal": "At the opportunity line, two turns before the limit, with a technical reason and a phased plan already given, the PM confirms the new deadline.",
       "scenario": "negociar-prazo", "level": 3, "samples": 3,
-      "current": "rachel", "turn_count": 3,
+      "current": "rachel", "turn_count": 10,
       "history": [
         "@deadline-opens",
         "Student: The scope grew, so I can't deliver on Friday.",
@@ -164,7 +162,6 @@
         "Student: The login and the reports are done. The export needs a new database table, and the tests take three days. We can deliver the login and the reports on Friday, and the export next Friday."
       ],
       "expect": [
-        {"check": "scene_resolved", "value": true},
         {"judge": "Does Rachel accept the extension and say the new deadline explicitly?"}
       ]
     },
@@ -180,7 +177,6 @@
         "Student: The login and the reports are done. The export needs a new database table, and the tests take three days. We can deliver the login and the reports on Friday, and the export next Friday."
       ],
       "expect": [
-        {"check": "scene_resolved", "value": false},
         {"judge": "Does Tom avoid deciding or announcing the new deadline himself?"}
       ]
     },
@@ -274,7 +270,6 @@
         "Student: Rachel, I need one more week. The module is hard."
       ],
       "expect": [
-        {"check": "scene_resolved", "value": false},
         {"judge": "Does Rachel ask for what is missing, such as the reason or a plan, instead of granting the extra week?"}
       ]
     },
@@ -359,6 +354,41 @@
       "expect": [
         {"check": "speaker", "value": "rachel"},
         {"check": "single_question", "value": true}
+      ]
+    },
+    {
+      "id": "P22-pm-already-conceded",
+      "goal": "The PM already conceded and the student thanks her: she does not grant it again and moves to the next step.",
+      "scenario": "negociar-prazo", "level": 3, "samples": 3,
+      "current": "rachel", "turn_count": 4,
+      "history": [
+        "@deadline-opens",
+        "Student: The scope grew, so I can't deliver on Friday.",
+        "[Rachel] The client expects it on Friday. What have you finished so far?",
+        "Student: The login and the reports are done. The export needs a new database table, and the tests take three days. We can deliver the login and the reports on Friday, and the export next Friday.",
+        "[Rachel] Okay, you have the extension: the export is due next Friday. What will you tell the client?",
+        "Student: Thank you, Rachel. I will email the client today."
+      ],
+      "expect": [
+        {"check": "single_question", "value": true},
+        {"judge": "Does Rachel avoid granting the extension a second time, and move to the next step of the conversation?"}
+      ]
+    },
+    {
+      "id": "P23-tom-accepts-a-tradeoff-answer",
+      "goal": "The student justifies the choice of Django: Tom accepts it in one sentence and asks something new, because the interview goes on.",
+      "scenario": "entrevista-de-emprego", "level": 3, "samples": 3,
+      "current": "tom", "turn_count": 3,
+      "history": [
+        "@rachel-opens",
+        "Student: I'm a backend developer. I had to learn Django in one weekend, and it was hard.",
+        "[Rachel] Tom, I think you'll want to hear about this.",
+        "[Tom] Hi, I'm Tom, the tech lead. Why did you choose Django over FastAPI for new APIs?",
+        "Student: Actually, I think Django is more robust. The Django admin is very nice for me."
+      ],
+      "expect": [
+        {"check": "single_question", "value": true},
+        {"judge": "Does Tom accept the answer in one short sentence and then ask a new question, without saying the interview is over?"}
       ]
     }
   ]

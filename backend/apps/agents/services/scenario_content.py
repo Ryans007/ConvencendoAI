@@ -58,7 +58,6 @@ class ScenarioContent:
     language: str
     questions: str
     rephrasing: str
-    concession_pace: str
     reply_to_student: str
     weights: dict[str, int]
     roles: list[Role]
@@ -134,7 +133,11 @@ def load_scenario_content(scenario: Scenario, level: Level) -> ScenarioContent:
         objective=scenario.objective,
         context=scenario.context,
         closing_hint=closing_hint,
-        max_turns=level.max_turns,
+        max_turns=(
+            scenario.max_turns
+            if scenario.max_turns is not None
+            else level.max_turns
+        ),
         max_consecutive_turns=scenario.max_consecutive_turns,
         difficulty_label=level.name,
         expected_production=level.expected_production,
@@ -142,7 +145,6 @@ def load_scenario_content(scenario: Scenario, level: Level) -> ScenarioContent:
         language=level.language,
         questions=level.questions,
         rephrasing=level.rephrasing,
-        concession_pace=level.concession_pace,
         reply_to_student=level.reply_to_student,
         weights=weights,
         roles=roles,

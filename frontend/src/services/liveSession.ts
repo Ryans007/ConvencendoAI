@@ -36,6 +36,7 @@ export interface LiveSessionState {
   result: LiveSessionResult | null;
   noSpeechNotice: boolean;
   audioTooLargeNotice: boolean;
+  studentHasSpoken: boolean;
   hint: SessionHint;
 }
 
@@ -83,6 +84,7 @@ export class LiveSession {
     result: null,
     noSpeechNotice: false,
     audioTooLargeNotice: false,
+    studentHasSpoken: false,
     hint: NO_HINT,
   };
 
@@ -312,7 +314,7 @@ export class LiveSession {
     }
     const buffer = await recording.blob.arrayBuffer();
     this.socket.send(buffer);
-    this.setState({ phase: "persona-speaking", hint: NO_HINT });
+    this.setState({ phase: "persona-speaking", hint: NO_HINT, studentHasSpoken: true });
   }
 
   /**
@@ -329,6 +331,21 @@ export class LiveSession {
     }
     this.setState({ hint: { status: "loading", text: null } });
     this.socket.send(JSON.stringify({ type: "hint_request" }));
+  }
+
+  /**
+   * O aluno pede o relatorio antes do limite de turnos: o servidor avalia a conversa ate ali e
+   * responde como responde ao fim por limite. So vale na vez do aluno e depois de ele ter falado
+   * ao menos uma vez, porque o servidor ignora o pedido antes disso e a tela ficaria esperando um
+   * relatorio que nao vem.
+   */
+  endAndReport(): void {
+    if (this.state.phase !== "student-turn" || !this.state.studentHasSpoken) {
+      return;
+    }
+    this.evaluationStarted = true;
+    this.socket.send(JSON.stringify({ type: "end_session" }));
+    this.setState({ phase: "evaluating" });
   }
 
   /** O aluno decide sair antes do fim: encerra a conexao, sem produzir relatorio. */

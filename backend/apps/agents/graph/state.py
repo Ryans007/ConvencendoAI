@@ -18,6 +18,9 @@ class ScenarioState(TypedDict):
     aluno falou com uma persona específica, inclusive a que já era a da vez: quem foi
     chamado responde ao que ele disse e fecha a rodada.
 
+    `scene_resolved` só é ligado pelo código: no fechamento do limite de turnos. Nenhuma persona
+    decide o fim da cena, que termina também a pedido do aluno, tratado fora do grafo.
+
     `redirect_to` fica preenchido só na rodada em que o aluno chamou uma persona para um
     assunto que é de outro personagem: é a chave de quem recebe a passagem de vez, feita pelo
     sistema e não pela persona.

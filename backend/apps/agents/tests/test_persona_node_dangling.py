@@ -130,16 +130,3 @@ def test_a_line_to_the_student_triggers_no_extra_line(monkeypatch):
     assert not [e for e in events if e["kind"].startswith("dangling")]
 
 
-def test_a_resolved_scene_is_not_followed_by_the_guard(monkeypatch):
-    content = _interview()
-    recording = _install(
-        monkeypatch,
-        PersonaTurn(
-            line="Rachel, thank you, we will be in touch.", pass_to="student", scene_resolved=True
-        ),
-    )
-
-    result = make_persona_node(content, "")(_state("tom"))
-
-    assert len(recording.prompts) == 1
-    assert result["scene_resolved"] is True

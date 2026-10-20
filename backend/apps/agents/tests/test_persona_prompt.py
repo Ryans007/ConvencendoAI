@@ -119,19 +119,17 @@ def test_answering_the_student_never_replaces_the_question_or_the_invitation():
         prompt = _prompt(level_order)
 
         rule = " ".join(prompt[prompt.index("ANSWER THE STUDENT FIRST") :].split())
-        assert "unless you are resolving the scene, ALWAYS" in rule
+        assert "Then ALWAYS finish the line with this turn's question" in rule
         assert "leaves the student with nothing to say" in rule
 
 
-def test_the_line_that_resolves_the_scene_asks_nothing():
+def test_no_prompt_lets_the_persona_end_the_scene():
     for level_order in (1, 2, 3):
-        prompt = " ".join(_prompt(level_order).split())
+        prompt = _prompt(level_order)
 
-        exception = 'The only exception is the line that resolves the scene (see "scene_resolved"'
-        assert exception in prompt
-        resolved_rule = prompt[prompt.index('- "scene_resolved"') :]
-        assert "close the interaction naturally, with NO question" in resolved_rule
-        assert "the session ends right after it" in resolved_rule
+        assert "scene_resolved" not in prompt
+        assert "resolves the scene" not in prompt
+        assert "close the interaction" not in prompt
 
 
 def test_an_invitation_to_go_on_counts_as_the_turns_question():
@@ -256,16 +254,15 @@ def test_the_prompt_carries_the_archetype_with_its_description():
     assert "apoia quando o argumento é bom" in prompt
 
 
-def test_the_role_that_decides_is_told_to_concede_when_the_condition_is_met():
+def test_the_role_that_decides_gets_its_card_and_no_push_to_concede():
     prompt = _deadline_prompt("rachel")
 
     assert "You decide this." in prompt
-    assert "resistance ENDS the moment" in prompt
-    assert "CONCESSION CHECK: split what makes you concede into its parts" in prompt
-    assert 'Fill "condition_met" first' in prompt
-    assert "concede in THAT very line" in prompt
-    assert 'set "scene_resolved" to true and ask NO question' in prompt
-    assert "Concede as soon as the student meets what makes you concede" in prompt
+    assert "What makes you concede:" in prompt
+    assert "resistance ENDS" not in prompt
+    assert "CONCESSION CHECK" not in prompt
+    assert "condition_met" not in prompt
+    assert "Concede as soon as" not in prompt
     assert "Do not hand it over easily" not in prompt
 
 
@@ -273,7 +270,7 @@ def test_the_role_that_does_not_decide_never_grants_or_confirms_the_outcome():
     prompt = _deadline_prompt("tom")
 
     assert "You do NOT decide this: Rachel (key: rachel) does." in prompt
-    assert 'always answer "condition_met": false and "scene_resolved":\nfalse' in prompt
+    assert "condition_met" not in prompt
     assert "CONCESSION CHECK" not in prompt
     assert "Concede as soon as" not in prompt
     assert "Do not hand it over easily" not in prompt

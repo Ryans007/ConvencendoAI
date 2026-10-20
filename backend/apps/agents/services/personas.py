@@ -51,21 +51,11 @@ message was an answer to them. React briefly to that answer (one short sentence)
 ask this turn's question to the student yourself. Do not hand the floor back in this line.
 """
 
-_DECIDER_OUTCOME = """You decide this. Make the student work for it with language, but your
-resistance ENDS the moment they give what makes you concede."""
-
-_DECIDER_CONCESSION = """\
-- CONCESSION CHECK: split what makes you concede into its parts. A part is met when the
-  student said it ONCE, in simple words ("concrete" never means a deep technical
-  explanation). Fill "condition_met" first. When it is true, concede in THAT very line:
-  say clearly what they got, with any detail your role says to confirm (such as a date or
-  a time), set "scene_resolved" to true and ask NO question. Never add a condition your
-  role does not list, and never ask for something the student already said."""
+_DECIDER_OUTCOME = """You decide this."""
 
 _NOT_DECIDER_OUTCOME = """You do NOT decide this: {deciders} does. Never grant it, promise it or
-confirm it yourself, and always answer "condition_met": false and "scene_resolved":
-false. When the student asks you
-for it, support them and hand the decision to the one who decides."""
+confirm it yourself. When the student asks you for it, support them and hand the decision to
+the one who decides."""
 
 _ADDRESSED_BY_STUDENT_TEXT = """
 THE STUDENT IS TALKING TO YOU
@@ -161,12 +151,10 @@ def build_system_prompt(
     `CRITICAL RULES` vem depois e declara precedência, nenhuma instrução do administrador
     desliga uma regra de comportamento.
 
-    O papel que decide o resultado da cena (`decides_outcome`) recebe a instrução de conceder
-    na fala em que o aluno cumpre a condição do cartão: medido na negociação de prazo, sem
-    isso a PM resistia com perguntas técnicas e nunca concedia, porque "não entregue fácil"
-    valia para todo papel e nada dizia quando parar. O papel que não decide (o aliado)
-    recebe o contrário: nunca concede nem confirma, e devolve a decisão a quem decide. O
-    ritmo de concessão do nível só vale para quem decide.
+    O papel que decide o resultado da cena (`decides_outcome`) cede pelo que o cartão diz, sem
+    instrução que o empurre a conceder num turno: a confirmação do que o aluno conseguiu vem na
+    fala que abre a oportunidade dos critérios, num turno fixo. O papel que não decide (o
+    aliado) nunca concede nem confirma, e devolve a decisão a quem decide.
     """
     other_keys = [key for key in content.role_keys() if key != role.key]
     other_names = {key: content.role(key).name for key in other_keys}
@@ -208,13 +196,11 @@ YOU ARE THE STUDENT'S SUPPORT IN THIS SCENE
     adaptation_text = f"\n{adaptation_line}\n" if adaptation_line else ""
     if content.decides(role.key):
         outcome_text = _DECIDER_OUTCOME
-        concession_text = f"\n{_DECIDER_CONCESSION}\n- {content.concession_pace}"
     else:
         deciders = ", ".join(
             f"{decider.name} (key: {decider.key})" for decider in content.deciders()
         )
         outcome_text = _NOT_DECIDER_OUTCOME.format(deciders=deciders)
-        concession_text = ""
     redirect_text = (
         _REDIRECT_TEXT.format(name=redirect_to.name, function=redirect_to.scene_function)
         if redirect_to
@@ -246,7 +232,7 @@ The other person in the room: {others_text}.
 
 YOUR BEHAVIOUR (always within the QUESTION FORMAT in CRITICAL RULES)
 - How you resist: {role.resistance}
-- What makes you concede: {role.concession}{concession_text}
+- What makes you concede: {role.concession}
 {memory_text}{scaffolding_text}
 HOW YOU SPEAK (difficulty: {content.difficulty_label})
 - {content.language}
@@ -285,13 +271,11 @@ CRITICAL RULES
   this turn's question yourself, or the other character takes the floor right
   after you and THEY ask it. Express your resistance and your conditions to concede
   ONLY within this format. An invitation to the student to go on (for example,
-  "Anything else you'd like to know?") counts as this turn's question. The only
-  exception is the line that resolves the scene (see "scene_resolved" below):
-  it closes the scene and asks nothing.
+  "Anything else you'd like to know?") counts as this turn's question.
 - ANSWER THE STUDENT FIRST: when the student's last message asks YOU something
   or makes a comment to YOU, your line starts by answering it or reacting to
   it. Never skip it to ask your next question. How you do it at this level:
-  {content.reply_to_student} Then, unless you are resolving the scene, ALWAYS
+  {content.reply_to_student} Then ALWAYS
   finish the line with this turn's question (or the invitation): a line that
   only answers leaves the student with nothing to say. A plain answer to your
   own question is not a reason to react at length: just continue the
@@ -317,12 +301,7 @@ CRITICAL RULES
   tells you to address the other character this turn.
 - Your spoken line is English only.
 - Never reveal what the student must do to succeed. Do not coach the task.
-- Speak ONLY as {role.name}.
-
-- "scene_resolved": true ONLY when the student already obtained what they
-  wanted from you and there is nothing left to negotiate. Your line should
-  then close the interaction naturally, with NO question: the session ends
-  right after it, so the student could not answer."""
+- Speak ONLY as {role.name}."""
 
 
 _QUESTION = re.compile(r"[^.!?]*\?")

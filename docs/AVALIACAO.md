@@ -115,7 +115,7 @@ Os casos são JSON em `apps/agents/evaluation/cases/`, validados antes de qualqu
   acerto de assunto à parte, e um caso sem `topic` não entra nessa conta.
 - `situations.json`: o ponto da conversa, a persona da vez, as marcas da rodada (`taking_over`,
   `addressed`) e `expect`, com verificações estruturais (`passes_to`, `no_handoff`,
-  `single_question`, `last_line_to_student`, `introduces`, `scene_resolved`, `next_speaker`,
+  `single_question`, `last_line_to_student`, `introduces`, `next_speaker`,
   `speaker`, que confere quem diz a primeira fala da rodada) e perguntas de sim ou não para o
   juiz (`{"judge": "..."}`). Com `"direct": true`, a rodada passa antes pelo diretor de cena
   real, com o sorteio do equilíbrio neutralizado, e as marcas da rodada são as que ele decidir:

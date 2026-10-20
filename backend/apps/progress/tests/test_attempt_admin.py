@@ -19,6 +19,7 @@ def _attempt(django_user_model) -> Attempt:
         completed_at=timezone.now(),
         hints_enabled=True,
         hints_used=2,
+        ended_by="student"
     )
 
 
@@ -32,6 +33,8 @@ def test_attempt_list_shows_the_hints_columns(admin_client, django_user_model):
     assert "dicas ligadas" in page.lower()
     assert "dicas usadas" in page.lower()
     assert "aluno_auditado" in page
+    assert "encerrada por" in page.lower()
+    assert "pedido do aluno" in page.lower()
 
 
 def test_attempts_cannot_be_added_changed_or_deleted_in_the_admin(admin_client, django_user_model):

@@ -21,6 +21,18 @@ def _scenario(**overrides) -> Scenario:
     return Scenario(**{**fields, **overrides})
 
 
+def test_scenario_max_turn_optional():
+    assert _scenario().max_turns is None
+
+
+def test_scenario_max_turns_requires_at_least_seven():
+    with translation.override("pt-br"), pytest.raises(ValidationError) as error:
+        _scenario(max_turns=6).full_clean()
+
+    messages = error.value.message_dict["max_turns"]
+    assert any("maior ou igual a 7" in message for message in messages)
+
+
 def test_new_scenario_gets_the_default_maximum():
     assert _scenario().max_consecutive_turns == 3
 

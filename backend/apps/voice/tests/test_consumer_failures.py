@@ -18,6 +18,7 @@ from apps.progress.services import build_journey
 from apps.voice import consumers as voice_consumers
 from apps.voice.routing import websocket_urlpatterns
 from apps.voice.services import stt
+from apps.voice.tests.scene_end import end_after_the_first_turn
 from apps.voice.tests.session_client import SessionCommunicator
 
 pytestmark = pytest.mark.django_db
@@ -27,8 +28,8 @@ _PROVIDER_DETAIL = (
     "Rate limit reached for model `openai/gpt-oss-20b` on tokens per day: "
     "Limit 200000, Used 198775"
 )
-_OPENING = PersonaTurn(line="Hello, let's talk.", pass_to="student", scene_resolved=False)
-_RESOLVING = PersonaTurn(line="Deal, see you next week.", pass_to="student", scene_resolved=True)
+_OPENING = PersonaTurn(line="Hello, let's talk.", pass_to="student")
+_RESOLVING = PersonaTurn(line="Deal, see you next week.", pass_to="student")
 
 
 def _rate_limit() -> openai.RateLimitError:
@@ -168,6 +169,7 @@ def test_evaluation_failure_after_the_scene_is_reported_as_report_failed(
 ):
     user, token = _student(django_user_model)
     _prepare(monkeypatch, [_OPENING, _RESOLVING])
+    end_after_the_first_turn(monkeypatch)
 
     def failing_evaluate(content, messages, known_rules=()):
         raise _rate_limit()

@@ -21,6 +21,7 @@ class AttemptAdmin(admin.ModelAdmin):
         "passed",
         "hints_enabled",
         "hints_used",
+        "ended_by",
         "completed_at",
     ]
     list_filter = ["scenario", "level", "passed", "hints_enabled"]

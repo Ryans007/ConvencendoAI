@@ -12,6 +12,7 @@ from apps.agents.services.schemas import PersonaTurn, RoutingDecision
 from apps.progress.models import Attempt
 from apps.voice import consumers as voice_consumers
 from apps.voice.routing import websocket_urlpatterns
+from apps.voice.tests.scene_end import end_after_the_first_turn
 from apps.voice.tests.session_client import SessionCommunicator
 
 pytestmark = pytest.mark.django_db
@@ -38,8 +39,8 @@ class _AlwaysRachel:
         return RoutingDecision(speaker="rachel")
 
 
-def _turn(line: str, resolved: bool = False) -> PersonaTurn:
-    return PersonaTurn(line=line, pass_to="student", scene_resolved=resolved)
+def _turn(line: str) -> PersonaTurn:
+    return PersonaTurn(line=line, pass_to="student")
 
 
 async def _keep_the_test_connection() -> None:
@@ -116,9 +117,9 @@ def test_hint_is_answered_counted_once_per_turn_and_marks_the_answer(
         monkeypatch,
         _turn("Why do you need more time?"),
         _turn("And what is your plan?"),
-        _turn("Fine, take the week.", resolved=True),
         router=_AlwaysRachel,
     )
+    end_after_the_first_turn(monkeypatch, "Fine, take the week.", turns=2)
     evaluated = _capture_evaluation(monkeypatch)
 
     async def run() -> None:

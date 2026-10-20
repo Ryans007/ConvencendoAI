@@ -153,14 +153,3 @@ def test_the_redirect_is_cleared_on_the_closing_hint_turn(monkeypatch):
     assert result["redirect_to"] == ""
 
 
-def test_a_scene_resolved_by_the_called_persona_skips_the_redirected_one(monkeypatch):
-    content = _interview()
-    recording = _install(
-        monkeypatch,
-        PersonaTurn(line="Good luck with the next steps.", pass_to="student", scene_resolved=True),
-    )
-
-    result = make_persona_node(content, "")(_state("rachel", redirect_to="tom"))
-
-    assert len(recording.prompts) == 1
-    assert result["scene_resolved"] is True

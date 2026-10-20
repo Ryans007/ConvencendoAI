@@ -34,7 +34,6 @@ def _fakes(monkeypatch, *, persona=None) -> FakeModels:
             PersonaTurn(
                 line="Understood. The new deadline is next Friday.",
                 pass_to="student",
-                scene_resolved=True,
             ),
         ],
     )
@@ -112,7 +111,7 @@ def test_a_full_run_writes_the_report_and_the_raw_data(tmp_path, monkeypatch):
     assert "## Papel das personas (juiz)" in report and "## Consumo" in report
     assert "S2-deadline-negotiation" in report
     assert data["layers"] == ["router", "situations", "sessions"]
-    assert data["sessions"][0]["scene_resolved"] is True
+    assert data["sessions"][0]["turn_count"] == data["sessions"][0]["max_turns"]
     assert sum(estimate.values()) == data["calls_estimated"]
 
 
@@ -136,7 +135,7 @@ def test_the_run_is_marked_as_evaluation_usage(tmp_path, monkeypatch):
     def persona(messages):
         owner = current_owner()
         owners.append(owner.username if owner else None)
-        return PersonaTurn(line="What happened?", pass_to="student", scene_resolved=False)
+        return PersonaTurn(line="What happened?", pass_to="student")
 
     _fakes(monkeypatch, persona=persona)
 

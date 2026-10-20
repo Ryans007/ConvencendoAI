@@ -13,6 +13,8 @@ class Scenario(models.Model):
 
     `max_consecutive_turns` limita quantas rodadas seguidas a mesma persona conduz: o
     modelo, sozinho, não divide a conversa, e cada cena tem o próprio ritmo.
+
+    `max_turns` limita o número total de rodadas permitidas na cena.
     """
 
     track = models.ForeignKey(Track, on_delete=models.CASCADE, related_name="scenarios")
@@ -31,6 +33,13 @@ class Scenario(models.Model):
             "A cada rodada é sorteado um limite entre 2 e este valor; ao atingi-lo, a vez "
             "passa ao outro personagem. Nenhuma persona conduz mais rodadas seguidas que isto."
         ),
+    )
+    max_turns = models.PositiveSmallIntegerField(
+        "máximo de turnos",
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(7)],
+        help_text="Número máximo de turnos permitidos na cena.",
     )
 
     class Meta:

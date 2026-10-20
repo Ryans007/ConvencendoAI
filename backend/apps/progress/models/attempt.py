@@ -3,6 +3,7 @@ from django.db import models
 
 from apps.catalog.constants import RubricDimension
 from apps.catalog.models import Level, Scenario
+from apps.progress.choices import EndedBy
 
 
 class Attempt(models.Model):
@@ -35,6 +36,13 @@ class Attempt(models.Model):
         default=0,
         verbose_name="dicas usadas",
         help_text="Quantas dicas o aluno pediu na sessão, no máximo uma por vez dele.",
+    )
+    ended_by = models.CharField(
+        "encerrada por",
+        max_length=20,
+        choices=EndedBy.choices,
+        blank=True,
+        help_text="O motivo pelo qual a sessão foi encerrada.",
     )
     started_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)

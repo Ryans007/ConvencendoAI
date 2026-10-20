@@ -90,7 +90,6 @@ def _fake_session(monkeypatch, prompts):
             PersonaTurn(
                 line="Good. The new deadline is next Friday.",
                 pass_to="student",
-                scene_resolved=True,
             ),
         ],
     )
@@ -108,7 +107,9 @@ def test_only_the_last_persona_line_of_a_session_is_judged_as_the_closing(loaded
     session = run_session_layer([profile], loaded.contents, use_judge=True)[0]
 
     flags = [judged["final"] for judged in session["roles"]]
-    assert flags == [False, False, True]
+    assert len(flags) > 3
+    assert flags[-1] is True
+    assert not any(flags[:-1])
     assert [CLOSING_MARK in prompt for prompt in prompts] == flags
 
 

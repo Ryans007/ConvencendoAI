@@ -6,6 +6,7 @@ from apps.agents.services.evaluator import evaluate
 from apps.agents.services.scenario_content import ScenarioContent, load_scenario_content
 from apps.catalog.constants import RubricDimension
 from apps.catalog.models import Level, Scenario
+from apps.progress.choices import EndedBy
 from apps.progress.constants import is_passing_score
 from apps.progress.models import Attempt, AttemptCriterion, ScoreBreakdown
 from apps.progress.services.memory import track_memory
@@ -26,11 +27,21 @@ def resolve_execution(scenario: Scenario, level: Level, user) -> tuple[ScenarioC
     return content, memory, attempt
 
 
-_RESULT_FIELDS = ["final_score", "passed", "memory_summary", "feedback", "completed_at"]
+_RESULT_FIELDS = [
+    "final_score",
+    "passed",
+    "memory_summary",
+    "feedback",
+    "ended_by",
+    "completed_at",
+]
 
 
 def evaluate_and_record_attempt(
-    attempt: Attempt, content: ScenarioContent, final_state: dict
+    attempt: Attempt,
+    content: ScenarioContent,
+    final_state: dict,
+    ended_by: str = EndedBy.TURN_LIMIT,
 ) -> Attempt:
     """Avalia o estado final de uma execução já terminada e grava o resultado na tentativa
     já aberta por `resolve_execution`.
@@ -45,6 +56,8 @@ def evaluate_and_record_attempt(
 
     Grava só os campos de resultado: o objeto recebido foi carregado no início da sessão,
     e gravá-lo inteiro apagaria o que mudou na tentativa durante ela, como as dicas usadas.
+    `ended_by` registra como a sessão terminou: pelo limite de turnos, que é o padrão, ou a
+    pedido do aluno.
 
     Os erros de linguagem apontados pelo avaliador viram itens de revisão do aluno na
     mesma transação: o avaliador recebe as regras que o aluno já tem para dizer quando um
@@ -88,6 +101,7 @@ def evaluate_and_record_attempt(
     attempt.passed = is_passing_score(score)
     attempt.memory_summary = outcome.memory_summary
     attempt.feedback = outcome.feedback
+    attempt.ended_by = ended_by
     attempt.completed_at = timezone.now()
 
     with transaction.atomic():

@@ -3,6 +3,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from apps.agents.graph import personas as graph_personas
 from apps.agents.graph.personas import make_persona_node
+from apps.agents.services.round_trace import collect_round_events
 from apps.agents.services.scenario_content import load_scenario_content
 from apps.agents.services.schemas import PersonaTurn
 from apps.catalog.models import Level, Scenario
@@ -329,102 +330,20 @@ def test_the_mark_is_cleared_on_the_closing_hint_turn(monkeypatch):
     assert result["addressed_by_student"] is False
 
 
-def _resolving_llm(prompts: list, *turns: PersonaTurn):
-    sequence = iter(turns)
-
-    class _SequenceLLM:
-        def invoke(self, messages):
-            prompts.append(messages[0].content)
-            return next(sequence)
-
-    return _SequenceLLM()
-
-
-def _closing_recorder(monkeypatch, closing: str = "Great, June 30th works.") -> list:
-    calls = []
-
-    def fake_closing_line(content, role, history):
-        calls.append((role.key, [m.content for m in history]))
-        return closing
-
-    monkeypatch.setattr(graph_personas, "generate_closing_line", fake_closing_line)
-    return calls
-
-
-def test_resolved_scene_with_a_question_in_the_line_is_closed_without_it(monkeypatch):
+def test_a_line_that_grants_what_the_student_wanted_does_not_end_the_scene(monkeypatch):
     content = _content()
     rachel = content.role_keys()[0]
     name = content.role(rachel).name
-    history = [
-        AIMessage(content=f"[{name}] Does the new date work for you?"),
-        HumanMessage(content="Yes, it works."),
-    ]
-    turn = PersonaTurn(
-        line="We will set June 30th. Do you need any resources?",
-        pass_to="student",
-        scene_resolved=True,
-    )
+    turn = PersonaTurn(line="Great, the new date works. What will you do next?", pass_to="student")
     monkeypatch.setattr(
-        graph_personas, "get_structured_llm", lambda purpose, schema: _resolving_llm([], turn)
+        graph_personas, "get_structured_llm", lambda purpose, schema: _FakeStructuredLLM(turn)
     )
-    calls = _closing_recorder(monkeypatch)
 
-    result = make_persona_node(content, "")(_state(history, rachel))
-
-    assert [m.content for m in result["messages"]] == [f"[{name}] Great, June 30th works."]
-    assert result["scene_resolved"] is True
-    assert calls == [(rachel, [m.content for m in history])]
-
-
-def test_resolved_scene_without_a_question_keeps_the_line_and_makes_no_extra_call(monkeypatch):
-    content = _content()
-    rachel = content.role_keys()[0]
-    name = content.role(rachel).name
-    turn = PersonaTurn(line="Great, June 30th works. Good luck.", pass_to="student", scene_resolved=True)
-    monkeypatch.setattr(
-        graph_personas, "get_structured_llm", lambda purpose, schema: _resolving_llm([], turn)
-    )
-    calls = _closing_recorder(monkeypatch)
-
-    result = make_persona_node(content, "")(_state([HumanMessage(content="Yes.")], rachel))
-
-    assert [m.content for m in result["messages"]] == [f"[{name}] Great, June 30th works. Good luck."]
-    assert calls == []
-
-
-def test_unresolved_scene_keeps_its_question(monkeypatch):
-    content = _content()
-    rachel = content.role_keys()[0]
-    name = content.role(rachel).name
-    turn = PersonaTurn(line="Did you write tests?", pass_to="student", scene_resolved=False)
-    monkeypatch.setattr(
-        graph_personas, "get_structured_llm", lambda purpose, schema: _resolving_llm([], turn)
-    )
-    calls = _closing_recorder(monkeypatch)
-
-    result = make_persona_node(content, "")(_state([HumanMessage(content="Yes.")], rachel))
-
-    assert [m.content for m in result["messages"]] == [f"[{name}] Did you write tests?"]
-    assert result["scene_resolved"] is False
-    assert calls == []
-
-
-def test_second_persona_of_a_handoff_resolving_with_a_question_is_the_one_replaced(monkeypatch):
-    content = _content()
-    rachel, tom = content.role_keys()
-    rachel_name, tom_name = content.role(rachel).name, content.role(tom).name
-    history = [HumanMessage(content="Yes, it works for me.")]
-    first = PersonaTurn(line="Tom, would you like to wrap up?", pass_to=tom)
-    second = PersonaTurn(line="Deal. Anything else you need?", pass_to="student", scene_resolved=True)
-    sequence_llm = _resolving_llm([], first, second)
-    monkeypatch.setattr(graph_personas, "get_structured_llm", lambda purpose, schema: sequence_llm)
-    calls = _closing_recorder(monkeypatch, "Deal. We will confirm by email.")
-    state = {**_state(history, rachel), "addressed_by_student": True, "redirect_to": tom}
-
-    result = make_persona_node(content, "")(state)
+    with collect_round_events() as events:
+        result = make_persona_node(content, "")(_state([HumanMessage(content="Yes.")], rachel))
 
     assert [m.content for m in result["messages"]] == [
-        f"[{rachel_name}] Tom, would you like to wrap up?",
-        f"[{tom_name}] Deal. We will confirm by email.",
+        f"[{name}] Great, the new date works. What will you do next?"
     ]
-    assert calls == [(tom, ["Yes, it works for me.", f"[{rachel_name}] Tom, would you like to wrap up?"])]
+    assert "scene_resolved" not in result
+    assert not [e for e in events if e["kind"] == "concession"]

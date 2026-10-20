@@ -11,7 +11,6 @@ SITUATION_RATE_CHECKS = (
     "introduces",
     "single_question",
     "last_line_to_student",
-    "scene_resolved",
     "speaker",
 )
 

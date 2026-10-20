@@ -13,6 +13,7 @@ from apps.catalog.models import Level, Scenario
 from apps.progress.models import Attempt
 from apps.voice import consumers as voice_consumers
 from apps.voice.routing import websocket_urlpatterns
+from apps.voice.tests.scene_end import end_after_the_first_turn
 from apps.voice.tests.session_client import SessionCommunicator
 
 pytestmark = pytest.mark.django_db
@@ -25,12 +26,13 @@ def test_live_session_opens_transcribes_a_turn_and_ends(django_user_model, monke
     level = Level.objects.get(order=3)
 
     opening_turn = PersonaTurn(
-        line="Hello, let's talk about the deadline.", pass_to="student", scene_resolved=False
+        line="Hello, let's talk about the deadline.", pass_to="student"
     )
     reply_turn = PersonaTurn(
-        line="Understood, let's proceed then.", pass_to="student", scene_resolved=True
+        line="Understood, let's proceed then.", pass_to="student"
     )
     turns = iter([opening_turn, reply_turn])
+    end_after_the_first_turn(monkeypatch, "Understood, let's proceed then.")
 
     class _FakeStructuredLLM:
         def invoke(self, messages):
@@ -110,8 +112,8 @@ def test_audio_sent_during_evaluation_is_ignored(django_user_model, monkeypatch)
     token = str(AccessToken.for_user(user))
 
     turns = iter([
-        PersonaTurn(line="Hello, let's talk.", pass_to="student", scene_resolved=False),
-        PersonaTurn(line="Deal, see you next week.", pass_to="student", scene_resolved=True),
+        PersonaTurn(line="Hello, let's talk.", pass_to="student"),
+        PersonaTurn(line="Deal, see you next week.", pass_to="student"),
     ])
 
     class _FakeStructuredLLM:
@@ -122,6 +124,7 @@ def test_audio_sent_during_evaluation_is_ignored(django_user_model, monkeypatch)
         def invoke(self, messages):
             return RoutingDecision(speaker="")
 
+    end_after_the_first_turn(monkeypatch)
     transcribed, evaluated = [], []
     outcome = EvaluationOutcome(
         confirmed_criteria=set(),
@@ -179,7 +182,7 @@ def test_empty_transcription_asks_the_student_to_speak_again(django_user_model, 
     user = django_user_model.objects.create(username="aluno")
     token = str(AccessToken.for_user(user))
 
-    opening_turn = PersonaTurn(line="Hello, let's talk.", pass_to="student", scene_resolved=False)
+    opening_turn = PersonaTurn(line="Hello, let's talk.", pass_to="student")
 
     class _FakeStructuredLLM:
         def invoke(self, messages):

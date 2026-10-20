@@ -11,7 +11,6 @@ _CHECK_TEXT = {
     "introduces": "a persona que entra se apresenta",
     "single_question": "uma pergunta só ao aluno",
     "last_line_to_student": "a última fala é dirigida ao aluno",
-    "scene_resolved": "estado de cena resolvida como esperado",
     "next_speaker": "a próxima persona da vez é a esperada",
     "speaker": "a fala é dita pela persona esperada",
 }
@@ -120,9 +119,8 @@ def _session_section(sessions: list[dict[str, Any]]) -> list[str]:
             lines += [f"- **A sessão falhou:** {session['error']}", ""]
             continue
         metrics = session["metrics"]
-        state = "cena resolvida" if session["scene_resolved"] else "limite de turnos"
         lines += [
-            f"- Terminou por: {state} ({session['turn_count']} de {session['max_turns']} turnos).",
+            f"- Terminou por: limite de turnos ({session['turn_count']} de {session['max_turns']} turnos).",
             f"- Falas por persona: {metrics['lines_by_persona']}.",
             f"- Quem fechou cada rodada: {' '.join(metrics['leaders'])}.",
             f"- Trocas de condução: {metrics['changes']}, por: {metrics['causes'] or 'nenhuma'}.",

@@ -12,21 +12,13 @@ class PersonaTurn(BaseModel):
     persona não recebe, e pedir ao mesmo modelo, na mesma saída, o que o aluno deveria
     responder leva a persona a falar pelo aluno.
 
-    `condition_met` vem antes da fala de propósito: a ordem dos campos é a ordem em que o
-    modelo preenche a saída, então ele decide primeiro se o aluno já cumpriu o que faz o papel
-    ceder e só depois escreve a fala. Medido com o modelo real, sem esse passo a persona que
-    decide pedia mais detalhe do que o cartão exige e nunca concedia (0 de 6); com ele, 7 de
-    8. O código não depende do campo: ele só ordena o raciocínio do modelo.
+    Não há campo para encerrar a cena: a cena termina só pelo limite de turnos ou por pedido do
+    aluno. Quando o fim era decidido por um campo do modelo, o aliado encerrava uma negociação
+    que só a PM podia concluir e o Tom encerrou uma entrevista no 4º turno de 12. Também não
+    há campo que empurre a persona a conceder num turno: com ele, a persona que já tinha
+    concedido repetia a concessão em todo turno seguinte.
     """
 
-    condition_met: bool = Field(
-        default=False,
-        description=(
-            "Decide this FIRST. True when the student has already said, anywhere in the "
-            "conversation, every part of what makes you concede (each part only once and in "
-            "simple words). Only relevant if you decide the outcome; otherwise false"
-        ),
-    )
     line: str = Field(default="", description="The character's spoken line, in English")
     pass_to: str = Field(
         default="student",
@@ -34,13 +26,6 @@ class PersonaTurn(BaseModel):
             "Who should respond to this line: \"student\" if it is addressed to the "
             "student, or the key of the other character if THEY should respond right "
             "now, in this same turn, because this line was addressed to them instead"
-        ),
-    )
-    scene_resolved: bool = Field(
-        default=False,
-        description=(
-            "True when you concede in this line, or when the student already got what they "
-            "wanted from you"
         ),
     )
 
