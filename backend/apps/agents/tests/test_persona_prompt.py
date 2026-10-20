@@ -382,3 +382,17 @@ def test_the_persona_that_does_not_hand_the_floor_gets_no_handoff_block():
 
 def test_the_opening_line_gets_no_debut_notice():
     assert "FIRST LINE IN THE CONVERSATION" not in _prompt(3)
+
+
+def test_the_closing_hint_prompt_keeps_the_scene_direction_out_of_the_line(monkeypatch):
+    prompt = _closing_hint_prompt(monkeypatch, "")
+
+    assert "stage direction for you, never something to say out loud" in prompt
+    assert "Never tell the student that the conversation is ending" in prompt
+
+
+def test_the_time_limit_closing_prompt_answers_a_greeting_first(monkeypatch):
+    prompt = _closing_line_prompt(monkeypatch)
+
+    assert "asked you something, greeted you" in prompt
+    assert prompt.index("greeted you") < prompt.index("what happens next")

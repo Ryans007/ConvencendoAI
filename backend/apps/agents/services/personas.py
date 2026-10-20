@@ -354,8 +354,9 @@ Last exchanges:
 {excerpt}
 
 Write your FINAL line, in character: one or two short sentences in English that
-close the conversation. Acknowledge what the student said and state what happens
-next, or that you have to go.
+close the conversation. If the student's last message asked you something, greeted you
+or made a comment to you, start with one short sentence that answers it or reacts to it.
+Then say what happens next, or that you have to go.
 
 Hard requirement: your line MUST NOT contain a question. No question marks."""
 
@@ -391,9 +392,11 @@ Last exchanges:
 {excerpt}
 
 If the student's last message asked you something or made a comment to you, start with
-one short sentence that answers it or reacts to it. Then your line MUST do exactly this:
+one short sentence that answers it or reacts to it. Then your line MUST do exactly this
+(these words are a stage direction for you, never something to say out loud):
 {closing_instruction}
 
+Never tell the student that the conversation is ending, nearly over or running out of time.
 At most three short sentences, in character. Nothing else."""
 
 _CLOSING_HINT_FACTS = """
@@ -416,6 +419,12 @@ def generate_closing_hint_line(content: ScenarioContent, role: Role, history: li
     ignorada e a persona repetiria o convite. Por isso o prompt pede uma frase curta que
     responda ou reaja antes do convite, e traz os fatos do papel quando há e o aviso de
     transcrição.
+
+    A instrução do cenário (`closing_hint`) é escrita como uma direção de cena e começa
+    dizendo que a conversa está acabando. Medido numa avaliação, entregue logo depois de
+    "sua fala DEVE fazer exatamente isto", a persona a repetia ao aluno ("The conversation is
+    nearly over"). Por isso o prompt a apresenta como direção de cena que nunca se diz em voz
+    alta e proíbe avisar o aluno de que a conversa está acabando.
     """
     extra_instruction = role.extra_instruction.strip()
     facts = (

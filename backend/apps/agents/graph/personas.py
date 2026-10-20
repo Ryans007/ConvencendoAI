@@ -55,21 +55,34 @@ def make_opening_node(content: ScenarioContent, memory: str):
 
     Evita a paralisia da primeira frase (o aluno não precisa puxar assunto) e
     força listening desde o começo.
+
+    A abertura é dita ao aluno: se o modelo a dirige à outra persona pelo vocativo ("Tom, the
+    client expects..."), ele tenta de novo uma vez, e se a segunda também vier assim usa uma
+    saudação fixa. Medido numa avaliação com o modelo real, 1 de 5 aberturas saía assim e ficava
+    sem resposta, porque a guarda da última fala só vale para as rodadas seguintes.
     """
     key = content.role_keys()[0]
+    names = [candidate.name for candidate in content.roles]
 
     def node_opening(state: ScenarioState) -> dict:
         role = content.role(key)
         system = build_system_prompt(content, role, memory)
         instruction = (
             "Open the scene: say the one line that starts this interaction. "
+            "Speak to the student, never to the other character. "
             'Set pass_to to "student".'
         )
 
         llm = get_structured_llm(ModelPurpose.PERSONA, PersonaTurn)
-        turn = llm.invoke([SystemMessage(content=system), HumanMessage(content=instruction)])
-
-        text = sanitize_line(turn.line) or "Hello. Let's get started."
+        text = ""
+        for attempt in range(2):
+            turn = llm.invoke([SystemMessage(content=system), HumanMessage(content=instruction)])
+            text = sanitize_line(turn.line)
+            if text and addressed_persona(text, role.name, names) is None:
+                break
+            record_round_event("opening_retried", speaker=key, attempt=attempt + 1)
+            text = ""
+        text = text or "Hello. Let's get started."
         _speak(role, text)
         record_round_event("opening", speaker=key)
 
@@ -81,8 +94,16 @@ def make_opening_node(content: ScenarioContent, memory: str):
     return node_opening
 
 
-def final_speaker(content: ScenarioContent, role: Role) -> Role:
-    """Quem diz as falas finais: a persona da vez, se ela decide; senão, a primeira que decide."""
+def final_speaker(content: ScenarioContent, role: Role, receiver: Role | None = None) -> Role:
+    """Quem diz as falas finais: quem recebe a vez nesta rodada, se decide; senão, a da vez.
+
+    Se a persona da vez não decide, é a primeira que decide. Quando o diretor de cena passou a
+    vez a outra persona nesta rodada (`receiver`) e ela decide, é ela quem diz a fala final:
+    medido numa sessão real, a Emma respondia sobre o assunto do James na fala da
+    oportunidade, porque essa fala ignorava a passagem, e inventava a resposta.
+    """
+    if receiver is not None and content.decides(receiver.key):
+        return receiver
     if content.decides(role.key):
         return role
     return content.deciders()[0]
@@ -116,8 +137,9 @@ def make_persona_node(content: ScenarioContent, memory: str):
       chamada pelo aluno.
     - Nenhuma persona encerra a cena: o modelo não tem campo para isso. A cena termina no
       limite de turnos, na fala de fechamento, ou a pedido do aluno, feito fora deste nó. O fechamento e a fala que abre
-      a oportunidade dos critérios são ditos por `final_speaker`: a persona da vez, se ela
-      decide, ou a primeira que decide pela ordem de abertura. Medido numa negociação, o
+      a oportunidade dos critérios são ditos por `final_speaker`: a persona que recebe a vez
+      nesta rodada, se ela decide, ou a persona da vez, se ela decide, ou a primeira que decide
+      pela ordem de abertura. Medido numa negociação, o
       aliado confirmava um prazo que só a PM podia conceder.
     """
     keys = content.role_keys()
@@ -139,7 +161,7 @@ def make_persona_node(content: ScenarioContent, memory: str):
         receiver = redirect_role or hand_role
 
         if state.get("turn_count", 0) >= max_turns:
-            final_role = final_speaker(content, role)
+            final_role = final_speaker(content, role, receiver)
             text = generate_closing_line(content, final_role, history)
             _speak(final_role, text)
             record_round_event("closing", speaker=final_role.key)
@@ -153,7 +175,7 @@ def make_persona_node(content: ScenarioContent, memory: str):
             }
 
         if state.get("turn_count", 0) == max_turns - 2 and content.closing_hint:
-            final_role = final_speaker(content, role)
+            final_role = final_speaker(content, role, receiver)
             text = generate_closing_hint_line(content, final_role, history)
             if text:
                 _speak(final_role, text)
