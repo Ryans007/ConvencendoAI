@@ -45,15 +45,21 @@ def make_routing_node(content: ScenarioContent, rng: random.Random | None = None
     1. O aluno chamou uma persona: é ela quem fala primeiro, mesmo que não fosse a vez dela, e
        `addressed_by_student` liga. Se o assunto é de outro personagem, `redirect_to` marca
        quem recebe a passagem de vez: a persona chamada diz que é com ele, e ele responde.
-    2. Ninguém foi chamado, mas o assunto é de outro personagem que não o da vez: ele conduz,
-       com `taking_over`, como na troca pelo equilíbrio, e o evento `topic_takeover` fica no
-       registro. Medido com o modelo real, a persona nunca passava a vez por conta própria
-       (0 das 20 trocas de 5 sessões), então a passagem deixou de ser dela. Só assume pelo
-       assunto quem decide o resultado da cena: medido na negociação, o motivo técnico dado à
-       PM passava a rodada ao Tom em 2 de 3 amostras, e o aliado passava a interrogar o aluno em
-       vez de apoiá-lo. O aliado continua entrando pelo equilíbrio e quando o aluno o chama.
+    2. Ninguém foi chamado, mas o assunto é de outro personagem que não o da vez: ele conduz a
+       próxima parte da conversa, e o evento `topic_takeover` fica no registro. Medido com o
+       modelo real, a persona nunca passava a vez por conta própria (0 das 20 trocas de 5
+       sessões), então a passagem deixou de ser dela. Só assume pelo assunto quem decide o
+       resultado da cena: medido na negociação, o motivo técnico dado à PM passava a rodada ao
+       Tom em 2 de 3 amostras, e o aliado passava a interrogar o aluno em vez de apoiá-lo. O
+       aliado continua entrando pelo equilíbrio e quando o aluno o chama.
     3. Sem chamado e sem assunto de outro: vale o equilíbrio. Se a persona da vez já conduziu
-       rodadas seguidas demais, a rodada passa a outro personagem, com `taking_over`.
+       rodadas seguidas demais, a conversa passa a outro personagem.
+
+    Nas trocas dos itens 2 e 3 a rodada não é entregue direto a quem entra: a persona da vez
+    continua sendo ela, e `hand_floor_to` marca quem recebe a palavra. Medido numa sessão real,
+    entregar a rodada direto fazia a Emma reagir à resposta que o aluno deu ao James, e quem
+    tinha perguntado parecia não ter ouvido. Com a marca, quem perguntou reage e passa a
+    palavra pelo nome, e o colega pergunta em seguida, na mesma rodada.
 
     Sempre que reconhece um destinatário, liga `addressed_by_student`, inclusive quando
     ele já era a persona da vez: a persona chamada responde ao que o aluno disse e fecha
@@ -127,7 +133,6 @@ def make_routing_node(content: ScenarioContent, rng: random.Random | None = None
                 print(f"[routing] aluno direcionou para {addressed} (era {current})")
                 return {
                     "current_speaker": addressed,
-                    "taking_over": False,
                     "addressed_by_student": True,
                     **marks,
                 }
@@ -140,7 +145,7 @@ def make_routing_node(content: ScenarioContent, rng: random.Random | None = None
         if topic_owner is not None and topic_owner != current and content.decides(topic_owner):
             record_round_event("topic_takeover", speaker=topic_owner, previous=current)
             print(f"[routing] assunto de {content.role(topic_owner).name} (era {current})")
-            return {"current_speaker": topic_owner, "taking_over": True}
+            return {"hand_floor_to": topic_owner}
 
         history = list(state["messages"])
         rounds_led = scene_participation(content, current, history).consecutive_rounds_led
@@ -153,7 +158,7 @@ def make_routing_node(content: ScenarioContent, rng: random.Random | None = None
                 f"[routing] equilibrio: {current} conduziu {rounds_led} rodada(s) seguida(s); "
                 f"vez de {leader}"
             )
-            return {"current_speaker": leader, "taking_over": True}
+            return {"hand_floor_to": leader}
         return {}
 
     return node_routing

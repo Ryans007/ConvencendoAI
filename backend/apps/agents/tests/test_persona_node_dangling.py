@@ -48,7 +48,7 @@ def _install(monkeypatch, *turns: PersonaTurn) -> _Recording:
     return recording
 
 
-def test_a_persona_that_takes_over_and_writes_to_the_colleague_gets_an_answer(monkeypatch):
+def test_a_persona_that_writes_to_the_colleague_gets_an_answer(monkeypatch):
     content = _interview()
     recording = _install(
         monkeypatch,
@@ -57,7 +57,7 @@ def test_a_persona_that_takes_over_and_writes_to_the_colleague_gets_an_answer(mo
     )
 
     with collect_round_events() as events:
-        result = make_persona_node(content, "")(_state("tom", taking_over=True))
+        result = make_persona_node(content, "")(_state("tom"))
 
     assert [m.content for m in result["messages"]] == [
         "[Tom] Rachel, do you want to continue?",
@@ -65,7 +65,7 @@ def test_a_persona_that_takes_over_and_writes_to_the_colleague_gets_an_answer(mo
     ]
     assert result["current_speaker"] == "rachel"
     assert {"kind": "dangling_answered", "speaker": "tom", "target": "rachel"} in events
-    assert "Tom JUST HANDED THIS TO YOU" in recording.prompts[1]
+    assert "Tom JUST HANDED THE FLOOR TO YOU" in recording.prompts[1]
 
 
 def test_a_persona_called_by_the_student_who_writes_to_the_colleague_gets_an_answer(monkeypatch):
@@ -109,7 +109,7 @@ def test_the_guard_adds_at_most_one_line_and_records_when_it_still_dangles(monke
     )
 
     with collect_round_events() as events:
-        result = make_persona_node(content, "")(_state("tom", taking_over=True))
+        result = make_persona_node(content, "")(_state("tom"))
 
     assert len(recording.prompts) == 2
     assert len(result["messages"]) == 2
@@ -123,7 +123,7 @@ def test_a_line_to_the_student_triggers_no_extra_line(monkeypatch):
     )
 
     with collect_round_events() as events:
-        result = make_persona_node(content, "")(_state("tom", taking_over=True))
+        result = make_persona_node(content, "")(_state("tom"))
 
     assert len(recording.prompts) == 1
     assert len(result["messages"]) == 1

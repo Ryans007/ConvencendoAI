@@ -55,7 +55,7 @@ def _sample_state(situation: Situation) -> dict[str, Any]:
         "messages": list(situation.history),
         "current_speaker": situation.current,
         "turn_count": situation.turn_count,
-        "taking_over": situation.taking_over,
+        "hand_floor_to": situation.hand_floor_to,
         "addressed_by_student": situation.addressed,
         "scene_resolved": False,
         "should_end": False,

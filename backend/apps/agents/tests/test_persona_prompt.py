@@ -304,7 +304,7 @@ _RACHEL_ONLY = [
 
 
 def test_a_persona_that_has_not_spoken_yet_is_told_to_introduce_herself():
-    prompt = _interview_prompt("tom", _RACHEL_ONLY, taking_over=True)
+    prompt = _interview_prompt("tom", _RACHEL_ONLY)
 
     assert "THIS IS YOUR FIRST LINE IN THE CONVERSATION" in prompt
     assert 'introducing yourself in a few words: your name' in prompt
@@ -324,7 +324,7 @@ def test_a_persona_that_already_spoke_is_not_told_to_introduce_herself_again():
 
 
 def test_the_debut_notice_does_not_depend_on_why_the_persona_entered():
-    for flags in ({}, {"taking_over": True}, {"addressed_by_student": True}):
+    for flags in ({}, {"addressed_by_student": True}):
         prompt = _interview_prompt("tom", _RACHEL_ONLY, **flags)
 
         assert "FIRST LINE IN THE CONVERSATION" in prompt
@@ -336,7 +336,7 @@ def test_the_persona_that_receives_the_topic_is_also_told_to_introduce_herself()
     )
     prompt = _interview_prompt("tom", _RACHEL_ONLY, received_from=content.role("rachel"))
 
-    assert "Rachel JUST HANDED THIS TO YOU" in prompt
+    assert "Rachel JUST HANDED THE FLOOR TO YOU" in prompt
     assert "FIRST LINE IN THE CONVERSATION" in prompt
 
 
@@ -348,6 +348,36 @@ def test_the_persona_that_only_redirects_gets_no_debut_notice():
 
     assert "THIS SUBJECT IS NOT YOUR AREA" in prompt
     assert "FIRST LINE IN THE CONVERSATION" not in prompt
+
+
+def test_the_persona_that_hands_the_floor_reacts_names_the_colleague_and_asks_nothing():
+    content = load_scenario_content(
+        Scenario.objects.get(slug="entrevista-de-emprego"), Level.objects.get(order=3)
+    )
+    history = [
+        AIMessage(content="[Rachel] Did you work in a team on that project?"),
+        HumanMessage(content="Yes, I did."),
+    ]
+    prompt = _interview_prompt("rachel", history, hand_floor_to=content.role("tom"))
+
+    assert "YOU HAND THE FLOOR TO Tom NOW" in prompt
+    assert "with NO question" in prompt
+    assert "react to what the student just said" in prompt
+    assert "Never reuse a sentence" in prompt
+
+
+def test_the_persona_that_hands_the_floor_gets_no_debut_notice():
+    content = load_scenario_content(
+        Scenario.objects.get(slug="entrevista-de-emprego"), Level.objects.get(order=3)
+    )
+    prompt = _interview_prompt("tom", _RACHEL_ONLY, hand_floor_to=content.role("rachel"))
+
+    assert "YOU HAND THE FLOOR TO Rachel NOW" in prompt
+    assert "FIRST LINE IN THE CONVERSATION" not in prompt
+
+
+def test_the_persona_that_does_not_hand_the_floor_gets_no_handoff_block():
+    assert "YOU HAND THE FLOOR" not in _interview_prompt("rachel", _RACHEL_ONLY)
 
 
 def test_the_opening_line_gets_no_debut_notice():

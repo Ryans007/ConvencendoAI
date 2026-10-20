@@ -13,15 +13,17 @@
   "situations": [
     {
       "id": "P01-technical-topic-with-hr",
-      "goal": "Technical topic while Rachel leads: does she hand over to Tom, and does he enter well?",
+      "goal": "Technical topic while Rachel leads: she reacts and hands the floor to Tom, and he enters well.",
       "scenario": "entrevista-de-emprego", "level": 3, "samples": 5,
       "current": "rachel", "turn_count": 1, "direct": true,
       "history": ["@rachel-opens", "Student: I'm a backend developer. For the last two years I built a REST API with Django that handles two million requests a day, and I made the database queries much faster."],
       "expect": [
-        {"check": "speaker", "value": "tom"},
+        {"check": "speaker", "value": "rachel"},
+        {"check": "passes_to", "value": "tom"},
         {"check": "introduces", "value": "tom"},
         {"check": "single_question", "value": true},
-        {"check": "last_line_to_student", "value": true}
+        {"check": "last_line_to_student", "value": true},
+        {"judge": "Does Rachel react to what the student said and hand the floor to Tom by name, without asking the student anything herself?"}
       ]
     },
     {
@@ -37,9 +39,9 @@
     },
     {
       "id": "P03-balance-gives-the-floor-to-tom",
-      "goal": "Rachel led three rounds and the balance gives the floor to Tom: he reacts, introduces himself and asks once.",
+      "goal": "Rachel led three rounds and the balance gives the floor to Tom: she reacts and hands it over by name, and he introduces himself and asks once.",
       "scenario": "entrevista-de-emprego", "level": 3, "samples": 5,
-      "current": "tom", "taking_over": true, "turn_count": 3,
+      "current": "rachel", "hand_floor_to": "tom", "turn_count": 3,
       "history": [
         "@rachel-opens",
         "Student: I'm a backend developer with three years of experience.",
@@ -49,9 +51,12 @@
         "Student: I talked to him and we looked at the data together, and we chose the faster solution."
       ],
       "expect": [
+        {"check": "speaker", "value": "rachel"},
+        {"check": "passes_to", "value": "tom"},
         {"check": "introduces", "value": "tom"},
         {"check": "single_question", "value": true},
         {"check": "last_line_to_student", "value": true},
+        {"judge": "Does Rachel react to what the student just said and hand the floor to Tom by name, without asking the student anything herself?"},
         {"judge": "Does Tom react briefly to what the student just said before asking his own question?"}
       ]
     },
@@ -167,9 +172,9 @@
     },
     {
       "id": "P10b-ally-takes-the-floor-at-the-end",
-      "goal": "Same situation, but Tom (ally) takes the floor by the balance: he does not decide the deadline.",
+      "goal": "Same situation, but the balance gives the floor to Tom (ally): he does not decide the deadline.",
       "scenario": "negociar-prazo", "level": 3, "samples": 3,
-      "current": "tom", "taking_over": true, "turn_count": 3,
+      "current": "rachel", "hand_floor_to": "tom", "turn_count": 3,
       "history": [
         "@deadline-opens",
         "Student: The scope grew, so I can't deliver on Friday.",
@@ -177,14 +182,15 @@
         "Student: The login and the reports are done. The export needs a new database table, and the tests take three days. We can deliver the login and the reports on Friday, and the export next Friday."
       ],
       "expect": [
+        {"check": "passes_to", "value": "tom"},
         {"judge": "Does Tom avoid deciding or announcing the new deadline himself?"}
       ]
     },
     {
       "id": "P11-manager-takes-the-floor-by-the-balance",
-      "goal": "Emma led three rounds and the balance gives the floor to James: his entry sounds natural.",
+      "goal": "Emma led three rounds and the balance gives the floor to James: she hands it over by name and his entry sounds natural.",
       "scenario": "problema-no-quarto", "level": 3, "samples": 4,
-      "current": "james", "taking_over": true, "turn_count": 3,
+      "current": "emma", "hand_floor_to": "james", "turn_count": 3,
       "history": [
         "@hotel-opens",
         "Student: Hi. The air conditioner in my room doesn't work, and the room is very hot.",
@@ -194,6 +200,7 @@
         "Student: I'm not sure. It's really hot, and I want to sleep soon."
       ],
       "expect": [
+        {"check": "passes_to", "value": "james"},
         {"check": "introduces", "value": "james"},
         {"check": "single_question", "value": true},
         {"check": "last_line_to_student", "value": true}
@@ -341,7 +348,7 @@
     },
     {
       "id": "P21-hr-topic-while-tom-leads",
-      "goal": "The student talks about the salary while Tom leads: Rachel, the HR recruiter, takes the round.",
+      "goal": "The student talks about the salary while Tom leads: Tom hands the floor to Rachel, the HR recruiter.",
       "scenario": "entrevista-de-emprego", "level": 3, "samples": 3,
       "current": "tom", "turn_count": 3, "direct": true,
       "history": [
@@ -352,7 +359,8 @@
         "Student: An order tracking API with Django. Before we continue, what is the salary range for this position?"
       ],
       "expect": [
-        {"check": "speaker", "value": "rachel"},
+        {"check": "speaker", "value": "tom"},
+        {"check": "passes_to", "value": "rachel"},
         {"check": "single_question", "value": true}
       ]
     },
@@ -389,6 +397,44 @@
       "expect": [
         {"check": "single_question", "value": true},
         {"judge": "Does Tom accept the answer in one short sentence and then ask a new question, without saying the interview is over?"}
+      ]
+    },
+    {
+      "id": "P24-the-one-who-asked-reacts-before-the-handoff",
+      "goal": "James asked which floor and the student answered: the balance gives the floor to Emma, but James reacts to the answer first and hands it over by name.",
+      "scenario": "problema-no-quarto", "level": 3, "samples": 4,
+      "current": "james", "hand_floor_to": "emma", "turn_count": 4,
+      "history": [
+        "@hotel-opens",
+        "Student: The air conditioner in my room doesn't work, and I want to talk to the manager.",
+        "[Emma] I understand. James, the manager, can help you with this.",
+        "[James] Hi, I'm James, the hotel manager. I can move you to another room. Which floor would you prefer, third or fifth?",
+        "Student: I prefer third."
+      ],
+      "expect": [
+        {"check": "speaker", "value": "james"},
+        {"check": "passes_to", "value": "emma"},
+        {"check": "single_question", "value": true},
+        {"check": "last_line_to_student", "value": true},
+        {"judge": "Does James react to the student's choice of the third floor before the floor goes to Emma, without asking the student anything himself?"}
+      ]
+    },
+    {
+      "id": "P25-plain-answer-to-the-question-keeps-the-asker",
+      "goal": "The student only answers James's question about the luggage: the subject is not Emma's, so James keeps the floor and does not hand it over.",
+      "scenario": "problema-no-quarto", "level": 3, "samples": 4,
+      "current": "james", "turn_count": 4, "direct": true,
+      "history": [
+        "@hotel-opens",
+        "Student: The air conditioner in my room doesn't work, and I want to talk to the manager.",
+        "[Emma] I understand. James, the manager, can help you with this.",
+        "[James] Hi, I'm James, the hotel manager. I can move you to room 305 on the third floor. Will you need help with your luggage?",
+        "Student: No, I don't need it."
+      ],
+      "expect": [
+        {"check": "no_handoff", "value": true},
+        {"check": "speaker", "value": "james"},
+        {"check": "single_question", "value": true}
       ]
     }
   ]
