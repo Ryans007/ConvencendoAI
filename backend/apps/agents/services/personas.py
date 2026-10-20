@@ -354,8 +354,9 @@ Last exchanges:
 {excerpt}
 
 Write your FINAL line, in character: one or two short sentences in English that
-close the conversation. Acknowledge what the student said and state what happens
-next, or that you have to go.
+close the conversation. If the student's last message asked you something, greeted you
+or made a comment to you, start with one short sentence that answers it or reacts to it.
+Then say what happens next, or that you have to go.
 
 Hard requirement: your line MUST NOT contain a question. No question marks."""
 
