@@ -22,6 +22,7 @@ from apps.agents.services.session_runner import evaluate_and_record_attempt, res
 from apps.agents.services.transcript import AFTER_HINT_KEY
 from apps.agents.services.tutor import suggest_answer
 from apps.catalog.models import Level, Scenario
+from apps.progress.choices import EndedBy
 from apps.progress.models import Attempt
 from apps.progress.services.session_access import AccessDenied, session_access_denial
 from apps.llm.services.factory import log_active_models
@@ -293,6 +294,26 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             await self._answer_hint_request()
         elif message.get("type") == "playback_failed":
             self._log_playback_failure(message.get("reason"))
+        elif message.get("type") == "end_session":
+            await self._end_by_student()
+
+    async def _end_by_student(self) -> None:
+        """Encerra a sessão a pedido do aluno: avalia a conversa até ali e grava a tentativa.
+
+        Só vale depois de o aluno ter dado pelo menos uma resposta e antes do fim da cena. O
+        pedido é atendido na vez do aluno, porque os handlers de uma conexão rodam um de cada
+        vez: um pedido que chega durante uma rodada espera a rodada terminar. A conversa vem do
+        estado pausado do grafo, o mesmo que o limite de turnos entregaria ao avaliador.
+        """
+        if self.scene_over:
+            print("[session] pedido de encerramento depois do fim da cena; ignorado")
+            return
+        snapshot = await self.graph.aget_state(self.thread_config)
+        messages = snapshot.values.get("messages") or []
+        if not any(message.type == "human" for message in messages):
+            print("[session] pedido de encerramento antes de qualquer resposta; ignorado")
+            return
+        await self._finish(dict(snapshot.values), EndedBy.STUDENT)
 
     @staticmethod
     def _log_playback_failure(reason: object) -> None:
@@ -390,8 +411,10 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
                 print(f"[timing] first audio sent after {time.monotonic() - started_at:.2f}s")
         return True
 
-    async def _finish(self, state: dict) -> None:
+    async def _finish(self, state: dict, ended_by: str = EndedBy.TURN_LIMIT) -> None:
         """Encerra a cena: avisa o cliente, avalia, grava a tentativa e manda o resultado.
+
+        `ended_by` diz como a sessão terminou e fica gravado na tentativa.
 
         O aviso `evaluating` sai antes do avaliador, que leva dezenas de segundos: sem
         ele, o cliente devolvia a vez ao aluno ao terminar o último áudio, como se a
@@ -401,7 +424,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({"type": "evaluating"}))
         try:
             attempt = await sync_to_async(evaluate_and_record_attempt)(
-                self.attempt, self.content, state
+                self.attempt, self.content, state, ended_by
             )
         except Exception as exc:
             await self._fail_with_error(exc, SessionErrorCode.REPORT_FAILED)
