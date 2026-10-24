@@ -110,6 +110,8 @@ export class LiveSession {
   private pendingOutcome: PendingOutcome | null = null;
   private evaluationStarted = false;
   private endedByStudent = false;
+  private turnStartedAt: number | null = null;
+  private pendingWaitMs: number | null = null;
 
   private readonly microphone = new AudioRecorder();
   private readonly player = new AudioPlayer();
@@ -291,6 +293,7 @@ export class LiveSession {
     }
 
     if (this.state.phase === "persona-speaking") {
+      this.turnStartedAt = Date.now();
       this.setState({
         phase: "student-turn",
         turnCount: this.state.turnCount + 1,
@@ -316,6 +319,12 @@ export class LiveSession {
     this.setState({ phase: "connection-lost" });
   }
 
+  /**
+   * Comeca a gravar a fala do aluno. A espera da vez e medida aqui, no toque, e nao quando o
+   * microfone termina de abrir: abrir o microfone leva um tempo que nao e do aluno. A espera e
+   * contada desde o fim da fala do personagem, entao uma nova gravacao depois de "nao ouvimos"
+   * continua contando do mesmo ponto.
+   */
   async startRecording(): Promise<void> {
     if (!this.playingAudio) {
       this.player.unlock();
@@ -323,6 +332,7 @@ export class LiveSession {
     if (this.state.phase !== "student-turn" || this.microphone.active) {
       return;
     }
+    this.pendingWaitMs = this.turnStartedAt === null ? null : Date.now() - this.turnStartedAt;
     const started = await this.microphone.start();
     if (!started) {
       this.setState({ noSpeechNotice: true });
@@ -345,6 +355,7 @@ export class LiveSession {
       return;
     }
     const buffer = await recording.blob.arrayBuffer();
+    this.sendTurnTiming();
     this.socket.send(buffer);
     this.setState({
       phase: "persona-speaking",
@@ -352,6 +363,18 @@ export class LiveSession {
       studentHasSpoken: true,
       speakerName: null,
     });
+  }
+
+  /**
+   * Informa ao servidor, logo antes do audio, quanto o aluno esperou para comecar a falar. O
+   * servidor usa o tempo so como medida de fluencia; a tela nunca mostra cronometro.
+   */
+  private sendTurnTiming(): void {
+    if (this.pendingWaitMs === null) {
+      return;
+    }
+    this.socket.send(JSON.stringify({ type: "turn_timing", waited_ms: this.pendingWaitMs }));
+    this.pendingWaitMs = null;
   }
 
   /**
