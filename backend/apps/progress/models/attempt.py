@@ -58,7 +58,8 @@ class ScoreBreakdown(models.Model):
     """Sub-nota de uma dimensão numa tentativa, com o peso que valia no momento.
 
     `weight_at_time` é o registro histórico: se o cenário for reajustado depois, esta
-    linha continua explicando a nota exatamente como foi calculada.
+    linha continua explicando a nota exatamente como foi calculada. `comment` é a explicação
+    da nota escrita pelo avaliador, para o relatório dizer ao aluno o porquê do número.
     """
 
     attempt = models.ForeignKey(
@@ -67,6 +68,15 @@ class ScoreBreakdown(models.Model):
     dimension = models.CharField(max_length=20, choices=RubricDimension.choices)
     value = models.PositiveSmallIntegerField()
     weight_at_time = models.PositiveSmallIntegerField()
+    comment = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="comentário",
+        help_text=(
+            "Uma frase do avaliador, em português, que explica a nota ao aluno. Vazio na "
+            "dimensão objetivo, que é calculada, e nas tentativas anteriores ao comentário."
+        ),
+    )
 
     class Meta:
         constraints = [

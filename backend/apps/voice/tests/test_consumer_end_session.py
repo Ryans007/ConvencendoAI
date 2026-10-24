@@ -13,6 +13,7 @@ from apps.progress.choices import EndedBy
 from apps.progress.models import Attempt
 from apps.voice import consumers as voice_consumers
 from apps.voice.routing import websocket_urlpatterns
+from apps.voice.services.stt import Transcription
 from apps.voice.tests.scene_end import end_after_the_first_turn
 from apps.voice.tests.session_client import SessionCommunicator
 
@@ -50,11 +51,15 @@ def _prepare(monkeypatch, *turns: PersonaTurn) -> list:
     monkeypatch.setattr(
         graph_routing, "get_structured_llm", lambda purpose, schema: _NobodyAddressed()
     )
-    monkeypatch.setattr(voice_consumers, "transcribe", lambda audio: "I need one more week.")
+    monkeypatch.setattr(
+        voice_consumers,
+        "transcribe_with_words",
+        lambda audio: Transcription("I need one more week."),
+    )
     monkeypatch.setattr(voice_consumers, "synthesize", lambda text, voice: b"fake-wav-bytes")
     evaluated = []
 
-    def fake_evaluate(content, messages, known_rules=()):
+    def fake_evaluate(content, messages, known_rules=(), speech_metrics=None):
         evaluated.append(list(messages))
         return EvaluationOutcome(
             confirmed_criteria=set(),

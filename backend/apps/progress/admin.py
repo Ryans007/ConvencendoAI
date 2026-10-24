@@ -1,6 +1,28 @@
 from django.contrib import admin
 
-from apps.progress.models import Attempt
+from apps.progress.models import Attempt, SpeechTurn
+
+
+class SpeechTurnInline(admin.TabularInline):
+    """As vezes de fala da tentativa, só para leitura: são a base das medidas de fluência."""
+
+    model = SpeechTurn
+    extra = 0
+    can_delete = False
+    fields = [
+        "order",
+        "waited_ms",
+        "leading_silence_ms",
+        "speech_ms",
+        "word_count",
+        "long_pauses",
+        "after_hint",
+        "text",
+    ]
+    readonly_fields = fields
+
+    def has_add_permission(self, request, obj=None) -> bool:
+        return False
 
 
 @admin.register(Attempt)
@@ -27,6 +49,7 @@ class AttemptAdmin(admin.ModelAdmin):
     list_filter = ["scenario", "level", "passed", "hints_enabled"]
     search_fields = ["user__username"]
     list_select_related = ["user", "scenario", "level"]
+    inlines = [SpeechTurnInline]
 
     def has_add_permission(self, request) -> bool:
         return False

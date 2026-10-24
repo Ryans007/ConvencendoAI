@@ -11,6 +11,9 @@ from apps.progress.constants import is_passing_score
 from apps.progress.models import Attempt, AttemptCriterion, ScoreBreakdown
 from apps.progress.services.memory import track_memory
 from apps.progress.services.scoring import final_score, objective_score
+from apps.progress.services.speech_metrics import session_metrics
+from apps.progress.services.speech_scoring import fluency_score, vocabulary_score
+from apps.progress.speech_bands import rules_for_level
 from apps.review.services.recording import known_rules_for, record_review_items
 
 
@@ -59,6 +62,10 @@ def evaluate_and_record_attempt(
     `ended_by` registra como a sessão terminou: pelo limite de turnos, que é o padrão, ou a
     pedido do aluno.
 
+    Numa sessão de voz, as vezes de fala gravadas dão as medidas da sessão: elas vão prontas
+    ao avaliador e entram nas notas de fluência e vocabulário. Sem vezes gravadas, como na
+    execução por texto, as duas notas são o julgamento da IA.
+
     Os erros de linguagem apontados pelo avaliador viram itens de revisão do aluno na
     mesma transação: o avaliador recebe as regras que o aluno já tem para dizer quando um
     erro se repete.
@@ -68,7 +75,16 @@ def evaluate_and_record_attempt(
         return attempt
 
     messages = list(final_state.get("messages") or [])
-    outcome = evaluate(content, messages, known_rules=known_rules_for(attempt.user))
+    metrics = session_metrics(
+        list(attempt.speech_turns.all()), excluded_names=[role.name for role in content.roles]
+    )
+    outcome = evaluate(
+        content,
+        messages,
+        known_rules=known_rules_for(attempt.user),
+        speech_metrics=metrics,
+    )
+    rules = rules_for_level(attempt.level.order)
 
     attempt_criteria = [
         AttemptCriterion(
@@ -89,8 +105,9 @@ def evaluate_and_record_attempt(
     ] + [
         ScoreBreakdown(
             dimension=judged.dimension,
-            value=judged.value,
+            value=_combined_value(judged.dimension, judged.value, judged.weight, metrics, rules),
             weight_at_time=judged.weight,
+            comment=judged.comment,
         )
         for judged in outcome.judged_dimensions
     ]
@@ -123,6 +140,17 @@ def evaluate_and_record_attempt(
         )
 
     return attempt
+
+
+def _combined_value(dimension, judged_value, weight, metrics, rules) -> int:
+    """A sub-nota gravada: fluência e vocabulário combinam o julgamento da IA com as medidas de
+    fala; as demais dimensões são o julgamento da IA, já limitado ao peso pelo avaliador.
+    """
+    if dimension == RubricDimension.FLUENCY:
+        return fluency_score(weight, judged_value, metrics, rules)
+    if dimension == RubricDimension.VOCABULARY:
+        return vocabulary_score(weight, judged_value, metrics, rules)
+    return judged_value
 
 
 def run_and_record_attempt(user, scenario: Scenario, level: Level) -> Attempt:

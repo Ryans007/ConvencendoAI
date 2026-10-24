@@ -10,6 +10,7 @@ from apps.agents.services.transcript import answered_after_hint, transcript_text
 from apps.catalog.constants import RubricDimension
 from apps.llm.constants import ModelPurpose
 from apps.llm.services.factory import get_structured_llm
+from apps.progress.services.speech_metrics import SessionSpeechMetrics
 
 # Pronúncia fica fora: a execução é sempre por texto, sem áudio para julgar. A
 # dimensão "objetivo" também fica fora daqui — é uma checklist calculada em
@@ -48,6 +49,21 @@ are. Judge every other dimension, and the acceptance criteria, exactly as for an
 turn: saying the suggestion in English is still the student's own English.
 """
 
+_SPEECH_NOTE = """
+SPEECH MEASUREMENTS (measured from the timing of the student's recorded turns)
+{lines}
+These numbers were measured, so never contradict them.{fluency}{vocabulary} The fluency and
+vocabulary comments may cite these numbers.
+"""
+
+_SPEECH_FLUENCY_SCOPE = (
+    " Your fluency score must judge only what the numbers cannot see: whether the speech was "
+    "understandable and whether the student corrected themselves mid-sentence."
+)
+_SPEECH_VOCABULARY_SCOPE = (
+    " Your vocabulary score must judge only whether each word was the right one for the context."
+)
+
 _PROMPT = """You are a strict but fair English examiner. You will grade a
 student's performance in a role-play task. The student is a Brazilian
 professional practising spoken English.
@@ -74,7 +90,7 @@ ACCEPTANCE CRITERIA AND WHAT THE STUDENT ACHIEVED
 
 TRANSCRIPT (the student's turns are marked "Student:")
 {transcript}
-{hints_note}
+{hints_note}{speech_note}
 Grade ONLY these dimensions, each from 0 up to its maximum:
 {dimensions}
 
@@ -89,10 +105,14 @@ Also decide:
   confirmation), so check the characters' replies too, not only the student's.
 
 Also write:
-- "feedback": 2-3 sentences addressed to the student, in English, saying what
-  worked and the single most important thing to improve. Never present as
-  something to improve what the level's format asks for (for example, short
-  answers when the level asks for short answers).
+- "feedback": 3-5 sentences addressed to the student, in Brazilian Portuguese,
+  saying what worked, the single most important thing to improve and why it
+  matters in this kind of conversation. Never present as something to improve
+  what the level's format asks for (for example, short answers when the level
+  asks for short answers).
+- "comments": for each judged dimension, ONE sentence in Brazilian Portuguese
+  addressed to the student explaining that score with something concrete from
+  the conversation.
 - "memory_summary": 3-4 very short factual notes in English about this
   student, to be remembered in a future conversation (role, project mentioned,
   commitments made, recurring language difficulty). Third person, no grades.
@@ -114,6 +134,11 @@ Also write:
     consertar, e não o de relatar." Bad: "Use 'repair', não 'report'." (it gives the
     answer away). When the wrong word sounds like the right one, say so: "Essas duas
     palavras soam parecidas; atenção ao verbo que expressa querer.";
+  - "explanation": one or two short sentences in Brazilian Portuguese explaining
+    the rule to the student. Unlike the note, it is shown after the session and
+    may write the correct English form;
+  - "examples": exactly two short English sentences that apply the same rule in
+    situations different from the student's sentence;
   - "repeats": the id of a KNOWN MISTAKE below when this mistake breaks the SAME
     rule, even with different words (for example "I have worked there yesterday"
     and "I have finished it last week" are the same rule); otherwise "".
@@ -140,6 +165,7 @@ KNOWN MISTAKES OF THIS STUDENT (rules from earlier sessions, with their ids)
 
 
 MAX_REVIEW_ITEMS = 4
+MAX_EXAMPLES = 2
 _NO_KNOWN_RULES = "(none yet)"
 
 
@@ -158,6 +184,7 @@ class JudgedDimension:
     dimension: str
     value: int
     weight: int
+    comment: str = ""
 
 
 @dataclass(frozen=True)
@@ -200,6 +227,7 @@ def evaluate(
     content: ScenarioContent,
     messages: list[BaseMessage],
     known_rules: Sequence[KnownRule] = (),
+    speech_metrics: SessionSpeechMetrics | None = None,
 ) -> EvaluationOutcome:
     """Avalia a execução de um cenário: julga as dimensões linguísticas e confirma
     os critérios de aceite satisfeitos, a partir da transcrição inteira.
@@ -217,6 +245,10 @@ def evaluate(
     porque é a regra, e não o trecho, que se revisa. Um `repeats` que não está entre as
     conhecidas é ignorado, um erro sem regra ou sem as duas formas é descartado, e passam
     no máximo 4.
+
+    O resumo e os comentários de cada dimensão são escritos em português, para o aluno. Quando
+    a sessão de voz tem medidas de fala, elas entram prontas no prompt: o modelo não reavalia
+    o que já foi medido e pode citar os números nos comentários.
     """
     criteria_status = "\n".join(f"- {c.code}: {c.text}" for c in content.criteria)
     dimensions_text = "\n".join(
@@ -235,6 +267,7 @@ def evaluate(
         criteria_status=criteria_status,
         transcript=transcript_text(messages, mark_hints=True),
         hints_note=_HINTS_NOTE if any(answered_after_hint(m) for m in messages) else "",
+        speech_note=_speech_note(speech_metrics),
         dimensions=dimensions_text,
         guidance=guidance_text,
         known_rules="\n".join(f"- {known.id}: {known.rule}" for known in known_rules)
@@ -252,6 +285,7 @@ def evaluate(
             dimension=dimension,
             value=int(max(0, min(weight, round(getattr(result.sub_scores, dimension.value))))),
             weight=weight,
+            comment=getattr(result.comments, dimension.value).strip(),
         )
         for dimension in JUDGED_DIMENSIONS
         for weight in [content.weights.get(dimension, 0)]
@@ -263,6 +297,40 @@ def evaluate(
         feedback=result.feedback.strip(),
         memory_summary=result.memory_summary.strip(),
         review_items=_usable_review_items(result.review_items, known_rules),
+    )
+
+
+def _speech_note(metrics: SessionSpeechMetrics | None) -> str:
+    """A seção do prompt com as medidas de fala, ou vazia quando não há nada medido.
+
+    Só aparecem as medidas que a sessão tem, e só se pede ao modelo que restrinja a nota de
+    fluência ou de vocabulário quando a medida correspondente existe: sem ela, a nota daquela
+    dimensão continua sendo inteira do julgamento dele.
+    """
+    if metrics is None:
+        return ""
+    lines = []
+    if metrics.reaction_seconds is not None:
+        lines.append(f"- median time to start answering: {metrics.reaction_seconds:.1f} s")
+    if metrics.words_per_minute is not None:
+        lines.append(f"- speaking speed: {metrics.words_per_minute:.0f} words per minute")
+    if metrics.long_pauses_per_100_words is not None:
+        lines.append(
+            "- long pauses (over 1.5 s) inside a turn: "
+            f"{metrics.long_pauses_per_100_words:.1f} per 100 words"
+        )
+    if metrics.lexical_diversity is not None:
+        lines.append(f"- word variety (MATTR, 0 to 1): {metrics.lexical_diversity:.2f}")
+    if metrics.lexical_range is not None:
+        lines.append(
+            f"- words outside the 2,000 most common in English: {metrics.lexical_range:.0%}"
+        )
+    if not lines:
+        return ""
+    return _SPEECH_NOTE.format(
+        lines="\n".join(lines),
+        fluency=_SPEECH_FLUENCY_SCOPE if metrics.reaction_seconds is not None else "",
+        vocabulary=_SPEECH_VOCABULARY_SCOPE if metrics.lexical_diversity is not None else "",
     )
 
 
@@ -315,13 +383,19 @@ def _masked_note(item: ReviewItem) -> str:
     return _WORD.sub(mask, note)
 
 
+def _usable_examples(examples: Sequence[str]) -> list[str]:
+    """Os exemplos que servem para o relatório: sem os vazios e no máximo dois."""
+    return [example.strip() for example in examples if example.strip()][:MAX_EXAMPLES]
+
+
 def _usable_review_items(
     items: list[ReviewItem], known_rules: Sequence[KnownRule]
 ) -> list[ReviewItem]:
     """Os erros que podem virar item de revisão, com `repeats` só apontando regra conhecida.
 
     Um item sem a frase, sem a forma correta ou sem a regra não serve para revisar e é
-    descartado. Já um item sem nota continua valendo, só sem o contexto extra.
+    descartado. Já um item sem nota, sem explicação ou sem exemplos continua valendo, só sem o
+    que faltou.
     """
     known_ids = {known.id for known in known_rules}
     usable = [
@@ -331,6 +405,8 @@ def _usable_review_items(
                 "produced": item.produced.strip(),
                 "correct": item.correct.strip(),
                 "note": _masked_note(item),
+                "explanation": item.explanation.strip(),
+                "examples": _usable_examples(item.examples),
                 "repeats": item.repeats if item.repeats in known_ids else "",
             }
         )

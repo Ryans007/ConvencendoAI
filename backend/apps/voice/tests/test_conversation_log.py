@@ -13,6 +13,7 @@ from apps.agents.services.schemas import PersonaTurn, RoutingDecision
 from apps.catalog.models import Level, Scenario
 from apps.voice import consumers as voice_consumers
 from apps.voice.routing import websocket_urlpatterns
+from apps.voice.services.stt import Transcription
 from apps.voice.tests.scene_end import end_after_the_first_turn
 from apps.voice.tests.session_client import SessionCommunicator
 
@@ -52,7 +53,9 @@ def _run_session(django_user_model, monkeypatch) -> None:
     monkeypatch.setattr(
         graph_routing, "get_structured_llm", lambda purpose, schema: _FakeRoutingLLM()
     )
-    monkeypatch.setattr(voice_consumers, "transcribe", lambda audio: STUDENT_SPEECH)
+    monkeypatch.setattr(
+        voice_consumers, "transcribe_with_words", lambda audio: Transcription(STUDENT_SPEECH)
+    )
     monkeypatch.setattr(voice_consumers, "synthesize", lambda text, voice: b"fake-wav-bytes")
     outcome = EvaluationOutcome(
         confirmed_criteria={"c1", "c2", "c3", "c4"},
@@ -69,7 +72,7 @@ def _run_session(django_user_model, monkeypatch) -> None:
     )
     monkeypatch.setattr(
         "apps.agents.services.session_runner.evaluate",
-        lambda content, messages, known_rules=(): outcome,
+        lambda content, messages, known_rules=(), speech_metrics=None: outcome,
     )
 
     async def run() -> None:

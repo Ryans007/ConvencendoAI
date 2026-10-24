@@ -107,8 +107,10 @@ class ReviewItem(BaseModel):
     `rule` é a regra por trás do erro, e não o trecho: é ela que junta, num item de revisão
     só, erros iguais ditos com palavras diferentes em sessões diferentes. `produced` e
     `correct` são a frase inteira, com e sem o erro, e `note` é a nota em português que dá o
-    contexto sem dar a resposta. `repeats` traz o identificador de uma regra que o aluno já
-    tem quando o erro é a mesma regra, ou vazio.
+    contexto sem dar a resposta. `explanation` e `examples` são do relatório da sessão: a
+    regra explicada em português, que pode mostrar a resposta, e frases novas que aplicam a
+    mesma regra. `repeats` traz o identificador de uma regra que o aluno já tem quando o erro
+    é a mesma regra, ou vazio.
     Todo campo tem default: um campo que o modelo deixou de preencher vira string vazia,
     nunca uma exceção.
     """
@@ -135,6 +137,20 @@ class ReviewItem(BaseModel):
             "in that sentence, never writing the correct English words"
         ),
     )
+    explanation: str = Field(
+        default="",
+        description=(
+            "One or two short sentences in Brazilian Portuguese explaining the rule to the "
+            "student; it may show the correct English form"
+        ),
+    )
+    examples: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Exactly two short English sentences applying the same rule in situations "
+            "different from the student's sentence"
+        ),
+    )
     repeats: str = Field(
         default="",
         description=(
@@ -142,6 +158,11 @@ class ReviewItem(BaseModel):
             "otherwise empty"
         ),
     )
+
+
+_COMMENT_DESCRIPTION = (
+    "ONE sentence in Brazilian Portuguese, addressed to the student, explaining this score"
+)
 
 
 class DimensionScores(BaseModel):
@@ -164,6 +185,21 @@ class DimensionScores(BaseModel):
     autonomy: float | None = Field(default=None, description="Score from 0 up to the stated maximum")
 
 
+class DimensionComments(BaseModel):
+    """Comentário de cada dimensão julgada, uma propriedade nomeada por dimensão.
+
+    Nomeado campo a campo pelo mesmo motivo de `DimensionScores`: no modo estrito de JSON
+    schema, um dicionário aberto volta vazio. Um comentário que o modelo não escreveu fica
+    vazio, e o relatório mostra só a nota daquela dimensão.
+    """
+
+    fluency: str = Field(default="", description=_COMMENT_DESCRIPTION)
+    vocabulary: str = Field(default="", description=_COMMENT_DESCRIPTION)
+    grammar: str = Field(default="", description=_COMMENT_DESCRIPTION)
+    pragmatics: str = Field(default="", description=_COMMENT_DESCRIPTION)
+    autonomy: str = Field(default="", description=_COMMENT_DESCRIPTION)
+
+
 class EvaluationResult(BaseModel):
     """Saída estruturada do avaliador ao fim da execução de um cenário."""
 
@@ -174,7 +210,16 @@ class EvaluationResult(BaseModel):
         default_factory=DimensionScores,
         description="Score per judged dimension, up to its stated maximum",
     )
-    feedback: str = Field(default="", description="2-3 sentences addressed to the student")
+    comments: DimensionComments = Field(
+        default_factory=DimensionComments,
+        description=(
+            "One sentence in Brazilian Portuguese per judged dimension explaining its score"
+        ),
+    )
+    feedback: str = Field(
+        default="",
+        description="3-5 sentences in Brazilian Portuguese addressed to the student",
+    )
     memory_summary: str = Field(
         default="", description="3-4 short factual notes to remember for a future conversation"
     )

@@ -36,7 +36,11 @@ def test_run_and_record_attempt_persists_score_and_criteria(django_user_model, m
         memory_summary="Asked for one extra week on the module.",
         review_items=[],
     )
-    monkeypatch.setattr(session_runner, "evaluate", lambda content, messages, known_rules=(): outcome)
+    monkeypatch.setattr(
+        session_runner,
+        "evaluate",
+        lambda content, messages, known_rules=(), speech_metrics=None: outcome,
+    )
 
     attempt = session_runner.run_and_record_attempt(user, scenario, level)
 
@@ -105,7 +109,11 @@ def test_evaluate_and_record_attempt_updates_the_same_attempt(django_user_model,
         memory_summary="Negotiated a one-week extension.",
         review_items=[],
     )
-    monkeypatch.setattr(session_runner, "evaluate", lambda content, messages, known_rules=(): outcome)
+    monkeypatch.setattr(
+        session_runner,
+        "evaluate",
+        lambda content, messages, known_rules=(), speech_metrics=None: outcome,
+    )
 
     final_state = {"messages": [HumanMessage(content="Turn one."), AIMessage(content="Reply.")]}
     result = session_runner.evaluate_and_record_attempt(attempt, content, final_state)
@@ -132,7 +140,11 @@ def test_recording_keeps_what_changed_in_the_attempt_during_the_session(
         memory_summary="Pediu mais prazo.",
         review_items=[],
     )
-    monkeypatch.setattr(session_runner, "evaluate", lambda content, messages, known_rules=(): outcome)
+    monkeypatch.setattr(
+        session_runner,
+        "evaluate",
+        lambda content, messages, known_rules=(), speech_metrics=None: outcome,
+    )
 
     session_runner.evaluate_and_record_attempt(
         attempt, content, {"messages": [HumanMessage(content="Turn one.")]}
@@ -161,7 +173,7 @@ def test_recording_a_completed_attempt_again_does_not_reevaluate(django_user_mod
         review_items=[],
     )
 
-    def fake_evaluate(content, messages, known_rules=()):
+    def fake_evaluate(content, messages, known_rules=(), speech_metrics=None):
         calls.append(messages)
         return outcome
 

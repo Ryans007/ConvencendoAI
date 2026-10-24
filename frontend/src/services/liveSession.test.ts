@@ -637,6 +637,49 @@ describe("LiveSession gravando a fala do aluno", () => {
     expect(stopTrack).toHaveBeenCalledTimes(1);
   });
 
+  it("envia a espera da vez logo antes do audio, sem cronometro no estado", async () => {
+    microphone();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const { session, socket, states } = await studentTurn(false);
+
+    vi.advanceTimersByTime(3000);
+    await session.startRecording();
+    vi.advanceTimersByTime(800);
+    session.stopRecording();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    vi.useRealTimers();
+
+    expect(JSON.parse(socket.sent.at(-2) as string)).toEqual({
+      type: "turn_timing",
+      waited_ms: 3000,
+    });
+    expect(socket.sent.at(-1)).toBeInstanceOf(ArrayBuffer);
+    expect(JSON.stringify(states.at(-1))).not.toContain("3000");
+  });
+
+  it("depois de 'nao ouvimos', a espera continua contando do fim da fala do personagem", async () => {
+    microphone();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const { session, socket } = await studentTurn(false);
+
+    vi.advanceTimersByTime(2000);
+    await session.startRecording();
+    session.stopRecording();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    vi.advanceTimersByTime(1000);
+    await session.startRecording();
+    vi.advanceTimersByTime(800);
+    session.stopRecording();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    vi.useRealTimers();
+
+    const timings = socket.sent
+      .filter((message): message is string => typeof message === "string")
+      .map((message) => JSON.parse(message))
+      .filter((message) => message.type === "turn_timing");
+    expect(timings).toEqual([{ type: "turn_timing", waited_ms: 3000 }]);
+  });
+
   it("dois toques seguidos abrem um só microfone", async () => {
     const { getUserMedia } = microphone();
     const { session } = await studentTurn(false);

@@ -25,6 +25,7 @@ from apps.catalog.models import Level, Scenario
 from apps.progress.choices import EndedBy
 from apps.progress.models import Attempt
 from apps.progress.services.session_access import AccessDenied, session_access_denial
+from apps.progress.services.speech_turns import record_speech_turn, valid_wait_ms
 from apps.llm.services.factory import log_active_models
 from apps.llm.services.conversation_log import conversation_log
 from apps.usage.services.owner import usage_owner
@@ -39,7 +40,7 @@ from apps.voice.services.failures import (
     SessionErrorCode,
     classify_failure,
 )
-from apps.voice.services.stt import transcribe
+from apps.voice.services.stt import Transcription, transcribe_with_words
 from apps.voice.services.tts import synthesize
 
 _AUTH_TIMEOUT_SECONDS = 10
@@ -82,6 +83,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         self.attempt = None
         self.hints_enabled = False
         self.current_hint: str | None = None
+        self.pending_wait_ms: int | None = None
         await self.accept()
         self._auth_deadline = asyncio.create_task(self._close_if_not_authenticated())
 
@@ -250,6 +252,10 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         Mensagens de texto são pedidos do cliente; o único que existe é o pedido de dica.
         Quando o aluno viu uma dica nesta vez, a fala dele segue marcada para o grafo, e
         a dica da vez é esquecida: a próxima vez começa sem dica.
+
+        Cada áudio consome a espera que o cliente informou logo antes dele, e a vez transcrita
+        é gravada com as medidas de fala. Gravar a vez é só medida: uma falha ali vai para o
+        log e a conversa segue.
         """
         if bytes_data is None:
             if text_data is not None:
@@ -263,13 +269,15 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({"type": "audio_too_large"}))
             return
 
+        waited_ms, self.pending_wait_ms = self.pending_wait_ms, None
         started_at = time.monotonic()
         try:
-            text = await sync_to_async(transcribe)(bytes_data)
+            transcription = await sync_to_async(transcribe_with_words)(bytes_data)
         except Exception as exc:
             await self._fail_with_error(exc)
             return
         print(f"[timing] stt: {time.monotonic() - started_at:.2f}s")
+        text = transcription.text
 
         if not text.strip():
             print("[stt] transcricao vazia; o aluno fala de novo, sem avancar a conversa")
@@ -277,6 +285,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             return
 
         conversation_log("You", text)
+        await self._record_speech_turn(transcription, waited_ms)
 
         resume = {"text": text, AFTER_HINT_KEY: True} if self.current_hint else text
         self.current_hint = None
@@ -290,12 +299,29 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             return
         if not isinstance(message, dict):
             return
-        if message.get("type") == "hint_request":
+        if message.get("type") == "turn_timing":
+            self.pending_wait_ms = valid_wait_ms(message.get("waited_ms"))
+        elif message.get("type") == "hint_request":
             await self._answer_hint_request()
         elif message.get("type") == "playback_failed":
             self._log_playback_failure(message.get("reason"))
         elif message.get("type") == "end_session":
             await self._end_by_student()
+
+    async def _record_speech_turn(
+        self, transcription: Transcription, waited_ms: int | None
+    ) -> None:
+        """Grava a vez do aluno com as medidas de fala, sem nunca interromper a conversa."""
+        try:
+            await sync_to_async(record_speech_turn)(
+                self.attempt,
+                text=transcription.text,
+                words=transcription.words,
+                waited_ms=waited_ms,
+                after_hint=self.current_hint is not None,
+            )
+        except Exception as exc:
+            logger.error("falha ao gravar as medidas da vez de fala: %s", exc)
 
     async def _end_by_student(self) -> None:
         """Encerra a sessão a pedido do aluno: avalia a conversa até ali e grava a tentativa.

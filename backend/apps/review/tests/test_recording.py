@@ -162,7 +162,7 @@ def test_recording_an_attempt_passes_the_known_rules_and_records_the_items(
     )
     received = []
 
-    def fake_evaluate(content, messages, known_rules=()):
+    def fake_evaluate(content, messages, known_rules=(), speech_metrics=None):
         received.append(list(known_rules))
         return _outcome(
             [
@@ -191,7 +191,9 @@ def test_a_failure_while_recording_the_items_undoes_the_attempt(student, monkeyp
         Scenario.objects.get(slug="entrevista-de-emprego"), Level.objects.get(order=3), student
     )
     monkeypatch.setattr(
-        session_runner, "evaluate", lambda content, messages, known_rules=(): _outcome([])
+        session_runner,
+        "evaluate",
+        lambda content, messages, known_rules=(), speech_metrics=None: _outcome([]),
     )
 
     def broken_recording(*args):
@@ -298,3 +300,20 @@ def test_the_newest_occurrence_brings_its_own_note(student):
     )
 
     assert item.occurrences.first().note == "Nota nova."
+
+
+def test_the_occurrence_keeps_the_explanation_and_the_examples(student):
+    attempt = _attempt(student)
+    mistake = ReportedMistake(
+        rule=PAST_SIMPLE,
+        produced="I have finished it last week",
+        correct="I finished it last week",
+        explanation="Com um tempo que já terminou, use o passado simples.",
+        examples=["I called her last night.", "We met on Monday."],
+    )
+
+    record_review_items(student, attempt, [mistake], TODAY)
+
+    occurrence = ReviewOccurrence.objects.get(attempt=attempt)
+    assert occurrence.explanation == "Com um tempo que já terminou, use o passado simples."
+    assert occurrence.examples == ["I called her last night.", "We met on Monday."]

@@ -13,6 +13,7 @@ from apps.catalog.models import Level, Scenario
 from apps.progress.models import Attempt
 from apps.voice import consumers as voice_consumers
 from apps.voice.routing import websocket_urlpatterns
+from apps.voice.services.stt import Transcription
 from apps.voice.tests.scene_end import end_after_the_first_turn
 from apps.voice.tests.session_client import SessionCommunicator
 
@@ -49,7 +50,11 @@ def test_live_session_opens_transcribes_a_turn_and_ends(django_user_model, monke
     monkeypatch.setattr(
         graph_routing, "get_structured_llm", lambda purpose, schema: _FakeRoutingLLM()
     )
-    monkeypatch.setattr(voice_consumers, "transcribe", lambda audio: "I need one more week.")
+    monkeypatch.setattr(
+        voice_consumers,
+        "transcribe_with_words",
+        lambda audio: Transcription("I need one more week."),
+    )
     monkeypatch.setattr(voice_consumers, "synthesize", lambda text, voice: b"fake-wav-bytes")
 
     fake_outcome = EvaluationOutcome(
@@ -66,7 +71,8 @@ def test_live_session_opens_transcribes_a_turn_and_ends(django_user_model, monke
         review_items=[],
     )
     monkeypatch.setattr(
-        "apps.agents.services.session_runner.evaluate", lambda content, messages, known_rules=(): fake_outcome
+        "apps.agents.services.session_runner.evaluate",
+        lambda content, messages, known_rules=(), speech_metrics=None: fake_outcome,
     )
 
     async def run() -> None:
@@ -133,13 +139,13 @@ def test_audio_sent_during_evaluation_is_ignored(django_user_model, monkeypatch)
         review_items=[],
     )
 
-    def fake_evaluate(content, messages, known_rules=()):
+    def fake_evaluate(content, messages, known_rules=(), speech_metrics=None):
         evaluated.append(messages)
         return outcome
 
     def fake_transcribe(audio):
         transcribed.append(audio)
-        return "I need one more week."
+        return Transcription("I need one more week.")
 
     monkeypatch.setattr(
         graph_personas, "get_structured_llm", lambda purpose, schema: _FakeStructuredLLM()
@@ -147,7 +153,7 @@ def test_audio_sent_during_evaluation_is_ignored(django_user_model, monkeypatch)
     monkeypatch.setattr(
         graph_routing, "get_structured_llm", lambda purpose, schema: _FakeRoutingLLM()
     )
-    monkeypatch.setattr(voice_consumers, "transcribe", fake_transcribe)
+    monkeypatch.setattr(voice_consumers, "transcribe_with_words", fake_transcribe)
     monkeypatch.setattr(voice_consumers, "synthesize", lambda text, voice: b"fake-wav-bytes")
     monkeypatch.setattr("apps.agents.services.session_runner.evaluate", fake_evaluate)
 
@@ -190,7 +196,9 @@ def test_empty_transcription_asks_the_student_to_speak_again(django_user_model, 
     monkeypatch.setattr(
         graph_personas, "get_structured_llm", lambda purpose, schema: _FakeStructuredLLM()
     )
-    monkeypatch.setattr(voice_consumers, "transcribe", lambda audio: "   ")
+    monkeypatch.setattr(
+        voice_consumers, "transcribe_with_words", lambda audio: Transcription("   ")
+    )
     monkeypatch.setattr(voice_consumers, "synthesize", lambda text, voice: b"fake-wav-bytes")
 
     async def run() -> None:

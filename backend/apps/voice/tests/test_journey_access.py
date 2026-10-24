@@ -45,7 +45,7 @@ def _fake_models(monkeypatch) -> None:
     monkeypatch.setattr(graph_personas, "get_structured_llm", lambda p, s: _Persona())
     monkeypatch.setattr(graph_routing, "get_structured_llm", lambda p, s: _Router())
     monkeypatch.setattr(voice_consumers, "synthesize", lambda text, voice: b"wav")
-    monkeypatch.setattr(voice_consumers, "transcribe", must_not_call)
+    monkeypatch.setattr(voice_consumers, "transcribe_with_words", must_not_call)
 
 
 def _complete(user, slug: str, level: int, *, passed: bool, hours_ago: float) -> None:

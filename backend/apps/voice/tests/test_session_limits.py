@@ -15,6 +15,7 @@ from apps.progress.models import Attempt
 from apps.usage.models import AccessLimits, LiveSessionLease
 from apps.voice import consumers as voice_consumers
 from apps.voice.routing import websocket_urlpatterns
+from apps.voice.services.stt import Transcription
 from apps.voice.tests.session_client import SessionCommunicator
 
 pytestmark = pytest.mark.django_db
@@ -151,7 +152,7 @@ def test_a_turn_audio_over_the_limit_is_refused_without_transcribing_or_ending(
     def must_not_transcribe(audio):
         raise AssertionError("o áudio grande não pode ser transcrito")
 
-    monkeypatch.setattr(voice_consumers, "transcribe", must_not_transcribe)
+    monkeypatch.setattr(voice_consumers, "transcribe_with_words", must_not_transcribe)
 
     async def run() -> dict:
         communicator = SessionCommunicator(
@@ -172,7 +173,9 @@ def test_a_turn_audio_over_the_limit_is_refused_without_transcribing_or_ending(
 def test_a_turn_audio_within_the_limit_is_transcribed_as_before(django_user_model, monkeypatch):
     user = django_user_model.objects.create(username="maria")
     _fake_session(monkeypatch)
-    monkeypatch.setattr(voice_consumers, "transcribe", lambda audio: "   ")
+    monkeypatch.setattr(
+        voice_consumers, "transcribe_with_words", lambda audio: Transcription("   ")
+    )
 
     async def run() -> dict:
         communicator = SessionCommunicator(
