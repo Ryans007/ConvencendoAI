@@ -261,6 +261,24 @@ def test_the_prompt_asks_for_the_whole_sentence_and_a_correction_that_keeps_the_
     assert "never change the request, the topic or the facts" in prompt
 
 
+def test_the_prompt_never_turns_a_correct_sentence_into_a_review_item(monkeypatch):
+    _, prompt = _evaluate_with(monkeypatch, [])
+    flat = " ".join(prompt.split())
+
+    assert "First make sure the sentence is really wrong" in flat
+    assert "A sentence that is correct English is NOT a mistake" in flat
+    assert '"I would like your phone number" is correct' in flat
+    assert "Never invent a rule to justify an item" in flat
+
+
+def test_the_prompt_asks_for_a_correction_that_only_changes_the_wrong_words(monkeypatch):
+    _, prompt = _evaluate_with(monkeypatch, [])
+    flat = " ".join(prompt.split())
+
+    assert "Change ONLY the words that make the sentence wrong" in flat
+    assert "never add a word the sentence did not need" in flat
+
+
 def test_the_prompt_asks_for_a_portuguese_note_that_never_writes_the_correct_words(monkeypatch):
     _, prompt = _evaluate_with(monkeypatch, [])
 

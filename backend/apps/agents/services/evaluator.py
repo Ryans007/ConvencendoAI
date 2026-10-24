@@ -104,8 +104,10 @@ Also write:
   - "produced": the WHOLE sentence the student said, with the mistake inside it,
     never just the wrong word or fragment;
   - "correct": that same whole sentence, corrected. Keep what the student meant:
-    never change the request, the topic or the facts. If the mistake cannot be
-    corrected without guessing something else the student wanted, do not report it;
+    never change the request, the topic or the facts. Change ONLY the words that
+    make the sentence wrong: never add a word the sentence did not need, such as a
+    new verb, to fit a structure you prefer. If the mistake cannot be corrected
+    without guessing something else the student wanted, do not report it;
   - "note": ONE short sentence in Brazilian Portuguese that tells the student what
     to look at in that sentence, describing the idea in Portuguese. It must NEVER
     contain the correct English word, phrase or structure. Good: "Aqui o verbo é o de
@@ -116,6 +118,11 @@ Also write:
     rule, even with different words (for example "I have worked there yesterday"
     and "I have finished it last week" are the same rule); otherwise "".
   Choosing the mistakes:
+  - First make sure the sentence is really wrong. A sentence that is correct
+    English is NOT a mistake, even when you would phrase it differently: "I would
+    like your phone number" is correct, because "would like" takes a noun directly
+    and needs "to" only before a verb. Never invent a rule to justify an item; if
+    you are not sure the sentence breaks a real rule, skip it.
   - The transcript is what automatic speech recognition heard, and it is the only
     evidence you have. A wrong word in it is the student's mistake even when it may
     have been a mispronunciation: "I won a floor" is a mistake when the student
