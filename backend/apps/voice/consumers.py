@@ -411,6 +411,8 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
 
         Antes de cada áudio sai uma mensagem `speaker` com o nome de quem fala, para a tela dizer
         quem é: o nome é o único texto de uma fala que chega ao cliente, e nunca o que foi dito.
+        O nome sai antes da síntese, e não junto do áudio, porque já é conhecido ali: enquanto o
+        áudio é sintetizado, a tela mostra quem vai responder em vez de um texto genérico.
 
         Falha do provedor de TTS encerra a sessão com erro explícito, sem fallback de
         síntese local. Devolve `False` nesse caso — a sessão já foi encerrada e quem
@@ -427,6 +429,8 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             name, text = _split_speaker(message.content)
             role = next((r for r in self.content.roles if r.name == name), None)
             voice = role.voice if role else self.content.roles[0].voice
+            speaker_name = role.name if role else name
+            await self.send(text_data=json.dumps({"type": "speaker", "name": speaker_name}))
             synthesis_started_at = time.monotonic()
             try:
                 audio = await sync_to_async(synthesize)(text, voice)
@@ -434,8 +438,6 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
                 await self._fail_with_error(exc)
                 return False
             print(f"[timing] tts ({name}): {time.monotonic() - synthesis_started_at:.2f}s")
-            speaker_name = role.name if role else name
-            await self.send(text_data=json.dumps({"type": "speaker", "name": speaker_name}))
             await self.send(bytes_data=audio)
             if not first_audio_sent:
                 first_audio_sent = True

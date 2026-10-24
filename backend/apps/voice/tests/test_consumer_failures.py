@@ -223,6 +223,10 @@ def test_voice_synthesis_failure_carries_the_code_too(django_user_model, monkeyp
     async def run() -> None:
         communicator = await _connect(token)
 
+        assert json.loads(await communicator.receive_from()) == {
+            "type": "speaker",
+            "name": "Rachel",
+        }
         await _expect_error(communicator, "provider_unavailable")
         await communicator.disconnect()
 
