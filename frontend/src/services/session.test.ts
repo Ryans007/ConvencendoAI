@@ -4,6 +4,14 @@ const mockPost = vi.fn();
 
 vi.mock("../api/client", () => ({
   post: (...args: unknown[]) => mockPost(...args),
+  ApiError: class ApiError extends Error {
+    readonly status: number | null;
+
+    constructor(message: string, status: number | null = null) {
+      super(message);
+      this.status = status;
+    }
+  },
 }));
 
 function createMemoryStorage(): Storage {
@@ -190,5 +198,111 @@ describe("services/session", () => {
     await session.logout();
 
     expect(session.isPasswordChangeRequired()).toBe(false);
+  });
+});
+
+describe("services/session com renovacoes simultaneas", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mockPost.mockReset();
+    vi.stubGlobal("localStorage", createMemoryStorage());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  async function loggedIn() {
+    mockPost.mockResolvedValueOnce({ access: "access-1", refresh: "refresh-1" });
+    const session = await import("./session");
+    await session.login("aluno", "senha");
+    mockPost.mockReset();
+    return session;
+  }
+
+  async function refused(status: number | null = 401): Promise<Error> {
+    const { ApiError } = await import("../api/client");
+    return new ApiError("recusado", status);
+  }
+
+  it("tres chamadas com o acesso vencido fazem um so pedido de renovacao", async () => {
+    const session = await loggedIn();
+    mockPost.mockResolvedValueOnce({ access: "access-2", refresh: "refresh-2" });
+
+    const results = await Promise.all([session.refresh(), session.refresh(), session.refresh()]);
+
+    expect(results).toEqual([true, true, true]);
+    expect(mockPost).toHaveBeenCalledTimes(1);
+    expect(session.getAccessToken()).toBe("access-2");
+  });
+
+  it("depois que a renovacao termina, uma nova renovacao faz um pedido novo", async () => {
+    const session = await loggedIn();
+    mockPost.mockResolvedValueOnce({ access: "access-2", refresh: "refresh-2" });
+    await session.refresh();
+    mockPost.mockResolvedValueOnce({ access: "access-3", refresh: "refresh-3" });
+
+    await session.refresh();
+
+    expect(mockPost).toHaveBeenCalledTimes(2);
+    expect(mockPost.mock.calls[1][1]).toEqual({ refresh: "refresh-2" });
+  });
+
+  it("um token recusado porque outra aba ja renovou adota o token guardado por ela", async () => {
+    const session = await loggedIn();
+    localStorage.setItem("convencendoai.refreshToken", "refresh-da-outra-aba");
+    mockPost
+      .mockRejectedValueOnce(await refused())
+      .mockResolvedValueOnce({ access: "access-2", refresh: "refresh-2" });
+
+    const renewed = await session.refresh();
+
+    expect(renewed).toBe(true);
+    expect(mockPost.mock.calls[0][1]).toEqual({ refresh: "refresh-1" });
+    expect(mockPost.mock.calls[1][1]).toEqual({ refresh: "refresh-da-outra-aba" });
+    expect(session.isAuthenticated()).toBe(true);
+  });
+
+  it("um token recusado sem outro token guardado encerra a sessao", async () => {
+    const session = await loggedIn();
+    mockPost.mockRejectedValueOnce(await refused());
+
+    const renewed = await session.refresh();
+
+    expect(renewed).toBe(false);
+    expect(mockPost).toHaveBeenCalledTimes(1);
+    expect(session.isAuthenticated()).toBe(false);
+  });
+
+  it("se o token da outra aba tambem e recusado, a sessao e encerrada sem nova tentativa", async () => {
+    const session = await loggedIn();
+    localStorage.setItem("convencendoai.refreshToken", "refresh-da-outra-aba");
+    mockPost.mockRejectedValueOnce(await refused()).mockRejectedValueOnce(await refused());
+
+    const renewed = await session.refresh();
+
+    expect(renewed).toBe(false);
+    expect(mockPost).toHaveBeenCalledTimes(2);
+    expect(session.isAuthenticated()).toBe(false);
+  });
+
+  it("sem resposta do servidor a renovacao falha mas a sessao continua", async () => {
+    const session = await loggedIn();
+    mockPost.mockRejectedValueOnce(await refused(null));
+
+    const renewed = await session.refresh();
+
+    expect(renewed).toBe(false);
+    expect(session.isAuthenticated()).toBe(true);
+  });
+
+  it("um erro interno do servidor nao encerra a sessao", async () => {
+    const session = await loggedIn();
+    mockPost.mockRejectedValueOnce(await refused(500));
+
+    const renewed = await session.refresh();
+
+    expect(renewed).toBe(false);
+    expect(session.isAuthenticated()).toBe(true);
   });
 });
