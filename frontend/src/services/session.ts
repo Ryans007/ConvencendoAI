@@ -1,4 +1,4 @@
-import { post } from "../api/client";
+import { ApiError, post } from "../api/client";
 
 const REFRESH_STORAGE_KEY = "convencendoai.refreshToken";
 
@@ -117,23 +117,65 @@ export async function changePassword(currentPassword: string, newPassword: strin
   setTokens(pair);
 }
 
-/** Troca o token de renovacao guardado por um par novo. Devolve se deu certo. */
-export async function refresh(): Promise<boolean> {
-  if (!refreshToken) {
+type RenewalOutcome = "renewed" | "refused" | "unreachable";
+
+let renewalInProgress: Promise<boolean> | null = null;
+
+/**
+ * Troca o token de renovacao guardado por um par novo. Devolve se deu certo.
+ *
+ * Uma renovacao por vez: quando o acesso vence, varias chamadas da tela recebem 401 juntas, e
+ * cada renovacao bloqueia o token usado no servidor. Quem chama enquanto uma renovacao esta em
+ * andamento recebe o resultado dela, em vez de renovar de novo com o mesmo token.
+ */
+export function refresh(): Promise<boolean> {
+  renewalInProgress ??= renewSession().finally(() => {
+    renewalInProgress = null;
+  });
+  return renewalInProgress;
+}
+
+/**
+ * Renova a sessao e decide se ela continua.
+ *
+ * Um token recusado pode ter sido usado por outra aba, que guardou o par novo no navegador:
+ * nesse caso a aba adota o token guardado e tenta uma unica vez com ele. A sessao so e apagada
+ * quando o servidor recusa o token e nao ha outro para tentar. Sem resposta do servidor (rede
+ * fora do ar, erro interno), a sessao fica como esta, para uma queda passageira nao deslogar.
+ */
+async function renewSession(): Promise<boolean> {
+  const used = refreshToken;
+  if (!used) {
     return false;
   }
+  const outcome = await renewWith(used);
+  if (outcome !== "refused") {
+    return outcome === "renewed";
+  }
+  const stored = readStoredRefreshToken();
+  if (stored && stored !== used) {
+    const retry = await renewWith(stored);
+    if (retry !== "refused") {
+      return retry === "renewed";
+    }
+  }
+  setTokens(null);
+  return false;
+}
+
+async function renewWith(token: string): Promise<RenewalOutcome> {
   try {
-    const pair = await post<TokenPair>(
-      "/auth/token/refresh/",
-      { refresh: refreshToken },
-      { skipAuth: true },
-    );
+    const pair = await post<TokenPair>("/auth/token/refresh/", { refresh: token }, { skipAuth: true });
     setTokens(pair);
-    return true;
-  } catch {
-    setTokens(null);
-    return false;
+    return "renewed";
+  } catch (error) {
+    return isRefusal(error) ? "refused" : "unreachable";
   }
+}
+
+/** Se o servidor recusou o token, e nao apenas deixou de responder ou falhou por dentro. */
+function isRefusal(error: unknown): boolean {
+  return !(error instanceof ApiError) || (error.status !== null && error.status < 500);
 }
 
 /** Restaura a sessao ao carregar a aba, usando o token de renovacao persistido, se houver. */
