@@ -1,6 +1,11 @@
 from django.contrib.auth.password_validation import validate_password
+from django.db import transaction
 from rest_framework import serializers
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
+from rest_framework_simplejwt.settings import api_settings
+from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+from rest_framework_simplejwt.tokens import RefreshToken
 
 
 class LoginSerializer(TokenObtainPairSerializer):
@@ -14,6 +19,35 @@ class LoginSerializer(TokenObtainPairSerializer):
         data = super().validate(attrs)
         data["must_change_password"] = self.user.must_change_password
         return data
+
+
+class TokenRenewalSerializer(TokenRefreshSerializer):
+    """Renovação do token que atende, uma de cada vez, as renovações com o mesmo token.
+
+    Com a rotação ligada, cada renovação bloqueia o token usado. Sem trava, duas renovações
+    simultâneas com o mesmo token passam juntas pela conferência do bloqueio e as duas tentam
+    gravá-lo, e a segunda bate na restrição de unicidade do banco. Aqui a linha do token é
+    travada antes da validação padrão, dentro da mesma transação: a segunda renovação espera a
+    primeira terminar, encontra o token já bloqueado e é recusada como qualquer token já usado.
+    Um token ilegível segue direto para a validação padrão, que é quem o recusa.
+    """
+
+    def validate(self, attrs: dict) -> dict:
+        with transaction.atomic():
+            jti = _refresh_jti(attrs["refresh"])
+            if jti is not None:
+                list(OutstandingToken.objects.select_for_update().filter(jti=jti))
+            return super().validate(attrs)
+
+
+def _refresh_jti(raw_token: str) -> str | None:
+    """O identificador do token de renovação, lido sem validar; vazio se o token for ilegível."""
+    try:
+        token = RefreshToken(raw_token, verify=False)
+    except TokenError:
+        return None
+    jti = token.payload.get(api_settings.JTI_CLAIM)
+    return jti if isinstance(jti, str) else None
 
 
 class TokenPairSerializer(serializers.Serializer):

@@ -6,6 +6,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenRefreshView as SimpleJwtTokenRefreshView
 
 from apps.users.serializers import (
     ChangePasswordSerializer,
@@ -14,6 +15,7 @@ from apps.users.serializers import (
     LoginSerializer,
     LogoutSerializer,
     TokenPairSerializer,
+    TokenRenewalSerializer,
 )
 from apps.users.services.client_ip import client_ip
 from apps.users.services.login_lockout import clear_login_failures, login_lock_remaining_seconds
@@ -132,6 +134,29 @@ class ChangePasswordView(APIView):
         serializer.is_valid(raise_exception=True)
         refresh = change_password(request.user, serializer.validated_data["new_password"])
         return Response({"access": str(refresh.access_token), "refresh": str(refresh)})
+
+
+class TokenRefreshView(SimpleJwtTokenRefreshView):
+    """Troca um token de renovação válido por um par novo, bloqueando o token usado.
+
+    Renovações simultâneas com o mesmo token são atendidas uma de cada vez: a primeira recebe o
+    par novo e as demais são recusadas com 401, como qualquer token já usado, sem erro de
+    servidor. Acontece quando várias chamadas da tela encontram o acesso vencido ao mesmo tempo,
+    ou quando duas abas renovam juntas.
+    """
+
+    serializer_class = TokenRenewalSerializer
+
+    @extend_schema(
+        responses={
+            200: TokenPairSerializer,
+            401: OpenApiResponse(
+                description="Token de renovação inválido, vencido ou já usado numa renovação."
+            ),
+        },
+    )
+    def post(self, request: Request, *args, **kwargs) -> Response:
+        return super().post(request, *args, **kwargs)
 
 
 class LogoutView(APIView):
