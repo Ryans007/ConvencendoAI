@@ -63,6 +63,8 @@ def record_review_items(
             produced=mistake.produced,
             correct=mistake.correct,
             note=mistake.note,
+            explanation=mistake.explanation,
+            examples=list(mistake.examples),
         )
         if item not in touched:
             touched.append(item)

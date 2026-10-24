@@ -2,9 +2,15 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
 from apps.agents.services import evaluator
-from apps.agents.services.schemas import DimensionScores, EvaluationResult, ReviewItem
+from apps.agents.services.schemas import (
+    DimensionComments,
+    DimensionScores,
+    EvaluationResult,
+    ReviewItem,
+)
 from apps.agents.services.scenario_content import load_scenario_content
 from apps.catalog.models import Level, Scenario
+from apps.progress.services.speech_metrics import SessionSpeechMetrics
 
 pytestmark = pytest.mark.django_db
 
@@ -473,3 +479,117 @@ def test_a_dimension_the_judge_scored_zero_is_kept_as_zero(monkeypatch):
 
     assert llm.calls == 1
     assert {d.dimension: d.value for d in outcome.judged_dimensions}["grammar"] == 0
+
+
+def test_the_prompt_asks_for_a_longer_summary_and_comments_in_portuguese(monkeypatch):
+    _, prompt = _evaluate_with(monkeypatch, [])
+    flat = " ".join(prompt.split())
+
+    assert '"feedback": 3-5 sentences addressed to the student, in Brazilian Portuguese' in flat
+    assert "the single most important thing to improve and why" in flat
+    assert '"comments": for each judged dimension, ONE sentence in Brazilian Portuguese' in flat
+
+
+def test_the_prompt_asks_for_an_explanation_and_two_examples_per_mistake(monkeypatch):
+    _, prompt = _evaluate_with(monkeypatch, [])
+    flat = " ".join(prompt.split())
+
+    assert '"explanation": one or two short sentences in Brazilian Portuguese' in flat
+    assert "may write the correct English form" in flat
+    assert '"examples": exactly two short English sentences' in flat
+
+
+def test_comments_come_back_with_each_judged_dimension(monkeypatch):
+    result = EvaluationResult(
+        sub_scores=_full_scores(),
+        comments=DimensionComments(grammar="  Você trocou o tempo verbal duas vezes. "),
+    )
+    monkeypatch.setattr(
+        evaluator, "get_structured_llm", lambda purpose, schema: _FakeStructuredLLM(result)
+    )
+
+    outcome = evaluator.evaluate(_content(), _SESSION)
+
+    comments = {judged.dimension: judged.comment for judged in outcome.judged_dimensions}
+    assert comments["grammar"] == "Você trocou o tempo verbal duas vezes."
+    assert comments["fluency"] == ""
+
+
+def test_examples_are_cleaned_and_capped_at_two(monkeypatch):
+    item = ReviewItem(
+        rule="past simple with a finished time expression",
+        produced="I have finished it last week",
+        correct="I finished it last week",
+        explanation="  Com um tempo que já terminou, use o passado simples. ",
+        examples=["I called her last night.", "  ", "We met on Monday.", "She left yesterday."],
+    )
+
+    outcome, _ = _evaluate_with(monkeypatch, [item])
+
+    kept = outcome.review_items[0]
+    assert kept.explanation == "Com um tempo que já terminou, use o passado simples."
+    assert kept.examples == ["I called her last night.", "We met on Monday."]
+
+
+def test_a_mistake_without_explanation_or_examples_is_still_kept(monkeypatch):
+    item = ReviewItem(rule="third person -s", produced="She don't", correct="She doesn't")
+
+    outcome, _ = _evaluate_with(monkeypatch, [item])
+
+    assert outcome.review_items[0].explanation == ""
+    assert outcome.review_items[0].examples == []
+
+
+def _prompt_with_metrics(monkeypatch, metrics) -> str:
+    prompts = []
+
+    class _RecordingLLM:
+        def invoke(self, received):
+            prompts.append(received[0].content)
+            return EvaluationResult(sub_scores=_full_scores())
+
+    monkeypatch.setattr(evaluator, "get_structured_llm", lambda purpose, schema: _RecordingLLM())
+    evaluator.evaluate(_content(), _SESSION, speech_metrics=metrics)
+    return " ".join(prompts[0].split())
+
+
+def test_speech_measurements_go_to_the_prompt_ready_to_be_cited(monkeypatch):
+    metrics = SessionSpeechMetrics(
+        reaction_seconds=6.0,
+        words_per_minute=92.4,
+        long_pauses_per_100_words=3.12,
+        lexical_diversity=0.62,
+        lexical_range=0.06,
+        word_count=120,
+    )
+
+    prompt = _prompt_with_metrics(monkeypatch, metrics)
+
+    assert "SPEECH MEASUREMENTS" in prompt
+    assert "median time to start answering: 6.0 s" in prompt
+    assert "speaking speed: 92 words per minute" in prompt
+    assert "3.1 per 100 words" in prompt
+    assert "word variety (MATTR, 0 to 1): 0.62" in prompt
+    assert "words outside the 2,000 most common in English: 6%" in prompt
+    assert "Your fluency score must judge only what the numbers cannot see" in prompt
+    assert "Your vocabulary score must judge only whether each word was the right one" in prompt
+
+
+def test_without_vocabulary_measures_the_prompt_leaves_vocabulary_to_the_model(monkeypatch):
+    metrics = SessionSpeechMetrics(
+        reaction_seconds=3.0,
+        words_per_minute=None,
+        long_pauses_per_100_words=None,
+        lexical_diversity=None,
+        lexical_range=None,
+        word_count=20,
+    )
+
+    prompt = _prompt_with_metrics(monkeypatch, metrics)
+
+    assert "median time to start answering: 3.0 s" in prompt
+    assert "Your vocabulary score must judge only" not in prompt
+
+
+def test_without_measurements_the_prompt_has_no_speech_section(monkeypatch):
+    assert "SPEECH MEASUREMENTS" not in _prompt_with_metrics(monkeypatch, None)

@@ -63,7 +63,9 @@ class ReviewOccurrence(models.Model):
     """Uma vez em que o aluno errou na regra de um item, numa sessão.
 
     Guarda o que ele disse e a forma correta, e a tentativa de origem dá a cena e a data.
-    É o histórico da auditoria: o item nunca perde de onde o erro veio.
+    É o histórico da auditoria: o item nunca perde de onde o erro veio. A explicação e os
+    exemplos são do relatório da sessão, que pode mostrar a resposta; a rodada de revisão
+    não os usa, porque ali o aluno precisa lembrar a forma correta sozinho.
     """
 
     item = models.ForeignKey(
@@ -93,6 +95,24 @@ class ReviewOccurrence(models.Model):
         help_text=(
             "Frase curta, em português, que diz o que observar na frase sem escrever o "
             "inglês correto. Vazia nos itens criados antes de a nota existir."
+        ),
+    )
+    explanation = models.TextField(
+        blank=True,
+        default="",
+        verbose_name="explicação",
+        help_text=(
+            "A regra explicada em português para o relatório da sessão. Diferente da nota, "
+            "pode mostrar a forma correta. Vazia nas ocorrências anteriores à explicação."
+        ),
+    )
+    examples = models.JSONField(
+        blank=True,
+        default=list,
+        verbose_name="exemplos",
+        help_text=(
+            "Até duas frases curtas em inglês que aplicam a mesma regra em outras situações, "
+            "mostradas no relatório da sessão."
         ),
     )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="registrada em")
