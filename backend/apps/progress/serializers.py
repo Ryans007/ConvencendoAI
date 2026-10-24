@@ -86,6 +86,12 @@ class ScoreBreakdownSerializer(serializers.Serializer):
         source="weight_at_time",
         help_text="Peso máximo da dimensão no momento da tentativa (histórico, não muda depois).",
     )
+    comment = serializers.CharField(
+        help_text=(
+            "Frase do avaliador, em português, que explica a nota. Vazia no objetivo e nas "
+            "tentativas anteriores ao comentário."
+        )
+    )
 
 
 class AttemptCriterionSerializer(serializers.Serializer):
@@ -99,24 +105,107 @@ class AttemptCriterionSerializer(serializers.Serializer):
     met = serializers.BooleanField(help_text="Se o aluno cumpriu este critério nesta tentativa.")
 
 
+class AttemptMistakeSerializer(serializers.Serializer):
+    """Um erro apontado na sessão, como o relatório o mostra: com a forma correta à vista."""
+
+    id = serializers.IntegerField(help_text="Identificador do erro, que abre o áudio dele.")
+    produced = serializers.CharField(help_text="A frase inteira que o aluno disse.")
+    correct = serializers.CharField(help_text="A mesma frase corrigida.")
+    explanation = serializers.CharField(
+        help_text="A regra explicada em português; vazia nos erros anteriores à explicação."
+    )
+    examples = serializers.ListField(
+        child=serializers.CharField(),
+        help_text="Até duas frases em inglês que aplicam a mesma regra em outras situações.",
+    )
+
+
+class SpeechMetricsSerializer(serializers.Serializer):
+    """As medidas de fala da sessão de voz que o nível da tentativa usa."""
+
+    reaction_seconds = serializers.FloatField(
+        allow_null=True, help_text="Mediana do tempo até começar a responder, em segundos."
+    )
+    words_per_minute = serializers.FloatField(
+        allow_null=True, help_text="Velocidade da fala, em palavras por minuto."
+    )
+    long_pauses_per_100_words = serializers.FloatField(
+        allow_null=True, help_text="Pausas de mais de 1,5 s no meio da fala, a cada 100 palavras."
+    )
+    lexical_diversity = serializers.FloatField(
+        allow_null=True, help_text="Diversidade de palavras (MATTR), de 0 a 1."
+    )
+    lexical_range = serializers.FloatField(
+        allow_null=True,
+        help_text="Fração das palavras de conteúdo fora das 2.000 mais frequentes, de 0 a 1.",
+    )
+
+
+class FluencySharesSerializer(serializers.Serializer):
+    """Quanto cada parte pesou na fluência medida."""
+
+    measured_share = serializers.FloatField(help_text="Fatia da medida na nota; o resto é da IA.")
+    reaction_share = serializers.FloatField()
+    speed_share = serializers.FloatField()
+    pauses_share = serializers.FloatField()
+
+
+class VocabularySharesSerializer(serializers.Serializer):
+    """Quanto cada parte pesou no vocabulário medido."""
+
+    judged_share = serializers.FloatField(help_text="Fatia do julgamento da IA (precisão).")
+    diversity_share = serializers.FloatField()
+    range_share = serializers.FloatField()
+
+
+class ReportScoringSerializer(serializers.Serializer):
+    """O que a tela precisa para explicar como a nota foi calculada."""
+
+    passing_score = serializers.IntegerField(help_text="Nota mínima de aprovação.")
+    fluency = FluencySharesSerializer(
+        allow_null=True, help_text="Proporções da fluência, ou nulo quando ela não foi medida."
+    )
+    vocabulary = VocabularySharesSerializer(
+        allow_null=True, help_text="Proporções do vocabulário, ou nulo quando ele não foi medido."
+    )
+
+
 class AttemptReportSerializer(serializers.Serializer):
-    """Relatório completo de uma tentativa já concluída: nota final, sub-nota por
-    dimensão, resultado de cada critério aplicável, e o feedback do avaliador.
+    """Relatório completo de uma tentativa já concluída: nota final, sub-nota e comentário por
+    dimensão, resultado de cada critério aplicável, resumo do avaliador, erros da sessão,
+    medidas de fala e a explicação da conta da nota.
     """
 
-    id = serializers.IntegerField()
-    scenario = serializers.CharField(source="scenario.slug")
-    level = serializers.IntegerField(source="level.order")
-    final_score = serializers.IntegerField(help_text="Nota de 0 a 100, normalizada sobre o peso avaliado.")
-    passed = serializers.BooleanField(help_text="Se a nota atingiu o mínimo de aprovação.")
-    feedback = serializers.CharField(help_text="2-3 frases do avaliador sobre o desempenho.")
-    completed_at = serializers.DateTimeField()
-    hints_enabled = serializers.BooleanField(
-        help_text="O aluno começou a sessão com as dicas ligadas."
+    id = serializers.IntegerField(source="attempt.id")
+    scenario = serializers.CharField(source="attempt.scenario.slug")
+    level = serializers.IntegerField(source="attempt.level.order")
+    final_score = serializers.IntegerField(
+        source="attempt.final_score",
+        help_text="Nota de 0 a 100, normalizada sobre o peso avaliado.",
     )
-    hints_used = serializers.IntegerField(help_text="Quantas dicas o aluno pediu na sessão.")
-    score_breakdowns = ScoreBreakdownSerializer(many=True)
-    criteria = AttemptCriterionSerializer(many=True)
+    passed = serializers.BooleanField(
+        source="attempt.passed", help_text="Se a nota atingiu o mínimo de aprovação."
+    )
+    feedback = serializers.CharField(
+        source="attempt.feedback",
+        help_text="Resumo do avaliador, em português nas tentativas novas.",
+    )
+    completed_at = serializers.DateTimeField(source="attempt.completed_at")
+    hints_enabled = serializers.BooleanField(
+        source="attempt.hints_enabled", help_text="O aluno começou a sessão com as dicas ligadas."
+    )
+    hints_used = serializers.IntegerField(
+        source="attempt.hints_used", help_text="Quantas dicas o aluno pediu na sessão."
+    )
+    score_breakdowns = ScoreBreakdownSerializer(source="attempt.score_breakdowns", many=True)
+    criteria = AttemptCriterionSerializer(source="attempt.criteria", many=True)
+    mistakes = AttemptMistakeSerializer(
+        many=True, help_text="Erros apontados na sessão, sem os que o aluno arquivou; até 4."
+    )
+    speech_metrics = SpeechMetricsSerializer(
+        allow_null=True, help_text="Medidas de fala da sessão de voz, ou nulo sem medidas."
+    )
+    scoring = ReportScoringSerializer()
 
 
 class TrackStateSerializer(serializers.Serializer):
