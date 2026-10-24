@@ -8,7 +8,7 @@ import { sessionErrorMessage } from "../../services/sessionErrors";
 import type { ReportContext } from "../relatorio/reportContext";
 import { endActionState } from "./endAction";
 import { HintPanel } from "./HintPanel";
-import { speakingLabel } from "./speakingLabel";
+import { speakingLabel, waitingLabel } from "./speakingLabel";
 
 const ENDED_TRANSITION_MS = 1400;
 
@@ -50,6 +50,7 @@ export default function SessaoAoVivoPage() {
     audioTooLargeNotice,
     studentHasSpoken,
     speakerName,
+    personaAudible,
     hint,
     startRecording,
     stopRecording,
@@ -107,7 +108,7 @@ export default function SessaoAoVivoPage() {
       {(phase === "connecting" || phase === "persona-speaking" || phase === "student-turn" || phase === "recording") && (
         <div className="flex flex-1 flex-col items-center justify-center gap-10 px-8 pb-20">
           <div className="relative flex h-28 w-28 items-center justify-center">
-            {personaSpeaking && (
+            {personaSpeaking && personaAudible && (
               <div className="absolute inset-0 animate-ping rounded-full border border-brand" />
             )}
             <AvatarPlaceholder size={88} />
@@ -116,7 +117,10 @@ export default function SessaoAoVivoPage() {
           <div className="flex min-h-[76px] flex-col items-center gap-5">
             <span className={`text-center text-[22px] font-medium ${recording ? "text-brand-strong" : "text-ink"}`}>
               {phase === "connecting" && "Conectando..."}
-              {personaSpeaking && speakingLabel(speakerName)}
+              {personaSpeaking &&
+                (personaAudible
+                  ? speakingLabel(speakerName)
+                  : waitingLabel(speakerName, studentHasSpoken))}
               {studentTurn && !recording && "Sua vez de falar"}
               {recording && "Gravando..."}
             </span>

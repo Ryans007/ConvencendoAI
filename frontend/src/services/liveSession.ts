@@ -38,6 +38,7 @@ export interface LiveSessionState {
   audioTooLargeNotice: boolean;
   studentHasSpoken: boolean;
   speakerName: string | null;
+  personaAudible: boolean;
   hint: SessionHint;
 }
 
@@ -101,6 +102,7 @@ export class LiveSession {
     audioTooLargeNotice: false,
     studentHasSpoken: false,
     speakerName: null,
+    personaAudible: false,
     hint: NO_HINT,
   };
 
@@ -175,6 +177,9 @@ export class LiveSession {
       }
       if (payload.type === "speaker") {
         this.announcedSpeaker = payload.name ?? null;
+        if (!this.playingAudio && this.state.phase === "persona-speaking") {
+          this.setState({ speakerName: this.announcedSpeaker });
+        }
         return;
       }
       if (payload.type === "hint_unavailable") {
@@ -219,7 +224,8 @@ export class LiveSession {
    *
    * O nome de quem fala vira estado quando o audio dele comeca a tocar, e nao quando chega:
    * numa rodada com duas falas os dois audios chegam juntos, e o nome da segunda so pode
-   * aparecer depois que a primeira terminou.
+   * aparecer depois que a primeira terminou. `personaAudible` marca que ha uma fala tocando de
+   * fato: antes disso a tela diz que a persona esta pensando, e nunca que ela esta falando.
    */
   private playNextAudio(): void {
     if (this.playingAudio || this.audioQueue.length === 0) {
@@ -233,7 +239,7 @@ export class LiveSession {
       this.playingAudio = false;
       return;
     }
-    this.setState({ phase: "persona-speaking", speakerName: queued.speaker });
+    this.setState({ phase: "persona-speaking", speakerName: queued.speaker, personaAudible: true });
     const advance = () => {
       this.playingAudio = false;
       this.playNextAudio();
@@ -272,11 +278,17 @@ export class LiveSession {
       const outcome = this.pendingOutcome;
       this.pendingOutcome = null;
       if (outcome.phase === "ended") {
-        this.setState({ phase: "ended", result: outcome.result ?? null, speakerName: null });
+        this.setState({
+          phase: "ended",
+          result: outcome.result ?? null,
+          speakerName: null,
+          personaAudible: false,
+        });
       } else {
         this.setState({
           phase: "error",
           speakerName: null,
+          personaAudible: false,
           errorMessage: outcome.errorMessage ?? null,
           errorCode: outcome.errorCode ?? null,
           errorRetryAfterSeconds: outcome.errorRetryAfterSeconds ?? null,
@@ -287,7 +299,7 @@ export class LiveSession {
 
     if (this.evaluationStarted) {
       if (this.state.phase !== "evaluating") {
-        this.setState({ phase: "evaluating", speakerName: null });
+        this.setState({ phase: "evaluating", speakerName: null, personaAudible: false });
       }
       return;
     }
@@ -298,6 +310,7 @@ export class LiveSession {
         phase: "student-turn",
         turnCount: this.state.turnCount + 1,
         speakerName: null,
+        personaAudible: false,
       });
     }
   }
@@ -362,6 +375,7 @@ export class LiveSession {
       hint: NO_HINT,
       studentHasSpoken: true,
       speakerName: null,
+      personaAudible: false,
     });
   }
 

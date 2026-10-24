@@ -785,19 +785,59 @@ describe("LiveSession e o nome de quem fala", () => {
     socket.dispatch("message", { data: JSON.stringify({ type: "speaker", name }) });
   }
 
-  it("mostra o nome da persona quando o audio dela comeca a tocar", () => {
+  it("o nome anunciado antes do audio aparece como quem esta pensando, sem fala tocando", () => {
     const session = new LiveSession("problema-no-quarto", 3);
     const socket = FakeWebSocket.instances[0];
     const states = collectStates(session);
     socket.dispatch("open", {});
+    expect(states.at(-1)?.personaAudible).toBe(false);
 
     speaker(socket, "James");
-    expect(states.at(-1)?.speakerName).toBeNull();
-
-    socket.dispatch("message", { data: new ArrayBuffer(4) });
 
     expect(states.at(-1)?.phase).toBe("persona-speaking");
     expect(states.at(-1)?.speakerName).toBe("James");
+    expect(states.at(-1)?.personaAudible).toBe(false);
+  });
+
+  it("a fala so conta como tocando quando o audio comeca", () => {
+    const session = new LiveSession("problema-no-quarto", 3);
+    const socket = FakeWebSocket.instances[0];
+    const states = collectStates(session);
+    socket.dispatch("open", {});
+    speaker(socket, "James");
+
+    socket.dispatch("message", { data: new ArrayBuffer(4) });
+
+    expect(states.at(-1)?.speakerName).toBe("James");
+    expect(states.at(-1)?.personaAudible).toBe(true);
+  });
+
+  it("o nome da proxima fala nao troca o nome de quem ainda esta falando", () => {
+    const session = new LiveSession("negociar-prazo", 3);
+    const socket = FakeWebSocket.instances[0];
+    const states = collectStates(session);
+    socket.dispatch("open", {});
+    speaker(socket, "Rachel");
+    socket.dispatch("message", { data: new ArrayBuffer(4) });
+
+    speaker(socket, "Tom");
+
+    expect(states.at(-1)?.speakerName).toBe("Rachel");
+    expect(states.at(-1)?.personaAudible).toBe(true);
+  });
+
+  it("na vez do aluno nenhuma fala conta como tocando", async () => {
+    const session = new LiveSession("negociar-prazo", 3);
+    const socket = FakeWebSocket.instances[0];
+    const states = collectStates(session);
+    socket.dispatch("open", {});
+    speaker(socket, "Rachel");
+    socket.dispatch("message", { data: new ArrayBuffer(4) });
+
+    await endAudio();
+
+    expect(states.at(-1)?.phase).toBe("student-turn");
+    expect(states.at(-1)?.personaAudible).toBe(false);
   });
 
   it("numa rodada com duas falas, o segundo nome so aparece quando o segundo audio comeca", async () => {
@@ -858,5 +898,18 @@ describe("LiveSession e o nome de quem fala", () => {
 
     expect(states.at(-1)?.phase).toBe("persona-speaking");
     expect(states.at(-1)?.speakerName).toBeNull();
+    expect(states.at(-1)?.personaAudible).toBe(false);
+  });
+
+  it("depois de o aluno responder, o nome anunciado aparece antes do audio", async () => {
+    const { session, socket } = await studentTurn(false);
+    const states = collectStates(session);
+    await speak(session);
+
+    speaker(socket, "Tom");
+
+    expect(states.at(-1)?.phase).toBe("persona-speaking");
+    expect(states.at(-1)?.speakerName).toBe("Tom");
+    expect(states.at(-1)?.personaAudible).toBe(false);
   });
 });
