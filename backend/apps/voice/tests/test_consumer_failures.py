@@ -18,6 +18,7 @@ from apps.progress.services import build_journey
 from apps.voice import consumers as voice_consumers
 from apps.voice.routing import websocket_urlpatterns
 from apps.voice.services import stt
+from apps.voice.services.stt import Transcription
 from apps.voice.tests.scene_end import end_after_the_first_turn
 from apps.voice.tests.session_client import SessionCommunicator
 
@@ -62,7 +63,9 @@ def _prepare(monkeypatch, persona_script, *, transcribe=None, synthesize=None):
         graph_routing, "get_structured_llm", lambda purpose, schema: _NobodyAddressed()
     )
     monkeypatch.setattr(
-        voice_consumers, "transcribe", transcribe or (lambda audio: "I need one more week.")
+        voice_consumers,
+        "transcribe_with_words",
+        transcribe or (lambda audio: Transcription("I need one more week.")),
     )
     monkeypatch.setattr(
         voice_consumers, "synthesize", synthesize or (lambda text, voice: b"fake-wav-bytes")
@@ -171,7 +174,7 @@ def test_evaluation_failure_after_the_scene_is_reported_as_report_failed(
     _prepare(monkeypatch, [_OPENING, _RESOLVING])
     end_after_the_first_turn(monkeypatch)
 
-    def failing_evaluate(content, messages, known_rules=()):
+    def failing_evaluate(content, messages, known_rules=(), speech_metrics=None):
         raise _rate_limit()
 
     monkeypatch.setattr("apps.agents.services.session_runner.evaluate", failing_evaluate)
@@ -249,7 +252,7 @@ def test_an_audio_the_provider_refuses_as_empty_asks_the_student_to_speak_again(
         "apps.voice.services.stt.get_audio_client",
         lambda purpose: AudioClient(client=client, model_id="whisper"),
     )
-    _prepare(monkeypatch, [_OPENING, _RESOLVING], transcribe=stt.transcribe)
+    _prepare(monkeypatch, [_OPENING, _RESOLVING], transcribe=stt.transcribe_with_words)
 
     async def run() -> None:
         communicator = await _connect(token)
@@ -268,7 +271,7 @@ def test_an_audio_the_provider_refuses_as_empty_asks_the_student_to_speak_again(
 
 def test_an_empty_audio_frame_asks_the_student_to_speak_again(django_user_model, monkeypatch):
     user, token = _student(django_user_model)
-    _prepare(monkeypatch, [_OPENING], transcribe=stt.transcribe)
+    _prepare(monkeypatch, [_OPENING], transcribe=stt.transcribe_with_words)
 
     async def run() -> None:
         communicator = await _connect(token)

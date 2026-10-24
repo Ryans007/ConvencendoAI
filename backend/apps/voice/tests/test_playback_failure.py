@@ -10,6 +10,7 @@ from apps.agents.graph import routing as graph_routing
 from apps.agents.services.schemas import PersonaTurn, RoutingDecision
 from apps.voice import consumers as voice_consumers
 from apps.voice.routing import websocket_urlpatterns
+from apps.voice.services.stt import Transcription
 from apps.voice.tests.session_client import SessionCommunicator
 
 pytestmark = pytest.mark.django_db
@@ -43,7 +44,11 @@ def _run_with_playback_report(django_user_model, monkeypatch, report: dict) -> N
     monkeypatch.setattr(
         graph_routing, "get_structured_llm", lambda purpose, schema: _NobodyAddressed()
     )
-    monkeypatch.setattr(voice_consumers, "transcribe", lambda audio: "I need one more week.")
+    monkeypatch.setattr(
+        voice_consumers,
+        "transcribe_with_words",
+        lambda audio: Transcription("I need one more week."),
+    )
     monkeypatch.setattr(voice_consumers, "synthesize", lambda text, voice: b"fake-wav-bytes")
     user = django_user_model.objects.create(username="aluno")
     token = str(AccessToken.for_user(user))

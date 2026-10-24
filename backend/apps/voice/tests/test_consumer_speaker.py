@@ -10,6 +10,7 @@ from apps.agents.graph import routing as graph_routing
 from apps.agents.services.schemas import PersonaTurn, RoutingDecision
 from apps.voice import consumers as voice_consumers
 from apps.voice.routing import websocket_urlpatterns
+from apps.voice.services.stt import Transcription
 from apps.voice.tests.session_client import SessionCommunicator
 
 pytestmark = pytest.mark.django_db
@@ -34,7 +35,11 @@ def _install(monkeypatch, routing: RoutingDecision) -> None:
 
     monkeypatch.setattr(graph_personas, "get_structured_llm", lambda purpose, schema: _Personas())
     monkeypatch.setattr(graph_routing, "get_structured_llm", lambda purpose, schema: _Router())
-    monkeypatch.setattr(voice_consumers, "transcribe", lambda audio: "Rachel, I need more time.")
+    monkeypatch.setattr(
+        voice_consumers,
+        "transcribe_with_words",
+        lambda audio: Transcription("Rachel, I need more time."),
+    )
     monkeypatch.setattr(voice_consumers, "synthesize", lambda text, voice: b"fake-wav-bytes")
 
 
