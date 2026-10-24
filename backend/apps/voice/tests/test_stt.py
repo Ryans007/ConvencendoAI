@@ -133,3 +133,82 @@ def test_an_empty_audio_is_logged_as_zero_bytes(monkeypatch, capsys):
     stt.transcribe(b"")
 
     assert "audio recebido: 0 bytes, formato desconhecido" in capsys.readouterr().out
+
+
+class _VerboseTranscription:
+    def __init__(self, text: str, words):
+        self.text = text
+        self.words = words
+
+
+class _FakeVerboseTranscriptions(_FakeTranscriptions):
+    def __init__(self, response):
+        super().__init__()
+        self.response = response
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        return self.response
+
+
+def test_transcribe_with_words_asks_for_word_timestamps_and_reads_them(monkeypatch):
+    response = _VerboseTranscription(
+        " I would like ",
+        [
+            {"word": "I", "start": 0.38, "end": 0.5},
+            {"word": "would", "start": 0.5, "end": 0.8},
+            {"word": "like", "start": 0.8, "end": 1.06},
+        ],
+    )
+    transcriptions = _FakeVerboseTranscriptions(response)
+    _configure_stt_model(monkeypatch, _FakeGroqClient(transcriptions))
+
+    result = stt.transcribe_with_words(b"raw-audio-bytes")
+
+    assert transcriptions.calls[0]["timestamp_granularities"] == ["word"]
+    assert result.text == "I would like"
+    assert result.words == (
+        stt.SpokenWord("I", 0.38, 0.5),
+        stt.SpokenWord("would", 0.5, 0.8),
+        stt.SpokenWord("like", 0.8, 1.06),
+    )
+
+
+def test_words_given_as_objects_are_read_too(monkeypatch):
+    class _Word:
+        def __init__(self, word, start, end):
+            self.word, self.start, self.end = word, start, end
+
+    response = _VerboseTranscription("hello", [_Word("hello", 0.1, 0.4)])
+    _configure_stt_model(monkeypatch, _FakeGroqClient(_FakeVerboseTranscriptions(response)))
+
+    assert stt.transcribe_with_words(b"audio").words == (stt.SpokenWord("hello", 0.1, 0.4),)
+
+
+def test_incomplete_words_are_skipped(monkeypatch):
+    response = _VerboseTranscription(
+        "a b c d",
+        [
+            {"word": "a", "start": 0.0, "end": 0.2},
+            {"word": "", "start": 0.2, "end": 0.3},
+            {"word": "c", "start": None, "end": 0.5},
+            {"word": "d", "start": 0.9, "end": 0.6},
+        ],
+    )
+    _configure_stt_model(monkeypatch, _FakeGroqClient(_FakeVerboseTranscriptions(response)))
+
+    assert stt.transcribe_with_words(b"audio").words == (stt.SpokenWord("a", 0.0, 0.2),)
+
+
+def test_a_provider_without_words_gives_a_transcription_without_words(monkeypatch):
+    _configure_stt_model(monkeypatch, _FakeGroqClient(_FakeTranscriptions(text="hello")))
+
+    result = stt.transcribe_with_words(b"audio")
+
+    assert result == stt.Transcription(text="hello")
+
+
+def test_an_empty_audio_is_a_transcription_without_text_or_words(monkeypatch):
+    _configure_stt_model(monkeypatch, _FakeGroqClient(_FakeTranscriptions()))
+
+    assert stt.transcribe_with_words(b"") == stt.Transcription(text="")
