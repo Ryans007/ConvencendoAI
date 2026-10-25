@@ -69,7 +69,7 @@ def make_opening_node(content: ScenarioContent, memory: str):
         system = build_system_prompt(content, role, memory)
         instruction = (
             "Open the scene: say the one line that starts this interaction. "
-            "Speak to the student, never to the other character. "
+            "Speak to the student, never to anyone else in the scene. "
             'Set pass_to to "student".'
         )
 
