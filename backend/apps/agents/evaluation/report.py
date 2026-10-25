@@ -13,6 +13,9 @@ _CHECK_TEXT = {
     "last_line_to_student": "a última fala é dirigida ao aluno",
     "next_speaker": "a próxima persona da vez é a esperada",
     "speaker": "a fala é dita pela persona esperada",
+    "supporting_not_by_balance": "o equilíbrio de turno não escolhe o coadjuvante",
+    "leader_after_supporting": "depois do coadjuvante, quem conduz é uma persona principal",
+    "max_two_lines": "a rodada tem no máximo duas falas",
 }
 MAX_EXAMPLES = 3
 

@@ -6,7 +6,7 @@ ROLE_ITEMS: dict[str, tuple[str, str]] = {
     "stays_in_function": (
         "Fica na função",
         "Does the line stay within the character's function in this scene, without taking over "
-        "the area of the other character?",
+        "the area of another character?",
     ),
     "acts_as_archetype": (
         "Age como o arquétipo",
@@ -41,6 +41,13 @@ ROLE_ITEMS: dict[str, tuple[str, str]] = {
     "no_task_reveal": (
         "Não entrega a tarefa",
         "Does the line avoid telling the student what they must say or do to succeed?",
+    ),
+    "supporting_stays_brief": (
+        "Coadjuvante não conduz",
+        "If this character is a supporting character, does the line stay brief (at most two "
+        "short sentences), avoid leading the scene, and contain a question to the student only "
+        "when the line closes the round? Use na when the character is not a supporting "
+        "character.",
     ),
 }
 

@@ -39,9 +39,15 @@ def _judge_persona_lines(content: ScenarioContent, messages: list) -> list[dict[
         role = role_by_name.get(parsed[0]) if parsed else None
         if role is None:
             continue
+        followed = index + 1 < len(messages) and isinstance(messages[index + 1], AIMessage)
         results.append(
             judge.judged_entry(
-                content, role, messages[:index], messages[index].content, final=index == last_index
+                content,
+                role,
+                messages[:index],
+                messages[index].content,
+                final=index == last_index,
+                closes_round=not followed,
             )
         )
     return results
