@@ -53,5 +53,6 @@ def run_scenario(content: ScenarioContent, memory: str = "") -> dict:
         "hand_floor_to": "",
         "addressed_by_student": False,
         "redirect_to": "",
+        "supporting_enters": "",
     }
     return graph.invoke(initial_state, config={"recursion_limit": 200})

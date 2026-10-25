@@ -25,6 +25,11 @@ class ScenarioState(TypedDict):
     `redirect_to` fica preenchido só na rodada em que o aluno chamou uma persona para um
     assunto que é de outro personagem: é a chave de quem recebe a passagem de vez, feita pelo
     sistema e não pela persona.
+
+    `supporting_enters` fica preenchido só na rodada em que o diretor de cena traz o
+    coadjuvante: `"first"` faz o coadjuvante falar antes, curto e sem pergunta, e a persona
+    da vez fechar a rodada; `"after"` faz a persona da vez responder sem pergunta e o
+    coadjuvante fechar a rodada. Em nenhum dos dois o coadjuvante vira `current_speaker`.
     """
 
     messages: Annotated[Sequence[BaseMessage], add_messages]
@@ -35,3 +40,4 @@ class ScenarioState(TypedDict):
     hand_floor_to: str
     addressed_by_student: bool
     redirect_to: str
+    supporting_enters: str

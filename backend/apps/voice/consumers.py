@@ -201,6 +201,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             "hand_floor_to": "",
             "addressed_by_student": False,
             "redirect_to": "",
+            "supporting_enters": "",
         }
         with self._usage_owner():
             await self._advance(initial_state, resume=None, started_at=time.monotonic())

@@ -119,6 +119,35 @@ and your role in this scene ({function}, said in English), for example
 and ask this turn's question.
 """
 
+_SUPPORTING_DEBUT_TEXT = """
+THIS IS YOUR FIRST LINE IN THE CONVERSATION
+You have not spoken yet. Start your line by introducing yourself in a few words: your name
+and your role in this scene ({function}, said in English).
+"""
+
+_SUPPORTING_FIRST_TEXT = """
+YOU STEP IN BRIEFLY NOW
+You are a supporting character: you do not lead this scene. Your line is at most two short
+sentences with NO question: answer what the student just said, or give the fact your role
+knows about it. {leader} speaks right after you, in this same turn, and asks the student the
+next question. Do not hand the floor to anyone by name.
+"""
+
+_SUPPORTING_CLOSES_TEXT = """
+YOU STEP IN BRIEFLY AND CLOSE THIS TURN
+You are a supporting character: you do not lead this scene. {name} just spoke before you in
+this same turn. Answer what was said to you or give the fact your role knows, in at most two
+short sentences, and finish with ONE short question to the student about your part of the
+scene. Do not take over the conversation: {name} keeps leading it.
+"""
+
+_SUPPORTING_FOLLOWS_TEXT = """
+THE STUDENT IS TALKING TO YOU, AND {name} JOINS RIGHT AFTER YOU
+The student's last message was addressed to you. Answer it or react to it, with NO question.
+{name} speaks right after you, in this same turn, and asks the student this turn's question.
+Do not address {name} by name: the scene brings them in.
+"""
+
 _RECEIVED_TEXT = """
 {name} JUST HANDED THE FLOOR TO YOU
 {name} handed the conversation to you in this same turn. Answer or react to what the student
@@ -147,8 +176,17 @@ def build_system_prompt(
     redirect_to: Role | None = None,
     hand_floor_to: Role | None = None,
     received_from: Role | None = None,
+    supporting_first_before: Role | None = None,
+    supporting_closes_after: Role | None = None,
+    supporting_follows: Role | None = None,
 ) -> str:
     """Monta o system prompt do papel para esta execução.
+
+    Os três últimos parâmetros só existem numa rodada com o coadjuvante.
+    `supporting_first_before` é a principal que fala depois dele, quando ele fala primeiro,
+    curto e sem pergunta. `supporting_closes_after` é a principal que falou antes, quando ele
+    fecha a rodada com uma pergunta curta. `supporting_follows` vai para a principal chamada
+    pelo aluno que responde sem pergunta porque o coadjuvante fecha a rodada logo depois.
 
     O formato de pergunta do nível aparece em `CRITICAL RULES` com precedência declarada
     sobre a resistência da persona: medido em teste real, a resistência cadastrada no
@@ -250,9 +288,18 @@ YOU ARE THE STUDENT'S SUPPORT IN THIS SCENE
         and hand_floor_to is None
         and participation.lines_by_role.get(role.key, 0) == 0
     )
+    debut_template = _SUPPORTING_DEBUT_TEXT if role.supporting else _DEBUT_TEXT
     debut_text = (
-        _DEBUT_TEXT.format(name=role.name, function=role.scene_function) if debut else ""
+        debut_template.format(name=role.name, function=role.scene_function) if debut else ""
     )
+    supporting_text = ""
+    if supporting_first_before:
+        supporting_text = _SUPPORTING_FIRST_TEXT.format(leader=supporting_first_before.name)
+    elif supporting_closes_after:
+        supporting_text = _SUPPORTING_CLOSES_TEXT.format(name=supporting_closes_after.name)
+    elif supporting_follows:
+        supporting_text = _SUPPORTING_FOLLOWS_TEXT.format(name=supporting_follows.name)
+    turn_text = f"{received_text}{debut_text}{supporting_text}"
 
     return f"""You are {role.name}, {role.scene_function}.
 Your interactional role in this scene: {role.archetype}.
@@ -296,7 +343,7 @@ NEVER REPEAT A QUESTION
   the conversation to a different subject. Never ask the same question a third
   time, even reworded.
 
-{participation_text}{addressed_text}{redirect_text}{handoff_text}{received_text}{debut_text}
+{participation_text}{addressed_text}{redirect_text}{handoff_text}{turn_text}
 IF THE STUDENT ASKS FOR HELP
 If they ask how to say something, ask you to repeat, to speak more slowly, or
 say they did not understand: help them immediately and warmly, in character.
@@ -316,8 +363,8 @@ CRITICAL RULES
   {content.reply_to_student} Then ALWAYS
   finish the line with this turn's question (or the invitation): a line that
   only answers leaves the student with nothing to say, UNLESS a block above tells you
-  to hand the floor to someone else: then your line has no question at all,
-  because they ask it. A plain answer to your
+  to hand the floor to someone else, or that someone else speaks right after you and
+  asks it: then your line has no question at all, because they ask it. A plain answer to your
   own question is not a reason to react at length: just continue the
   conversation.
 - Every question is about the student's own experience, preferences, decisions or
