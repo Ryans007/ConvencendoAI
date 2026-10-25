@@ -3,6 +3,7 @@ from collections import defaultdict
 from django import forms
 from django.contrib import admin
 
+from apps.catalog.constants import RolePresence
 from apps.catalog.models import (
     Criterion,
     Scenario,
@@ -10,7 +11,11 @@ from apps.catalog.models import (
     ScenarioLevelWeightOverride,
     ScenarioRole,
 )
-from apps.catalog.validators import clean_scenario_level_weights
+from apps.catalog.validators import (
+    CastEntry,
+    clean_scenario_cast,
+    clean_scenario_level_weights,
+)
 
 
 class CriterionInline(admin.TabularInline):
@@ -21,10 +26,30 @@ class CriterionInline(admin.TabularInline):
     fields = ["code", "text", "order", "levels"]
 
 
+class ScenarioRoleFormSet(forms.BaseInlineFormSet):
+    """Valida o elenco inteiro do cenário: tamanho, presença e quem decide ou abre a cena."""
+
+    def clean(self) -> None:
+        super().clean()
+        cast = [
+            CastEntry(
+                presence=form.cleaned_data.get("presence") or RolePresence.PRINCIPAL,
+                decides_outcome=bool(form.cleaned_data.get("decides_outcome")),
+                opening_order=form.cleaned_data.get("opening_order") or 0,
+            )
+            for form in self.forms
+            if hasattr(form, "cleaned_data")
+            and form.cleaned_data
+            and not form.cleaned_data.get("DELETE")
+        ]
+        clean_scenario_cast(cast)
+
+
 class ScenarioRoleInline(admin.TabularInline):
     """O papel de cada persona escalada neste cenário."""
 
     model = ScenarioRole
+    formset = ScenarioRoleFormSet
     extra = 1
     autocomplete_fields = ["persona", "archetype"]
     fields = [
@@ -36,6 +61,8 @@ class ScenarioRoleInline(admin.TabularInline):
         "concession",
         "extra_instruction",
         "decides_outcome",
+        "presence",
+        "entry_cue",
         "opening_order",
         "scaffolding_levels",
     ]

@@ -1,5 +1,6 @@
 from django.db import models
 
+from apps.catalog.constants import RolePresence
 from apps.catalog.models.archetype import Archetype
 from apps.catalog.models.level import Level
 from apps.catalog.models.persona import Persona
@@ -20,6 +21,13 @@ class ScenarioRole(models.Model):
     papel que tem poder de decidir o resultado da cena: só ele encerra a cena como
     resolvida e diz as falas finais. Um cenário sem nenhum papel marcado trata todos como
     quem decide.
+
+    `presence` separa quem conduz a cena (principal) do terceiro personagem que só entra
+    quando há motivo (coadjuvante), independente do arquétipo: um aliado pode ser principal,
+    como o tech lead da negociação. `entry_cue` é a deixa de entrada do coadjuvante, o
+    assunto ou momento em que ele entra; como `closing_hint` do cenário, é instrução
+    dirigida ao modelo de linguagem e fica em inglês. As regras do elenco (no máximo três
+    papéis, um coadjuvante que não decide nem abre a cena) ficam em `validators.py`.
     """
 
     scenario = models.ForeignKey(Scenario, on_delete=models.CASCADE, related_name="roles")
@@ -41,6 +49,25 @@ class ScenarioRole(models.Model):
             "Marque o papel que pode conceder o que o aluno quer e encerrar a cena. "
             "Um aliado, por exemplo, apoia o aluno mas não decide. Se nenhum papel do "
             "cenário estiver marcado, todos são tratados como quem decide."
+        ),
+    )
+    presence = models.CharField(
+        "presença na cena",
+        max_length=20,
+        choices=RolePresence.choices,
+        default=RolePresence.PRINCIPAL,
+        help_text=(
+            "Principal conduz a conversa e reveza a vez com a outra principal. Coadjuvante "
+            "só entra quando é chamado, quando o assunto é dele ou uma vez garantida na "
+            "metade da cena; fala curto e nunca conduz. Um cenário tem no máximo um."
+        ),
+    )
+    entry_cue = models.TextField(
+        "deixa de entrada",
+        blank=True,
+        help_text=(
+            "Só para o coadjuvante, em inglês: o assunto ou momento em que ele entra. "
+            'Exemplo: "When the guest describes the problem with the new room".'
         ),
     )
     opening_order = models.PositiveSmallIntegerField()

@@ -17,3 +17,16 @@ class RubricDimension(models.TextChoices):
     PRONUNCIATION = "pronunciation", "Pronúncia"
     PRAGMATICS = "pragmatics", "Pragmática"
     AUTONOMY = "autonomy", "Autonomia"
+
+
+class RolePresence(models.TextChoices):
+    """Quanto um papel aparece na cena.
+
+    O principal conduz rodadas e entra no rodízio do equilíbrio de turno. O coadjuvante só
+    entra quando há motivo (o aluno o chama, o assunto é dele, uma principal se dirige a ele
+    ou a aparição garantida), fala curto e nunca conduz a cena: é o terceiro personagem que
+    dá um fato ou um apoio pontual sem dividir a conversa por igual com os outros dois.
+    """
+
+    PRINCIPAL = "principal", "Principal"
+    SUPPORTING = "supporting", "Coadjuvante"
