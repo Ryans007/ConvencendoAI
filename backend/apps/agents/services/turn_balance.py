@@ -29,8 +29,9 @@ def should_hand_over(
 def next_leader(content: ScenarioContent, current_key: str, history: list[BaseMessage]) -> str:
     """Escolhe quem conduz a rodada quando a persona da vez passa a vez pelo equilíbrio.
 
-    Entre os outros personagens, entra quem falou há mais tempo — quem ainda não falou
-    vem primeiro. Com dois personagens, é sempre o outro.
+    Entre as outras personas principais, entra quem falou há mais tempo — quem ainda não
+    falou vem primeiro. Com duas principais, é sempre a outra. O coadjuvante nunca entra
+    por aqui: ele só fala quando há motivo, e o rodízio o faria dividir a cena por igual.
     """
     key_by_name = {role.name: role.key for role in content.roles}
     last_spoke = {key: -1 for key in content.role_keys()}
@@ -40,5 +41,5 @@ def next_leader(content: ScenarioContent, current_key: str, history: list[BaseMe
         match = _SPEAKER_PREFIX.match(message.content or "")
         if match and match.group(1) in key_by_name:
             last_spoke[key_by_name[match.group(1)]] = index
-    candidates = [key for key in content.role_keys() if key != current_key]
+    candidates = [key for key in content.principal_keys() if key != current_key]
     return min(candidates, key=lambda key: last_spoke[key])

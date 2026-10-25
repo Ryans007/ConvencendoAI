@@ -75,6 +75,11 @@ def make_routing_node(content: ScenarioContent, rng: random.Random | None = None
     quer de quem conduz: o motivo técnico dado à PM faz parte da negociação dela e não passa a
     rodada ao tech lead.
 
+    Numa cena com coadjuvante, antes dos três itens, `supporting_entry` decide se ele entra:
+    quando o aluno o chama, quando o assunto é dele (a lista de áreas traz a deixa de entrada
+    dele) ou pela aparição garantida. O coadjuvante nunca vira a persona da vez e nunca é
+    escolhido pelo equilíbrio, então a cena continua dividida entre as duas principais.
+
     Sem modelo de roteamento configurado, ou se a chamada falhar por qualquer motivo, o
     nó trata como "sem destinatário e sem assunto" — o equilíbrio continua valendo, e a
     execução nunca é interrompida. `rng` é injetável para os testes controlarem o sorteio.
@@ -82,12 +87,18 @@ def make_routing_node(content: ScenarioContent, rng: random.Random | None = None
     keys = content.role_keys()
     draw = rng or random.Random()
 
+    supporting = content.supporting_role()
+
+    def area(key: str) -> str:
+        role = content.role(key)
+        text = f"- {role.name} (key: {key}): {role.scene_function}"
+        if role.supporting and role.entry_cue:
+            text += f". Only this moment: {role.entry_cue}"
+        return text
+
     def direction(state: ScenarioState, current: str) -> tuple[str | None, str | None]:
         roster = ", ".join(f"{content.role(key).name} (key: {key})" for key in keys)
-        areas = "\n".join(
-            f"- {content.role(key).name} (key: {key}): {content.role(key).scene_function}"
-            for key in keys
-        )
+        areas = "\n".join(area(key) for key in keys)
         system = _ROUTING_PROMPT.format(
             roster=roster,
             leader=content.role(current).name,
@@ -113,12 +124,57 @@ def make_routing_node(content: ScenarioContent, rng: random.Random | None = None
         )
         return addressed, topic_owner
 
+    def supporting_entry(
+        state: ScenarioState, current: str, addressed: str | None, topic_owner: str | None
+    ) -> dict | None:
+        """Decide se o coadjuvante entra nesta rodada, e de que forma.
+
+        Ele entra antes da persona da vez (`first`) quando o aluno o chama, quando o assunto é
+        dele, ou pela aparição garantida: da metade da cena em diante, enquanto ele não tiver
+        falado, na primeira rodada em que o aluno não chamar uma persona principal. Na rodada
+        anterior à oportunidade dos critérios, se ele ainda não falou e o aluno chamou uma
+        principal, a principal chamada responde sem pergunta e ele fecha a rodada (`after`);
+        essa última chance passa por cima de um redirecionamento de assunto, que só se perde
+        nessa rodada, para que a aparição seja garantida em toda sessão. `None` quando ele não
+        entra, e a rodada segue as regras de dois personagens.
+        """
+        if supporting is None:
+            return None
+        if addressed == supporting.key:
+            record_round_event("supporting_called", speaker=supporting.key, leader=current)
+            return {"supporting_enters": "first"}
+        history = list(state["messages"])
+        spoke = scene_participation(content, current, history).lines_by_role[supporting.key] > 0
+        turn = state.get("turn_count", 0)
+        due = not spoke and turn >= content.max_turns // 2
+        if addressed is not None:
+            if not spoke and turn >= content.max_turns - 3:
+                record_round_event(
+                    "supporting_guaranteed", speaker=supporting.key, leader=addressed, mode="after"
+                )
+                marks = {"current_speaker": addressed} if addressed != current else {}
+                return {"addressed_by_student": True, "supporting_enters": "after", **marks}
+            return None
+        if topic_owner == supporting.key:
+            record_round_event("supporting_topic", speaker=supporting.key, leader=current)
+            return {"supporting_enters": "first"}
+        if due:
+            record_round_event(
+                "supporting_guaranteed", speaker=supporting.key, leader=current, mode="first"
+            )
+            return {"supporting_enters": "first"}
+        return None
+
     def node_routing(state: ScenarioState) -> dict:
         if len(keys) < 2:
             return {}
 
         current = state.get("current_speaker") or keys[0]
         addressed, topic_owner = direction(state, current)
+        entry = supporting_entry(state, current, addressed, topic_owner)
+        if entry is not None:
+            print(f"[routing] coadjuvante entra ({entry['supporting_enters']})")
+            return entry
         if addressed is not None:
             record_round_event("addressed", speaker=addressed, previous=current)
             redirect = topic_owner if topic_owner not in (None, addressed) else None

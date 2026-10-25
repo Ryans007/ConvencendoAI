@@ -21,6 +21,9 @@ STRUCTURAL_CHECKS = {
     "introduces": "persona",
     "next_speaker": "persona",
     "speaker": "persona",
+    "supporting_not_by_balance": "flag",
+    "leader_after_supporting": "flag",
+    "max_two_lines": "flag",
 }
 
 _PERSONA_LINE = re.compile(r"^\[([^\]]+)\]\s*(.*)$", re.DOTALL)

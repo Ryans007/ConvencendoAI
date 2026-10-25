@@ -17,6 +17,45 @@ def _round_end(events: list[dict[str, Any]]) -> dict[str, Any]:
     return next((event for event in reversed(events) if event["kind"] == "round_end"), {})
 
 
+def _supporting_not_by_balance(
+    round_lines: list[str], events: list[dict[str, Any]], content: ScenarioContent
+) -> bool:
+    """O equilíbrio de turno não escolheu o coadjuvante para conduzir a rodada."""
+    supporting = content.supporting_role()
+    return supporting is None or not any(
+        event["kind"] == "balance_takeover" and event.get("leader") == supporting.key
+        for event in events
+    )
+
+
+def _leader_after_supporting(
+    round_lines: list[str], events: list[dict[str, Any]], content: ScenarioContent
+) -> bool:
+    """O coadjuvante falou na rodada, e quem conduz a rodada seguinte é uma persona principal."""
+    supporting = content.supporting_role()
+    if supporting is None:
+        return False
+    spoke = any(
+        parsed and parsed[0] == supporting.name
+        for parsed in (speaker_and_text(line) for line in round_lines)
+    )
+    return spoke and _round_end(events).get("next_speaker") in content.principal_keys()
+
+
+def _max_two_lines(
+    round_lines: list[str], events: list[dict[str, Any]], content: ScenarioContent
+) -> bool:
+    """A rodada tem no máximo duas falas de persona."""
+    return len(round_lines) <= 2
+
+
+_SUPPORTING_CHECKS = {
+    "supporting_not_by_balance": _supporting_not_by_balance,
+    "leader_after_supporting": _leader_after_supporting,
+    "max_two_lines": _max_two_lines,
+}
+
+
 def check_structural(
     expectation: Expectation,
     round_lines: list[str],
@@ -47,6 +86,8 @@ def check_structural(
     if check == "speaker":
         first = speaker_and_text(round_lines[0]) if round_lines else None
         return bool(first) and first[0] == content.role(value).name
+    if check in _SUPPORTING_CHECKS:
+        return _SUPPORTING_CHECKS[check](round_lines, events, content)
     raise ValueError(f"Verificação desconhecida: {check}")
 
 

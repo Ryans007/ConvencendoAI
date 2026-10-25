@@ -153,7 +153,7 @@ def test_notice_that_the_student_is_talking_to_the_persona_appears_only_when_fla
     flagged = _prompt(1, addressed_by_student=True)
 
     assert "THE STUDENT IS TALKING TO YOU" in flagged
-    assert "do not\nhand the floor to the other character" in flagged
+    assert "do not\nhand the floor to anyone else" in flagged
 
 
 class _CapturingLLM:

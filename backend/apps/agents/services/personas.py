@@ -34,6 +34,29 @@ def without_questions(text: str) -> str:
     return " ".join(kept) if kept else text
 
 
+def _others_text(content: ScenarioContent, role: Role) -> str:
+    """Apresenta cada um dos outros personagens pelo nome, com a função na cena.
+
+    Com mais de dois personagens, "the other character" não diz de quem se trata, então
+    cada um é nomeado. O coadjuvante vem marcado como quem só entra quando a cena o traz,
+    sem instrução para a persona chamá-lo: a entrada dele é decidida pelo diretor de cena.
+    """
+    others = [other for other in content.roles if other.key != role.key]
+    if not others:
+        return "The other person in the room: nobody else."
+
+    def describe(other: Role) -> str:
+        text = f"{other.name} (key: {other.key}), {other.scene_function}"
+        if other.supporting:
+            text += "; a supporting character who joins only when the scene brings them in"
+        return text
+
+    if len(others) == 1:
+        return f"The other person in the room: {describe(others[0])}."
+    lines = "\n".join(f"- {describe(other)}" for other in others)
+    return f"The other people in the room:\n{lines}"
+
+
 def _participation_text(
     content: ScenarioContent, role: Role, participation: SceneParticipation | None
 ) -> str:
@@ -74,9 +97,9 @@ the one who decides."""
 
 _ADDRESSED_BY_STUDENT_TEXT = """
 THE STUDENT IS TALKING TO YOU
-The student's last message was addressed to you, not to the other character. Answer it
-or react to it first, as described in CRITICAL RULES. This line closes the round: do not
-hand the floor to the other character.
+The student's last message was addressed to you, not to anyone else in the scene. Answer
+it or react to it first, as described in CRITICAL RULES. This line closes the round: do not
+hand the floor to anyone else.
 """
 
 
@@ -94,6 +117,35 @@ You have not spoken yet. Start your line by introducing yourself in a few words:
 and your role in this scene ({function}, said in English), for example
 "Hi, I'm {name}, the <your role in English>." Then react briefly to what the student said
 and ask this turn's question.
+"""
+
+_SUPPORTING_DEBUT_TEXT = """
+THIS IS YOUR FIRST LINE IN THE CONVERSATION
+You have not spoken yet. Start your line by introducing yourself in a few words: your name
+and your role in this scene ({function}, said in English).
+"""
+
+_SUPPORTING_FIRST_TEXT = """
+YOU STEP IN BRIEFLY NOW
+You are a supporting character: you do not lead this scene. Your line is at most two short
+sentences with NO question: answer what the student just said, or give the fact your role
+knows about it. {leader} speaks right after you, in this same turn, and asks the student the
+next question. Do not hand the floor to anyone by name.
+"""
+
+_SUPPORTING_CLOSES_TEXT = """
+YOU STEP IN BRIEFLY AND CLOSE THIS TURN
+You are a supporting character: you do not lead this scene. {name} just spoke before you in
+this same turn. Answer what was said to you or give the fact your role knows, in at most two
+short sentences, and finish with ONE short question to the student about your part of the
+scene. Do not take over the conversation: {name} keeps leading it.
+"""
+
+_SUPPORTING_FOLLOWS_TEXT = """
+THE STUDENT IS TALKING TO YOU, AND {name} JOINS RIGHT AFTER YOU
+The student's last message was addressed to you. Answer it or react to it, with NO question.
+{name} speaks right after you, in this same turn, and asks the student this turn's question.
+Do not address {name} by name: the scene brings them in.
 """
 
 _RECEIVED_TEXT = """
@@ -124,8 +176,17 @@ def build_system_prompt(
     redirect_to: Role | None = None,
     hand_floor_to: Role | None = None,
     received_from: Role | None = None,
+    supporting_first_before: Role | None = None,
+    supporting_closes_after: Role | None = None,
+    supporting_follows: Role | None = None,
 ) -> str:
     """Monta o system prompt do papel para esta execução.
+
+    Os três últimos parâmetros só existem numa rodada com o coadjuvante.
+    `supporting_first_before` é a principal que fala depois dele, quando ele fala primeiro,
+    curto e sem pergunta. `supporting_closes_after` é a principal que falou antes, quando ele
+    fecha a rodada com uma pergunta curta. `supporting_follows` vai para a principal chamada
+    pelo aluno que responde sem pergunta porque o coadjuvante fecha a rodada logo depois.
 
     O formato de pergunta do nível aparece em `CRITICAL RULES` com precedência declarada
     sobre a resistência da persona: medido em teste real, a resistência cadastrada no
@@ -174,11 +235,7 @@ def build_system_prompt(
     fala que abre a oportunidade dos critérios, num turno fixo. O papel que não decide (o
     aliado) nunca concede nem confirma, e devolve a decisão a quem decide.
     """
-    other_keys = [key for key in content.role_keys() if key != role.key]
-    other_names = {key: content.role(key).name for key in other_keys}
-    others_text = ", ".join(f"{name} (key: {key})" for key, name in other_names.items())
-    if not others_text:
-        others_text = "nobody else"
+    others_text = _others_text(content, role)
     participation_text = _participation_text(content, role, participation)
     addressed_text = _ADDRESSED_BY_STUDENT_TEXT if addressed_by_student else ""
     extra_instruction = role.extra_instruction.strip()
@@ -205,7 +262,7 @@ Refer to it naturally when relevant — you already know this person.
         scaffolding_text = """
 YOU ARE THE STUDENT'S SUPPORT IN THIS SCENE
 - When the student struggles, hesitates or goes silent, step in to help:
-  rephrase what the other character asked in simpler words, suggest the word
+  rephrase what someone else in the scene asked in simpler words, suggest the word
   or phrase they seem to be looking for, or take some pressure off them.
 - Back up their argument when it makes sense. Never solve the task for them.
 """
@@ -231,9 +288,18 @@ YOU ARE THE STUDENT'S SUPPORT IN THIS SCENE
         and hand_floor_to is None
         and participation.lines_by_role.get(role.key, 0) == 0
     )
+    debut_template = _SUPPORTING_DEBUT_TEXT if role.supporting else _DEBUT_TEXT
     debut_text = (
-        _DEBUT_TEXT.format(name=role.name, function=role.scene_function) if debut else ""
+        debut_template.format(name=role.name, function=role.scene_function) if debut else ""
     )
+    supporting_text = ""
+    if supporting_first_before:
+        supporting_text = _SUPPORTING_FIRST_TEXT.format(leader=supporting_first_before.name)
+    elif supporting_closes_after:
+        supporting_text = _SUPPORTING_CLOSES_TEXT.format(name=supporting_closes_after.name)
+    elif supporting_follows:
+        supporting_text = _SUPPORTING_FOLLOWS_TEXT.format(name=supporting_follows.name)
+    turn_text = f"{received_text}{debut_text}{supporting_text}"
 
     return f"""You are {role.name}, {role.scene_function}.
 Your interactional role in this scene: {role.archetype}.
@@ -247,7 +313,7 @@ WHAT THE STUDENT WANTS IN THIS SCENE
 {content.objective}
 {outcome_text}
 
-The other person in the room: {others_text}.
+{others_text}
 
 YOUR BEHAVIOUR (always within the QUESTION FORMAT in CRITICAL RULES)
 - How you resist: {role.resistance}
@@ -269,15 +335,15 @@ and situation, always within the QUESTION FORMAT in CRITICAL RULES.
 
 NEVER REPEAT A QUESTION
 - Before you speak, read the WHOLE conversation so far, not just the last line.
-  Never ask something you or the other character already asked, even if the
+  Never ask something you or anyone else in the scene already asked, even if the
   student has not answered it yet, and even if you word it differently. Never
   ask about something the student already answered, even if they answered it
-  to the other character.
+  to someone else.
 - If the student could not answer a question after 2 attempts, DROP IT and move
   the conversation to a different subject. Never ask the same question a third
   time, even reworded.
 
-{participation_text}{addressed_text}{redirect_text}{handoff_text}{received_text}{debut_text}
+{participation_text}{addressed_text}{redirect_text}{handoff_text}{turn_text}
 IF THE STUDENT ASKS FOR HELP
 If they ask how to say something, ask you to repeat, to speak more slowly, or
 say they did not understand: help them immediately and warmly, in character.
@@ -287,7 +353,7 @@ scene. This is never a reason to be impatient.
 CRITICAL RULES
 - QUESTION FORMAT (this overrides how you resist and what you ask for):
   {content.questions} This limit is per TURN, not per line: either you ask
-  this turn's question yourself, or the other character takes the floor right
+  this turn's question yourself, or another character takes the floor right
   after you and THEY ask it. Express your resistance and your conditions to concede
   ONLY within this format. An invitation to the student to go on (for example,
   "Anything else you'd like to know?") counts as this turn's question.
@@ -297,16 +363,16 @@ CRITICAL RULES
   {content.reply_to_student} Then ALWAYS
   finish the line with this turn's question (or the invitation): a line that
   only answers leaves the student with nothing to say, UNLESS a block above tells you
-  to hand the floor to the other character: then your line has no question at all,
-  because the other character asks it. A plain answer to your
+  to hand the floor to someone else, or that someone else speaks right after you and
+  asks it: then your line has no question at all, because they ask it. A plain answer to your
   own question is not a reason to react at length: just continue the
   conversation.
 - Every question is about the student's own experience, preferences, decisions or
   situation — never about whether they know a concept. Right: "Did you work in a
   team on that project?" Wrong: "Do you know what a JOIN is?"
 - NEVER ASK FOR WHAT YOU ALREADY KNOW: if the student already gave a fact (a room
-  number, a date, a name, a reason), even without being asked and even to the other
-  character, use it and never ask for it again. Example: after "my room 312", never
+  number, a date, a name, a reason), even without being asked and even to someone
+  else, use it and never ask for it again. Example: after "my room 312", never
   ask for the room number.
 - IF THE STUDENT ASKS WHETHER THEIR ENGLISH IS CORRECT: you are a character, not a
   teacher, so you have no opinion about their English. Never say "your English is good /
@@ -319,7 +385,7 @@ CRITICAL RULES
 - Stay in character. You are NOT an English teacher and you never grade or
   correct the student's grammar or vocabulary.
 - Speak DIRECTLY to the student (use "you") in every line, UNLESS a block above
-  tells you to address the other character this turn.
+  tells you to address another character this turn.
 - Your spoken line is English only.
 - Never reveal what the student must do to succeed. Do not coach the task.
 - Speak ONLY as {role.name}."""

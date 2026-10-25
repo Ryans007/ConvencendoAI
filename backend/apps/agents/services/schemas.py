@@ -24,7 +24,7 @@ class PersonaTurn(BaseModel):
         default="student",
         description=(
             "Who should respond to this line: \"student\" if it is addressed to the "
-            "student, or the key of the other character if THEY should respond right "
+            "student, or the key of another character if THEY should respond right "
             "now, in this same turn, because this line was addressed to them instead"
         ),
     )

@@ -69,7 +69,7 @@ def make_opening_node(content: ScenarioContent, memory: str):
         system = build_system_prompt(content, role, memory)
         instruction = (
             "Open the scene: say the one line that starts this interaction. "
-            "Speak to the student, never to the other character. "
+            "Speak to the student, never to anyone else in the scene. "
             'Set pass_to to "student".'
         )
 
@@ -141,9 +141,85 @@ def make_persona_node(content: ScenarioContent, memory: str):
       nesta rodada, se ela decide, ou a persona da vez, se ela decide, ou a primeira que decide
       pela ordem de abertura. Medido numa negociação, o
       aliado confirmava um prazo que só a PM podia conceder.
+    - Numa cena com coadjuvante, `supporting_enters` monta a rodada dele: em `first` ele fala
+      antes, sem pergunta, e a persona da vez fecha; em `after` a persona chamada pelo aluno
+      responde sem pergunta e ele fecha com uma pergunta curta. Quando ele recebe a passagem
+      pelo assunto ou o vocativo de uma principal, também fecha com uma pergunta curta. Em
+      todos os casos a persona da vez na rodada seguinte é uma principal, e a rodada tem no
+      máximo duas falas: um vocativo que sobraria para uma terceira fala fica registrado como
+      `dangling_unresolved`.
     """
     keys = content.role_keys()
     max_turns = content.max_turns
+
+    def _follow_up_line(
+        other: Role, previous: Role, so_far: list, adaptation_line: str
+    ) -> AIMessage:
+        """Gera e fala a fala de `other` logo depois de `previous`, na mesma rodada."""
+        prompt_marks = (
+            {"supporting_closes_after": previous}
+            if other.supporting
+            else {"received_from": previous}
+        )
+        other_system = build_system_prompt(
+            content,
+            other,
+            memory,
+            adaptation_line,
+            scene_participation(content, other.key, so_far),
+            **prompt_marks,
+        )
+        other_llm = get_structured_llm(ModelPurpose.PERSONA, PersonaTurn)
+        _, other_text, _ = _generate_turn(
+            other_llm, conversation_messages(other_system, so_far), other, so_far
+        )
+        _speak(other, other_text)
+        return AIMessage(content=f"[{other.name}] {other_text}")
+
+    def supporting_first_round(leader: Role, history: list, adaptation_line: str) -> dict:
+        """Rodada em que o coadjuvante fala primeiro e a persona da vez fecha a rodada.
+
+        O coadjuvante responde ao que o aluno disse ou dá o fato da função dele, sem pergunta:
+        se a pergunta da rodada ficasse com ele, o aluno responderia a quem não conduz a cena,
+        e a persona da vez reagiria a uma resposta dada a outro. Uma pergunta que o modelo
+        escreva mesmo assim é retirada da fala, e o evento `supporting_question_dropped` fica no
+        registro. A persona da vez continua sendo a mesma na rodada seguinte.
+        """
+        supporting = content.supporting_role()
+        system = build_system_prompt(
+            content,
+            supporting,
+            memory,
+            adaptation_line,
+            scene_participation(content, supporting.key, history),
+            supporting_first_before=leader,
+        )
+        llm = get_structured_llm(ModelPurpose.PERSONA, PersonaTurn)
+        _, text, _ = _generate_turn(
+            llm, conversation_messages(system, history), supporting, history
+        )
+        stepped_in = without_questions(text)
+        if stepped_in != text:
+            record_round_event("supporting_question_dropped", speaker=supporting.key)
+        _speak(supporting, stepped_in)
+        record_round_event(
+            "supporting_entered", speaker=supporting.key, mode="first", leader=leader.key
+        )
+        lines = [AIMessage(content=f"[{supporting.name}] {stepped_in}")]
+        lines.append(_follow_up_line(leader, supporting, history + lines, adaptation_line))
+        names = [candidate.name for candidate in content.roles]
+        if addressed_persona(lines[-1].content, leader.name, names) is not None:
+            record_round_event("dangling_unresolved", speaker=leader.key, reason="two_lines")
+        print(f"[routing] {supporting.name} entra; {leader.name} fecha a rodada")
+        record_round_event("round_end", speaker=leader.key, next_speaker=leader.key)
+        return {
+            "messages": lines,
+            "current_speaker": leader.key,
+            "hand_floor_to": "",
+            "addressed_by_student": False,
+            "redirect_to": "",
+            "supporting_enters": "",
+        }
 
     def node_persona(state: ScenarioState) -> dict:
         key = _fallback_key(content, state)
@@ -159,6 +235,8 @@ def make_persona_node(content: ScenarioContent, memory: str):
         hand_key = state.get("hand_floor_to") or ""
         hand_role = content.role(hand_key) if hand_key in keys and hand_key != key else None
         receiver = redirect_role or hand_role
+        supporting = content.supporting_role()
+        entering = (state.get("supporting_enters") or "") if supporting else ""
 
         if state.get("turn_count", 0) >= max_turns:
             final_role = final_speaker(content, role, receiver)
@@ -172,6 +250,7 @@ def make_persona_node(content: ScenarioContent, memory: str):
                 "hand_floor_to": "",
                 "addressed_by_student": False,
                 "redirect_to": "",
+                "supporting_enters": "",
             }
 
         if state.get("turn_count", 0) == max_turns - 2 and content.closing_hint:
@@ -186,7 +265,11 @@ def make_persona_node(content: ScenarioContent, memory: str):
                     "hand_floor_to": "",
                     "addressed_by_student": False,
                     "redirect_to": "",
+                    "supporting_enters": "",
                 }
+
+        if entering == "first":
+            return supporting_first_round(role, history, adaptation_line)
 
         participation = scene_participation(content, key, history)
         system = build_system_prompt(
@@ -195,16 +278,19 @@ def make_persona_node(content: ScenarioContent, memory: str):
             memory,
             adaptation_line,
             participation,
-            addressed_by_student=addressed,
-            redirect_to=redirect_role,
+            addressed_by_student=addressed and entering != "after",
+            redirect_to=None if entering == "after" else redirect_role,
             hand_floor_to=hand_role,
+            supporting_follows=supporting if entering == "after" else None,
         )
         messages = conversation_messages(system, history)
+        if entering == "after":
+            receiver = None
 
         llm = get_structured_llm(ModelPurpose.PERSONA, PersonaTurn)
         turn, text, from_fallback = _generate_turn(llm, messages, role, history)
         directed = receiver.key if receiver else key
-        if receiver and not from_fallback:
+        if (receiver or entering == "after") and not from_fallback:
             handing_text = without_questions(text)
             if handing_text != text:
                 record_round_event("handoff_question_dropped", speaker=key)
@@ -220,23 +306,20 @@ def make_persona_node(content: ScenarioContent, memory: str):
         speaker = role
 
         def speak_after(other: Role, previous: Role) -> None:
-            """Faz `other` falar na mesma rodada, depois de `previous`."""
-            other_system = build_system_prompt(
-                content,
-                other,
-                memory,
-                adaptation_line,
-                scene_participation(content, other.key, history + lines),
-                received_from=previous,
-            )
-            other_llm = get_structured_llm(ModelPurpose.PERSONA, PersonaTurn)
-            _, other_text, _ = _generate_turn(
-                other_llm, conversation_messages(other_system, history + lines), other, history
-            )
-            _speak(other, other_text)
-            lines.append(AIMessage(content=f"[{other.name}] {other_text}"))
+            """Faz `other` falar na mesma rodada, depois de `previous`.
+
+            O coadjuvante que fala depois fecha a rodada com uma pergunta curta, sem assumir a
+            conversa, então recebe a instrução própria dele em vez da passagem de vez comum.
+            """
+            lines.append(_follow_up_line(other, previous, history + lines, adaptation_line))
 
         next_key = key
+        if entering == "after" and supporting is not None:
+            record_round_event(
+                "supporting_entered", speaker=supporting.key, mode="after", leader=key
+            )
+            speak_after(supporting, role)
+            speaker = supporting
         if receiver and not from_fallback:
             record_round_event(
                 "handoff",
@@ -247,11 +330,14 @@ def make_persona_node(content: ScenarioContent, memory: str):
             )
             speak_after(receiver, role)
             speaker = receiver
-            next_key = receiver.key
+            next_key = key if receiver.supporting else receiver.key
             print(f"[routing] passagem de {role.name} para {receiver.name}")
 
         names = [candidate.name for candidate in content.roles]
         target_name = addressed_persona(lines[-1].content, speaker.name, names)
+        if target_name is not None and supporting is not None and len(lines) >= 2:
+            record_round_event("dangling_unresolved", speaker=speaker.key, reason="two_lines")
+            target_name = None
         if target_name is not None:
             target = next(candidate for candidate in content.roles if candidate.name == target_name)
             print(
@@ -261,7 +347,7 @@ def make_persona_node(content: ScenarioContent, memory: str):
             record_round_event("dangling_answered", speaker=speaker.key, target=target.key)
             speak_after(target, speaker)
             speaker = target
-            next_key = target.key
+            next_key = next_key if target.supporting else target.key
             if addressed_persona(lines[-1].content, speaker.name, names) is not None:
                 record_round_event("dangling_unresolved", speaker=speaker.key)
 
@@ -274,6 +360,7 @@ def make_persona_node(content: ScenarioContent, memory: str):
             "hand_floor_to": "",
             "addressed_by_student": False,
             "redirect_to": "",
+            "supporting_enters": "",
         }
 
     return node_persona

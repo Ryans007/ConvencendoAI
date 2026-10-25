@@ -42,7 +42,7 @@ def test_an_opening_to_the_student_is_used_as_it_came(monkeypatch):
 def test_the_opening_instruction_says_to_speak_to_the_student(monkeypatch):
     _, _, script = _opening(monkeypatch, "Hi, I'm Rachel. What is going on?")
 
-    assert "Speak to the student, never to the other character." in script.instructions[0]
+    assert "Speak to the student, never to anyone else in the scene." in script.instructions[0]
 
 
 def test_an_opening_addressed_to_the_colleague_is_asked_again(monkeypatch):

@@ -28,6 +28,7 @@ Archetype: {archetype} - {archetype_description}
 Traits: {traits}
 How the character resists: {resistance}
 What makes the character concede: {concession}
+Presence in the scene: {presence}
 
 THE OTHER CHARACTER(S) IN THE SCENE
 {others}
@@ -41,10 +42,13 @@ RULES OF THE LEVEL
 - How to reply to the student: {reply_to_student}
 
 HOW A ROUND WORKS
-In one round, a character may hand the floor to the other one: the first line is then addressed
-to the other character, with no question to the student, and the other character asks the
-student. A line that is addressed to the other character is expected in that case.
-{closing_note}
+In one round, a character may hand the floor to another one: the first line is then addressed
+to that character, with no question to the student, and that character asks the student. A
+line that is addressed to another character is expected in that case. A supporting character
+never leads the scene: when it speaks first in a round, its line is brief and has no question,
+and a principal character asks the student right after; when it closes the round, it ends with
+one short question about its part of the scene.
+{round_note}{closing_note}
 CONVERSATION BEFORE THE LINE
 {history}
 
@@ -87,9 +91,18 @@ def archetype_description(name: str) -> str:
     return Archetype.objects.filter(name=name).values_list("description", flat=True).first() or ""
 
 
+_PRINCIPAL = "principal character: leads the conversation with the student"
+_SUPPORTING = "supporting character: joins only briefly and never leads the scene"
+_FOLLOWED_NOTE = """
+THIS LINE DOES NOT CLOSE THE ROUND
+Another character speaks right after this line, in the same round, and asks the student.
+"""
+
+
 def _others(content: ScenarioContent, role: Role) -> str:
     others = [
         f"- {other.name}: {other.scene_function}"
+        + (" (supporting character)" if other.supporting else "")
         for other in content.roles
         if other.key != role.key
     ]
@@ -121,13 +134,16 @@ def judge_line(
     history: list[BaseMessage],
     line: str,
     final: bool = False,
+    closes_round: bool = True,
 ) -> dict[str, dict[str, str]]:
     """Pede ao avaliador o veredito de cada item da lista de verificação sobre uma fala.
 
     Recebe a conversa até a fala, o cartão do papel (com a descrição do arquétipo, lida do
     catálogo) e as regras do nível. Quando a fala é a última da cena (`final`), o prompt avisa
     que ela é um fechamento: sem pergunta e sem resistência, que o sistema manda e o juiz não
-    pode cobrar. Devolve `{item: {"answer": "yes|no|na", "reason": ...}}`.
+    pode cobrar. Quando outra fala vem depois dela na mesma rodada (`closes_round` falso), o
+    juiz é avisado de que uma fala sem pergunta ao aluno é esperada ali. Devolve
+    `{item: {"answer": "yes|no|na", "reason": ...}}`.
     """
     prompt = _ROLE_PROMPT.format(
         context=content.context,
@@ -139,11 +155,13 @@ def judge_line(
         traits=role.traits,
         resistance=role.resistance,
         concession=role.concession,
+        presence=_SUPPORTING if role.supporting else _PRINCIPAL,
         others=_others(content, role),
         facts=role.extra_instruction.strip() or "(none)",
         language=content.language,
         questions=content.questions,
         reply_to_student=content.reply_to_student,
+        round_note="" if closes_round else _FOLLOWED_NOTE,
         closing_note=_CLOSING_NOTE if final else "",
         history=transcript_text(history) or "(no one has spoken yet)",
         line=line,
@@ -177,6 +195,7 @@ def judged_entry(
     history: list[BaseMessage],
     line: str,
     final: bool = False,
+    closes_round: bool = True,
 ) -> dict[str, Any]:
     """O julgamento de uma fala, com a fala, as últimas falas anteriores e se era a final.
 
@@ -192,7 +211,7 @@ def judged_entry(
         "error": "",
     }
     try:
-        entry["items"] = judge_line(content, role, history, line, final)
+        entry["items"] = judge_line(content, role, history, line, final, closes_round)
     except JudgeFailed as exc:
         entry["error"] = str(exc)
     return entry
@@ -205,10 +224,11 @@ def judge_round(
     key_by_name = {role.name: role for role in content.roles}
     seen = list(history)
     results = []
-    for line in round_lines:
+    for index, line in enumerate(round_lines):
         speaker = line[1 : line.index("]")] if line.startswith("[") and "]" in line else ""
         role = key_by_name.get(speaker)
         if role is not None:
-            results.append(judged_entry(content, role, seen, line))
+            closes = index == len(round_lines) - 1
+            results.append(judged_entry(content, role, seen, line, closes_round=closes))
         seen.append(AIMessage(content=line))
     return results
