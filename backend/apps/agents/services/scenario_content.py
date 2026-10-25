@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from django.utils.text import slugify
 
+from apps.catalog.constants import RolePresence
 from apps.catalog.models import Level, Scenario
 from apps.catalog.services.criteria import applicable_criteria
 from apps.catalog.validators import effective_scenario_level_weights
@@ -21,6 +22,8 @@ class Role:
 
     `key` identifica o papel dentro do cenário (usado como `current_speaker` no estado
     do grafo, e citado no prompt da persona para dizer a quem ela pode passar a vez).
+    `supporting` marca o coadjuvante, que nunca conduz a rodada nem entra no rodízio, e
+    `entry_cue` é a deixa em que ele entra.
     """
 
     key: str
@@ -35,6 +38,8 @@ class Role:
     concession: str
     extra_instruction: str
     scaffolds: bool
+    supporting: bool
+    entry_cue: str
 
 
 @dataclass(frozen=True)
@@ -71,6 +76,17 @@ class ScenarioContent:
 
     def role_keys(self) -> list[str]:
         return [role.key for role in self.roles]
+
+    def principal_keys(self) -> list[str]:
+        """As chaves dos papéis que conduzem rodadas, na ordem de abertura."""
+        return [role.key for role in self.roles if not role.supporting]
+
+    def supporting_role(self) -> Role | None:
+        """O coadjuvante da cena, se houver: o catálogo admite no máximo um."""
+        return next((role for role in self.roles if role.supporting), None)
+
+    def is_supporting(self, key: str) -> bool:
+        return any(role.key == key and role.supporting for role in self.roles)
 
     def deciders(self) -> list[Role]:
         """Os papéis que decidem o resultado da cena, na ordem de abertura.
@@ -116,6 +132,8 @@ def load_scenario_content(scenario: Scenario, level: Level) -> ScenarioContent:
             concession=scenario_role.concession,
             extra_instruction=scenario_role.extra_instruction,
             scaffolds=scenario_role.scaffolding_levels.filter(pk=level.pk).exists(),
+            supporting=scenario_role.presence == RolePresence.SUPPORTING,
+            entry_cue=scenario_role.entry_cue,
         )
         for scenario_role in scenario.roles.select_related(
             "persona", "archetype"
