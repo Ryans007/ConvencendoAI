@@ -8,6 +8,54 @@
     ],
     "hotel-opens": [
       "[Emma] Good evening, welcome to the front desk. How can I help you?"
+    ],
+    "new-room-opens": [
+      "[Emma] Oh, hello again. Is everything all right with the new room?"
+    ],
+    "new-room-half": [
+      "[Emma] Oh, hello again. Is everything all right with the new room?",
+      "Student: Not really. I have a problem with the new room.",
+      "[Emma] I'm sorry. What is the problem?",
+      "Student: It is very noisy. I can't sleep there.",
+      "[Emma] I can give you earplugs and ask maintenance to check. Would that help?",
+      "Student: No, thank you. I want a different room, please.",
+      "[Emma] I understand. This is your second change today, so I need James. James, can you help?",
+      "[James] Hi, I'm James, the manager. Sorry about this. What do you need in the new room?",
+      "Student: I need a quiet room, please.",
+      "[James] Of course. Do you prefer a high floor or a low floor?",
+      "Student: I don't mind. I only want to sleep."
+    ],
+    "wrong-order-opens": [
+      "[Ben] Here is your mushroom risotto. Enjoy your meal!"
+    ],
+    "wrong-order-half": [
+      "[Ben] Here is your mushroom risotto. Enjoy your meal!",
+      "Student: Excuse me, this is not right.",
+      "[Ben] Oh, what's wrong with it?",
+      "Student: It has cheese on it.",
+      "[Ben] I can take the cheese off the top. Is that okay?",
+      "Student: No, sorry. I can't eat cheese at all.",
+      "[Ben] I see. Let me call my manager. Olivia, can you come here, please?",
+      "[Olivia] Hi, I'm Olivia, the manager. I'm sorry about this. What would you like us to do?",
+      "Student: I would like a new risotto, please.",
+      "[Olivia] Of course. Do you want the same dish again, or something different?",
+      "Student: The same dish is fine."
+    ],
+    "birthday-opens": [
+      "[Olivia] I'm glad the new risotto is fine. Is there anything else I can do for you tonight?"
+    ],
+    "birthday-half": [
+      "[Olivia] I'm glad the new risotto is fine. Is there anything else I can do for you tonight?",
+      "Student: Yes. I want to book a table here.",
+      "[Olivia] Wonderful. What is the occasion?",
+      "Student: It is my birthday next Saturday.",
+      "[Olivia] Happy early birthday! What time would you like to come?",
+      "Student: At seven, please.",
+      "[Olivia] Seven works. Ben will take care of your table. Ben, can you help with the menu?",
+      "[Ben] Sure. For big groups we only serve the set menu. Does anyone in the group have a food allergy?",
+      "Student: I can't eat cheese, but my friends can.",
+      "[Ben] No problem, the set menu has a risotto without cheese. Would you like to hear the other dishes?",
+      "Student: Yes, please."
     ]
   },
   "situations": [
@@ -470,6 +518,242 @@
       "expect": [
         {"check": "speaker", "value": "james"},
         {"judge": "Does James answer or react to the guest's question about how he is before closing the conversation?"}
+      ]
+    },
+    {
+      "id": "P28-new-room-student-calls-the-porter",
+      "goal": "The guest calls Mike by name: he speaks first, briefly and with no question, and Emma asks the guest right after.",
+      "scenario": "quarto-novo-barulhento", "level": 3, "samples": 3,
+      "current": "emma", "turn_count": 2, "direct": true,
+      "history": [
+        "@new-room-opens",
+        "Student: No. The new room is right next to the elevator.",
+        "[Emma] Oh, I'm sorry. What exactly is the problem with it?",
+        "Student: Mike, you heard the noise too, right?"
+      ],
+      "expect": [
+        {"check": "speaker", "value": "mike"},
+        {"check": "max_two_lines", "value": true},
+        {"check": "single_question", "value": true},
+        {"check": "last_line_to_student", "value": true},
+        {"check": "leader_after_supporting", "value": true},
+        {"check": "supporting_not_by_balance", "value": true},
+        {"judge": "Is Mike's line short, does it only confirm what he saw or heard, and does it avoid promising a room?"}
+      ]
+    },
+    {
+      "id": "P29-new-room-problem-is-the-porters-cue",
+      "goal": "The guest describes the problem with the new room without naming anyone: it is Mike's moment, he confirms it and Emma asks.",
+      "scenario": "quarto-novo-barulhento", "level": 3, "samples": 3,
+      "current": "emma", "turn_count": 1, "direct": true,
+      "history": [
+        "@new-room-opens",
+        "Student: No. The new room is next to the elevator, and the noise doesn't stop."
+      ],
+      "expect": [
+        {"check": "speaker", "value": "mike"},
+        {"check": "max_two_lines", "value": true},
+        {"check": "single_question", "value": true},
+        {"check": "last_line_to_student", "value": true},
+        {"check": "leader_after_supporting", "value": true}
+      ]
+    },
+    {
+      "id": "P30-new-room-guaranteed-appearance",
+      "goal": "Half of the scene has passed and Mike has not spoken: he steps in once, briefly, and a principal asks the guest.",
+      "scenario": "quarto-novo-barulhento", "level": 3, "samples": 3,
+      "current": "james", "turn_count": 6, "direct": true,
+      "history": ["@new-room-half"],
+      "expect": [
+        {"check": "speaker", "value": "mike"},
+        {"check": "max_two_lines", "value": true},
+        {"check": "single_question", "value": true},
+        {"check": "last_line_to_student", "value": true},
+        {"check": "leader_after_supporting", "value": true}
+      ]
+    },
+    {
+      "id": "P31-new-room-last-chance-after-the-manager",
+      "goal": "Right before the criteria opportunity, the guest calls James and Mike has not spoken: James answers with no question and Mike closes with one short question.",
+      "scenario": "quarto-novo-barulhento", "level": 3, "samples": 3,
+      "current": "james", "turn_count": 9, "direct": true,
+      "history": [
+        "@new-room-half",
+        "[James] We have a quiet room on the third floor, far from the elevator. Would you like it?",
+        "Student: Yes, please. That sounds good.",
+        "[James] Great. I will prepare it now. Do you need anything else?",
+        "Student: No, thank you.",
+        "[James] Perfect. Shall I ask someone to bring your bags?",
+        "Student: James, how long will the room take?"
+      ],
+      "expect": [
+        {"check": "speaker", "value": "james"},
+        {"check": "max_two_lines", "value": true},
+        {"check": "single_question", "value": true},
+        {"check": "last_line_to_student", "value": true},
+        {"check": "leader_after_supporting", "value": true}
+      ]
+    },
+    {
+      "id": "P32-new-room-ordinary-round-keeps-the-porter-out",
+      "goal": "The guest answers Emma about the room number: it is not Mike's moment, so Emma leads and Mike stays quiet.",
+      "scenario": "quarto-novo-barulhento", "level": 3, "samples": 3,
+      "current": "emma", "turn_count": 2, "direct": true,
+      "history": [
+        "@new-room-opens",
+        "Student: Not really. I want to talk about my room.",
+        "[Emma] Of course. What is your new room number?",
+        "Student: It is room 512."
+      ],
+      "expect": [
+        {"check": "speaker", "value": "emma"},
+        {"check": "single_question", "value": true},
+        {"check": "last_line_to_student", "value": true},
+        {"check": "supporting_not_by_balance", "value": true}
+      ]
+    },
+    {
+      "id": "P33-wrong-order-student-calls-the-friend",
+      "goal": "The student calls Mia by name: she confirms the order briefly, with no question, and Ben asks the student right after.",
+      "scenario": "pedido-errado", "level": 3, "samples": 3,
+      "current": "ben", "turn_count": 2, "direct": true,
+      "history": [
+        "@wrong-order-opens",
+        "Student: Excuse me, this risotto has cheese. I asked for no cheese.",
+        "[Ben] Hmm, my note only says mushroom risotto. What exactly did you order?",
+        "Student: Mia, you heard me, right?"
+      ],
+      "expect": [
+        {"check": "speaker", "value": "mia"},
+        {"check": "max_two_lines", "value": true},
+        {"check": "single_question", "value": true},
+        {"check": "last_line_to_student", "value": true},
+        {"check": "leader_after_supporting", "value": true},
+        {"check": "supporting_not_by_balance", "value": true},
+        {"judge": "Does Mia only confirm what the student ordered, without making the complaint or asking for a solution herself?"}
+      ]
+    },
+    {
+      "id": "P34-wrong-order-doubt-is-the-friends-cue",
+      "goal": "The waiter doubts the order and the student insists without naming anyone: it is Mia's moment, she confirms it and Ben asks.",
+      "scenario": "pedido-errado", "level": 3, "samples": 3,
+      "current": "ben", "turn_count": 2, "direct": true,
+      "history": [
+        "@wrong-order-opens",
+        "Student: Excuse me, this risotto has cheese. I asked for no cheese.",
+        "[Ben] Are you sure? I only wrote mushroom risotto. Did you say no cheese?",
+        "Student: Yes, I'm sure. I said it when I ordered."
+      ],
+      "expect": [
+        {"check": "speaker", "value": "mia"},
+        {"check": "max_two_lines", "value": true},
+        {"check": "single_question", "value": true},
+        {"check": "last_line_to_student", "value": true},
+        {"check": "leader_after_supporting", "value": true}
+      ]
+    },
+    {
+      "id": "P35-wrong-order-guaranteed-appearance",
+      "goal": "Half of the scene has passed and Mia has not spoken: she steps in once, briefly, and a principal asks the student.",
+      "scenario": "pedido-errado", "level": 3, "samples": 3,
+      "current": "olivia", "turn_count": 6, "direct": true,
+      "history": ["@wrong-order-half"],
+      "expect": [
+        {"check": "speaker", "value": "mia"},
+        {"check": "max_two_lines", "value": true},
+        {"check": "single_question", "value": true},
+        {"check": "last_line_to_student", "value": true},
+        {"check": "leader_after_supporting", "value": true}
+      ]
+    },
+    {
+      "id": "P36-wrong-order-ordinary-round-keeps-the-friend-out",
+      "goal": "The student asks how long a new dish takes: it is the waiter's topic, so Ben leads and Mia stays quiet.",
+      "scenario": "pedido-errado", "level": 3, "samples": 3,
+      "current": "ben", "turn_count": 2, "direct": true,
+      "history": [
+        "@wrong-order-opens",
+        "Student: Excuse me, this risotto has cheese, and I can't eat cheese.",
+        "[Ben] Oh, I'm so sorry. I can ask the kitchen to make a new one. Is that okay?",
+        "Student: Yes, please. How long will it take?"
+      ],
+      "expect": [
+        {"check": "speaker", "value": "ben"},
+        {"check": "single_question", "value": true},
+        {"check": "last_line_to_student", "value": true},
+        {"check": "supporting_not_by_balance", "value": true}
+      ]
+    },
+    {
+      "id": "P37-birthday-guests-and-price-are-the-friends-cue",
+      "goal": "The number of guests and the price come up: it is Mia's moment, she confirms the group briefly and Olivia asks.",
+      "scenario": "reservar-aniversario", "level": 3, "samples": 3,
+      "current": "olivia", "turn_count": 2, "direct": true,
+      "history": [
+        "@birthday-opens",
+        "Student: Yes. I want to book a table for my birthday next Saturday.",
+        "[Olivia] Happy early birthday! How many people are coming?",
+        "Student: I think about ten people. How much does it cost per person?"
+      ],
+      "expect": [
+        {"check": "speaker", "value": "mia"},
+        {"check": "max_two_lines", "value": true},
+        {"check": "single_question", "value": true},
+        {"check": "last_line_to_student", "value": true},
+        {"check": "leader_after_supporting", "value": true}
+      ]
+    },
+    {
+      "id": "P38-birthday-student-calls-the-friend",
+      "goal": "The student asks Mia by name how many friends are coming: she answers briefly, with no question, and Olivia asks the student.",
+      "scenario": "reservar-aniversario", "level": 3, "samples": 3,
+      "current": "olivia", "turn_count": 2, "direct": true,
+      "history": [
+        "@birthday-opens",
+        "Student: Yes. I want to book a table for my birthday next Saturday.",
+        "[Olivia] Happy early birthday! How many people are coming?",
+        "Student: Mia, how many of our friends said yes?"
+      ],
+      "expect": [
+        {"check": "speaker", "value": "mia"},
+        {"check": "max_two_lines", "value": true},
+        {"check": "single_question", "value": true},
+        {"check": "last_line_to_student", "value": true},
+        {"check": "leader_after_supporting", "value": true},
+        {"check": "supporting_not_by_balance", "value": true},
+        {"judge": "Does Mia answer briefly about the guests and leave the booking decision to the student and Olivia?"}
+      ]
+    },
+    {
+      "id": "P39-birthday-guaranteed-appearance",
+      "goal": "Half of the scene has passed and Mia has not spoken: she steps in once, briefly, and a principal asks the student.",
+      "scenario": "reservar-aniversario", "level": 3, "samples": 3,
+      "current": "ben", "turn_count": 6, "direct": true,
+      "history": ["@birthday-half"],
+      "expect": [
+        {"check": "speaker", "value": "mia"},
+        {"check": "max_two_lines", "value": true},
+        {"check": "single_question", "value": true},
+        {"check": "last_line_to_student", "value": true},
+        {"check": "leader_after_supporting", "value": true}
+      ]
+    },
+    {
+      "id": "P40-birthday-student-calls-the-waiter",
+      "goal": "The student asks Ben by name about the menu early in the scene: Ben answers and asks, and Mia stays quiet.",
+      "scenario": "reservar-aniversario", "level": 3, "samples": 3,
+      "current": "olivia", "turn_count": 2, "direct": true,
+      "history": [
+        "@birthday-opens",
+        "Student: Yes. I want to book a table for my birthday next Saturday.",
+        "[Olivia] Happy early birthday! What time would you like to come?",
+        "Student: Ben, is there a vegetarian dish on the menu?"
+      ],
+      "expect": [
+        {"check": "speaker", "value": "ben"},
+        {"check": "single_question", "value": true},
+        {"check": "last_line_to_student", "value": true},
+        {"check": "supporting_not_by_balance", "value": true}
       ]
     }
   ]
