@@ -32,18 +32,22 @@ def test_aplicar_a_carga_duas_vezes_nao_duplica_nenhum_registro() -> None:
     seed_closing_hint = _seed_function(
         "0008_seed_interview_level_one_closing_hint", "seed_interview_level_one_closing_hint"
     )
+    seed_supporting_scenes = _seed_function(
+        "0024_seed_supporting_scenes", "seed_supporting_scenes"
+    )
 
     seed_levels(apps, None)
     seed_tracks(apps, None)
     seed_criteria(apps, None)
     seed_closing_hint(apps, None)
+    seed_supporting_scenes(apps, None)
 
     assert Archetype.objects.count() == 6
     assert Level.objects.count() == 3
-    assert Track.objects.count() == 2
-    assert Persona.objects.count() == 4
-    assert Scenario.objects.count() == 3
-    assert Criterion.objects.count() == 15
+    assert Track.objects.count() == 3
+    assert Persona.objects.count() == 8
+    assert Scenario.objects.count() == 6
+    assert Criterion.objects.count() == 30
     assert ScenarioLevelHint.objects.count() == 1
 
 

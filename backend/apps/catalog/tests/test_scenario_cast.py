@@ -68,7 +68,9 @@ def test_a_supporting_role_that_opens_the_scene_is_refused():
 
 @pytest.mark.django_db
 def test_existing_roles_are_principal_without_an_entry_cue():
-    roles = ScenarioRole.objects.all()
+    roles = ScenarioRole.objects.filter(
+        scenario__slug__in=["entrevista-de-emprego", "negociar-prazo", "problema-no-quarto"]
+    )
 
     assert roles.exists()
     assert set(roles.values_list("presence", flat=True)) == {PRINCIPAL}
