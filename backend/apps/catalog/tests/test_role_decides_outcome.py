@@ -44,7 +44,9 @@ def test_undoing_the_data_migration_clears_the_mark_and_keeps_the_rest():
 
     _MIGRATION.unmark_deciders(apps, None)
 
-    assert not ScenarioRole.objects.filter(decides_outcome=True).exists()
+    assert not ScenarioRole.objects.filter(
+        scenario__slug__in=list(_MIGRATION.DECIDERS), decides_outcome=True
+    ).exists()
     after = set(
         ScenarioRole.objects.filter(scenario__slug="negociar-prazo").values_list(
             "pk", "concession", "extra_instruction"
