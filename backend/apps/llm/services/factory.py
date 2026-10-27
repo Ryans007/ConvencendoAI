@@ -5,7 +5,7 @@ from langchain.agents import create_agent
 from langchain.agents.structured_output import ProviderStrategy, ToolStrategy
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_openai import ChatOpenAI
-from openai import BadRequestError, OpenAI
+from openai import BadRequestError, LengthFinishReasonError, OpenAI
 
 from apps.llm.constants import (
     PROVIDER_MAX_RETRIES,
@@ -23,6 +23,10 @@ _TEMPERATURE_BY_PURPOSE = {
     ModelPurpose.PERSONA: 0.7,
     ModelPurpose.JUDGE: 0.0,
     ModelPurpose.ROUTER: 0.0,
+}
+
+_MAX_TOKENS_BY_PURPOSE = {
+    ModelPurpose.JUDGE: 8192,
 }
 
 _FIELD_BY_PURPOSE = {
@@ -76,6 +80,12 @@ def get_llm(purpose: str) -> ChatOpenAI:
     minuto, o erro de tempo esgotado que a sessão e a revisão já tratam como "serviço de IA
     indisponível". O SDK também retenta o tempo esgotado, por isso o pior caso é duas vezes o
     limite. As chamadas normais levam de 2 a 7 segundos, e 24 com o modelo frio.
+
+    O avaliador tem limite de saída próprio, de 8192 tokens. Sem ele vale o padrão do
+    provedor, e a Groq cortou uma avaliação em 3072 tokens, dos quais 2587 eram o raciocínio
+    do modelo: a nota não chegou a ser escrita e o aluno ficou sem relatório. As avaliações
+    com sucesso já chegaram a 2880 tokens. Os outros papéis escrevem respostas curtas e
+    seguem com o padrão do provedor. O limite só é cobrado no que o modelo de fato gera.
     """
     config = AgentModelConfig.get_solo()
     model = _model_for(purpose, config)
@@ -85,6 +95,7 @@ def get_llm(purpose: str) -> ChatOpenAI:
         api_key=provider.api_key,
         base_url=provider.base_url,
         temperature=_TEMPERATURE_BY_PURPOSE[purpose],
+        max_tokens=_MAX_TOKENS_BY_PURPOSE.get(purpose),
         timeout=PROVIDER_TIMEOUT_SECONDS,
         max_retries=PROVIDER_MAX_RETRIES,
     )
@@ -103,6 +114,14 @@ class _Tally:
         usage = getattr(message, "usage_metadata", None) or {}
         self.input_tokens += int(usage.get("input_tokens", 0))
         self.output_tokens += int(usage.get("output_tokens", 0))
+
+    def add_cut_off(self, error: LengthFinishReasonError) -> None:
+        """Soma uma resposta cortada no limite de saída: ela não vira mensagem, mas foi cobrada."""
+        self.model_calls += 1
+        usage = error.completion.usage
+        if usage is not None:
+            self.input_tokens += usage.prompt_tokens
+            self.output_tokens += usage.completion_tokens
 
     @property
     def duration_ms(self) -> int:
@@ -127,6 +146,11 @@ class _StructuredAgent:
     sem esse tratamento, a exceção atravessava o grafo e derrubava a sessão. Qualquer outro
     erro do provedor continua sendo propagado. O log da recusa inclui o que o modelo
     gerou (`failed_generation`, quando o provedor devolve), para diagnosticar a causa.
+
+    A resposta cortada no limite de saída também é tentada de novo. Um modelo que raciocina
+    antes de responder pode gastar o limite inteiro pensando e não chegar ao schema, e a
+    biblioteca levanta `LengthFinishReasonError` em vez de devolver uma resposta vazia; sem
+    esse tratamento, a avaliação do fim da sessão falhava e o aluno ficava sem relatório.
     """
 
     _ATTEMPTS = 2
@@ -199,6 +223,10 @@ class _StructuredAgent:
                     f"({exc.code})"
                 )
                 conversation_log(f"[warning] {self._purpose}: gerado", generated)
+                continue
+            except LengthFinishReasonError as exc:
+                tally.add_cut_off(exc)
+                print(f"[warning] {self._purpose}: resposta cortada no limite de saída")
                 continue
             new_messages = result.get("messages", [])[len(messages) :]
             for message in new_messages:
