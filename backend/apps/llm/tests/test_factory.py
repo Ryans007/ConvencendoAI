@@ -6,6 +6,9 @@ from dataclasses import dataclass
 import httpx
 import openai
 import pytest
+from openai.types.chat import ChatCompletion, ChatCompletionMessage
+from openai.types.chat.chat_completion import Choice
+from openai.types.completion_usage import CompletionUsage
 
 from apps.llm.constants import ModelCategory, ModelPurpose, StructuredOutputMethod
 from apps.llm.models import AgentModelConfig, LLMModel, LLMProvider
@@ -79,6 +82,20 @@ def test_get_llm_builds_client_with_configured_parameters(monkeypatch):
     assert persona_llm.openai_api_key.get_secret_value() == "sk-test"
     assert persona_llm.temperature == 0.7
     assert judge_llm.temperature == 0.0
+
+
+def test_only_the_judge_gets_its_own_output_limit(monkeypatch):
+    monkeypatch.setenv("LLM_TEST_API_KEY", "sk-test")
+    model = _make_model()
+    config = AgentModelConfig.get_solo()
+    config.persona_model = model
+    config.judge_model = model
+    config.router_model = model
+    config.save()
+
+    assert get_llm(ModelPurpose.JUDGE).max_tokens == 8192
+    assert get_llm(ModelPurpose.PERSONA).max_tokens is None
+    assert get_llm(ModelPurpose.ROUTER).max_tokens is None
 
 
 def test_get_llm_raises_when_no_model_configured():
@@ -297,6 +314,49 @@ def test_get_structured_llm_returns_empty_schema_when_the_json_never_validates(m
     )
 
     assert structured_llm.invoke(["a message"]) == _Schema()
+
+
+def _cut_off_error() -> openai.LengthFinishReasonError:
+    completion = ChatCompletion(
+        id="cut",
+        created=0,
+        model="gpt-oss-120b",
+        object="chat.completion",
+        choices=[
+            Choice(
+                index=0,
+                finish_reason="length",
+                message=ChatCompletionMessage(role="assistant", content=""),
+            )
+        ],
+        usage=CompletionUsage(prompt_tokens=3897, completion_tokens=3072, total_tokens=6969),
+    )
+    return openai.LengthFinishReasonError(completion=completion)
+
+
+def test_get_structured_llm_retries_when_the_response_is_cut_off_at_the_limit(monkeypatch):
+    structured_llm = _structured_llm_with(
+        monkeypatch,
+        [_cut_off_error(), {"structured_response": _Schema("ok")}],
+    )
+
+    assert structured_llm.invoke(["a message"]) == _Schema("ok")
+
+
+def test_get_structured_llm_returns_empty_schema_when_the_response_is_cut_off_twice(
+    monkeypatch,
+):
+    structured_llm = _structured_llm_with(monkeypatch, [_cut_off_error(), _cut_off_error()])
+
+    assert structured_llm.invoke(["a message"]) == _Schema()
+
+
+def test_a_cut_off_response_counts_the_billed_tokens():
+    tally = factory._Tally()
+
+    tally.add_cut_off(_cut_off_error())
+
+    assert (tally.model_calls, tally.input_tokens, tally.output_tokens) == (1, 3897, 3072)
 
 
 def test_get_structured_llm_propagates_other_provider_errors(monkeypatch):
