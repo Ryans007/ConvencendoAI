@@ -14,7 +14,6 @@ REASONING_MODEL = "openai/gpt-oss-120b"
 STT_MODEL = "whisper-large-v3-turbo"
 TTS_MODEL = "canopylabs/orpheus-v1-english"
 
-# Os gpt-oss da Groq usam JSON schema estrito: foi o método sem recusa nem fala vazia.
 _STRICT = StructuredOutputMethod.JSON_SCHEMA_STRICT
 _TOOL = StructuredOutputMethod.TOOL_CALLING
 _MODELS = (
@@ -60,6 +59,9 @@ def apply_default_setup(api_key: str) -> SetupReport:
     alterado: uma chave cadastrada no admin, um modelo existente (mesmo desativado) e um papel
     já preenchido ficam como estão. A chave recebida só é gravada se o provedor não tiver uma
     legível. Roda numa transação, para que uma falha no meio não deixe metade configurada.
+
+    Os gpt-oss da Groq usam JSON schema estrito, porque foi o método de saída estruturada que
+    não produziu recusa nem fala vazia.
     """
     report = SetupReport()
 

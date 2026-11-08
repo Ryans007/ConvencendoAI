@@ -2,9 +2,7 @@ from django.db import models
 
 from apps.llm.key_box import open_sealed, seal
 
-# A parte visível da chave no admin: no máximo estes caracteres, e nunca mais que um quarto dela.
 _HINT_MAX_CHARS = 6
-# A máscara tem tamanho fixo para não revelar o comprimento da chave.
 _HINT_MASK = "••••••••"
 
 
@@ -51,7 +49,8 @@ class LLMProvider(models.Model):
         """O começo da chave seguido de uma máscara, ou vazio se não há chave.
 
         Mostra no máximo 6 caracteres e nunca mais que um quarto da chave, para que uma chave
-        curta não fique quase toda à vista.
+        curta não fique quase toda à vista. A máscara tem tamanho fixo, para não revelar o
+        comprimento da chave.
         """
         key = self.api_key
         if not key:

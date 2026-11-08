@@ -4,12 +4,15 @@ import hashlib
 from cryptography.fernet import Fernet, InvalidToken
 from django.conf import settings
 
-# Separa esta derivação de qualquer outro uso do SECRET_KEY: a mesma chave secreta, com outro
-# prefixo, dá outra chave Fernet.
 _DOMAIN = b"convencendoai.llm-provider-key:"
 
 
 def _fernet() -> Fernet:
+    """A chave Fernet derivada do `SECRET_KEY` com o prefixo `_DOMAIN`.
+
+    O prefixo separa esta derivação de qualquer outro uso do `SECRET_KEY`: a mesma chave
+    secreta, com outro prefixo, dá outra chave Fernet.
+    """
     digest = hashlib.sha256(_DOMAIN + settings.SECRET_KEY.encode()).digest()
     return Fernet(base64.urlsafe_b64encode(digest))
 
