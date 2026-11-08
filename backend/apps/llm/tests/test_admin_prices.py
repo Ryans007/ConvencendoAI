@@ -24,7 +24,7 @@ def admin_client(client, django_user_model):
 
 def _model(category: str) -> LLMModel:
     provider = LLMProvider.objects.create(
-        code="groq", name="Groq", base_url="https://api.groq.com/openai/v1", api_key_env="LLM_TEST_API_KEY"
+        code="groq", name="Groq", base_url="https://api.groq.com/openai/v1", api_key="test-key"
     )
     return LLMModel.objects.create(
         provider=provider, category=category, model_id="m", display_name="m"

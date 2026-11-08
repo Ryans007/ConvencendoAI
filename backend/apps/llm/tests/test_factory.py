@@ -24,12 +24,13 @@ def _make_model(
     provider_active: bool = True,
     model_active: bool = True,
     structured_output_method: str = StructuredOutputMethod.TOOL_CALLING,
+    api_key: str = "test-key",
 ) -> LLMModel:
     provider = LLMProvider.objects.create(
         code="openai",
         name="OpenAI",
         base_url="https://api.openai.com/v1",
-        api_key_env="LLM_TEST_API_KEY",
+        api_key=api_key,
         is_active=provider_active,
     )
     return LLMModel.objects.create(
@@ -54,7 +55,7 @@ def _make_audio_model(
             code=f"groq-{model_id}",
             name="Groq",
             base_url="https://api.groq.com/openai/v1",
-            api_key_env="LLM_TEST_API_KEY",
+            api_key="test-key",
             is_active=provider_active,
         )
     return LLMModel.objects.create(
@@ -67,8 +68,7 @@ def _make_audio_model(
 
 
 def test_get_llm_builds_client_with_configured_parameters(monkeypatch):
-    monkeypatch.setenv("LLM_TEST_API_KEY", "sk-test")
-    model = _make_model()
+    model = _make_model(api_key="sk-test")
     config = AgentModelConfig.get_solo()
     config.persona_model = model
     config.judge_model = model
@@ -85,8 +85,7 @@ def test_get_llm_builds_client_with_configured_parameters(monkeypatch):
 
 
 def test_only_the_judge_gets_its_own_output_limit(monkeypatch):
-    monkeypatch.setenv("LLM_TEST_API_KEY", "sk-test")
-    model = _make_model()
+    model = _make_model(api_key="sk-test")
     config = AgentModelConfig.get_solo()
     config.persona_model = model
     config.judge_model = model
@@ -453,7 +452,7 @@ def silent_provider(monkeypatch):
 
 def _configure_silent(server: _SilentServer) -> LLMProvider:
     provider = LLMProvider.objects.create(
-        code="silent", name="Silent", base_url=server.base_url, api_key_env="LLM_TEST_API_KEY", is_active=True
+        code="silent", name="Silent", base_url=server.base_url, api_key="test-key", is_active=True
     )
     config = AgentModelConfig.get_solo()
     config.persona_model = LLMModel.objects.create(
@@ -529,9 +528,11 @@ def test_a_stuck_call_is_retried_once_before_giving_up(silent_provider, monkeypa
     assert 0.8 <= elapsed < 5
 
 
-def _configure_chat_and_stt():
-    model = _make_model()
+def _configure_chat_and_stt(api_key: str = "test-key"):
+    model = _make_model(api_key=api_key)
     audio = _make_audio_model(category=ModelCategory.STT, model_id="whisper")
+    audio.provider.api_key = api_key
+    audio.provider.save()
     config = AgentModelConfig.get_solo()
     config.persona_model = model
     config.stt_model = audio
@@ -539,33 +540,27 @@ def _configure_chat_and_stt():
     return model, audio
 
 
-def test_the_chat_key_comes_from_the_environment_of_the_server(monkeypatch):
-    _configure_chat_and_stt()
-    monkeypatch.setenv("LLM_TEST_API_KEY", "chave-do-ambiente")
+def test_the_chat_key_is_the_one_registered_on_the_provider():
+    _configure_chat_and_stt(api_key="chave-do-admin")
 
     llm = get_llm(ModelPurpose.PERSONA)
 
-    assert llm.openai_api_key.get_secret_value() == "chave-do-ambiente"
+    assert llm.openai_api_key.get_secret_value() == "chave-do-admin"
 
 
-def test_the_audio_key_comes_from_the_environment_of_the_server(monkeypatch):
-    _configure_chat_and_stt()
-    monkeypatch.setenv("LLM_TEST_API_KEY", "chave-do-ambiente")
+def test_the_audio_key_is_the_one_registered_on_the_provider():
+    _configure_chat_and_stt(api_key="chave-do-admin")
 
     audio = factory.get_audio_client(ModelCategory.STT)
 
-    assert audio.client.api_key == "chave-do-ambiente"
+    assert audio.client.api_key == "chave-do-admin"
 
 
-@pytest.mark.parametrize("value", [None, "", "   "])
-def test_a_provider_without_its_variable_is_not_configured_and_no_request_is_prepared(
+@pytest.mark.parametrize("value", ["", "   "])
+def test_a_provider_without_a_key_is_not_configured_and_no_request_is_prepared(
     monkeypatch, value
 ):
-    _configure_chat_and_stt()
-    if value is None:
-        monkeypatch.delenv("LLM_TEST_API_KEY", raising=False)
-    else:
-        monkeypatch.setenv("LLM_TEST_API_KEY", value)
+    _configure_chat_and_stt(api_key=value)
 
     def must_not_build(*args, **kwargs):
         raise AssertionError("nenhum cliente pode ser montado sem a chave")
@@ -579,35 +574,46 @@ def test_a_provider_without_its_variable_is_not_configured_and_no_request_is_pre
         factory.get_audio_client(ModelCategory.STT)
 
     for failure in (chat_failure, audio_failure):
-        assert "LLM_TEST_API_KEY" in str(failure.value)
+        assert "admin" in str(failure.value)
         assert "groq" in str(failure.value) or "openai" in str(failure.value)
 
 
-def test_the_error_never_carries_a_key_value(monkeypatch):
-    _configure_chat_and_stt()
-    monkeypatch.setenv("LLM_TEST_API_KEY", "   ")
+def test_a_key_that_no_longer_opens_is_not_configured(settings):
+    settings.SECRET_KEY = "uma-chave-secreta"
+    _configure_chat_and_stt(api_key="gsk_antiga")
+
+    settings.SECRET_KEY = "outra-chave-secreta"
+
+    with pytest.raises(ModelNotConfigured):
+        get_llm(ModelPurpose.PERSONA)
+
+
+def test_the_error_never_carries_a_key_value(settings):
+    settings.SECRET_KEY = "uma-chave-secreta"
+    _configure_chat_and_stt(api_key="gsk_VALOR-ANTIGO")
+    settings.SECRET_KEY = "outra-chave-secreta"
 
     with pytest.raises(ModelNotConfigured) as failure:
         get_llm(ModelPurpose.PERSONA)
 
-    assert "test-key" not in str(failure.value)
+    assert "VALOR-ANTIGO" not in str(failure.value)
+    assert "gsk_" not in str(failure.value)
 
 
-def test_changing_the_variable_changes_the_next_call_without_touching_the_database(monkeypatch):
-    _configure_chat_and_stt()
-    monkeypatch.setenv("LLM_TEST_API_KEY", "primeira")
+def test_changing_the_key_in_the_provider_changes_the_next_call():
+    model, _ = _configure_chat_and_stt(api_key="primeira")
     first = get_llm(ModelPurpose.PERSONA)
 
-    monkeypatch.setenv("LLM_TEST_API_KEY", "segunda")
+    model.provider.api_key = "segunda"
+    model.provider.save()
     second = get_llm(ModelPurpose.PERSONA)
 
     assert first.openai_api_key.get_secret_value() == "primeira"
     assert second.openai_api_key.get_secret_value() == "segunda"
 
 
-def test_a_provider_without_a_key_is_an_unavailable_service_for_the_student(monkeypatch):
-    _configure_chat_and_stt()
-    monkeypatch.delenv("LLM_TEST_API_KEY", raising=False)
+def test_a_provider_without_a_key_is_an_unavailable_service_for_the_student():
+    _configure_chat_and_stt(api_key="")
 
     with pytest.raises(ModelNotConfigured) as failure:
         get_llm(ModelPurpose.PERSONA)

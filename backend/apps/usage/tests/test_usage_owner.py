@@ -84,7 +84,7 @@ def test_every_model_call_of_a_live_session_is_attributed_to_the_student_and_the
     other = django_user_model.objects.create(username="joao")
     token = str(AccessToken.for_user(user))
     provider = LLMProvider.objects.create(
-        code="groq", name="Groq", base_url="https://x/v1", api_key_env="LLM_TEST_API_KEY"
+        code="groq", name="Groq", base_url="https://x/v1", api_key="test-key"
     )
     chat = LLMModel.objects.create(provider=provider, model_id="chat", display_name="c")
     _fake_audio(monkeypatch, provider)
@@ -159,7 +159,7 @@ def test_a_review_answer_and_the_correct_form_audio_are_attributed_to_the_studen
 
     user = django_user_model.objects.create_user(username="maria")
     provider = LLMProvider.objects.create(
-        code="groq", name="Groq", base_url="https://x/v1", api_key_env="LLM_TEST_API_KEY"
+        code="groq", name="Groq", base_url="https://x/v1", api_key="test-key"
     )
     llm = LLMModel.objects.create(
         provider=provider, category=ModelCategory.TTS, model_id="orpheus", display_name="o"
@@ -193,7 +193,7 @@ def test_a_review_transcription_is_attributed_to_the_student_and_item(
 
     user = django_user_model.objects.create_user(username="maria")
     provider = LLMProvider.objects.create(
-        code="groq", name="Groq", base_url="https://x/v1", api_key_env="LLM_TEST_API_KEY"
+        code="groq", name="Groq", base_url="https://x/v1", api_key="test-key"
     )
     llm = LLMModel.objects.create(
         provider=provider, category=ModelCategory.STT, model_id="whisper", display_name="w"
@@ -215,7 +215,7 @@ def test_a_review_transcription_is_attributed_to_the_student_and_item(
 
 def test_a_call_made_by_a_command_is_system_use(django_user_model):
     provider = LLMProvider.objects.create(
-        code="groq", name="Groq", base_url="https://x/v1", api_key_env="LLM_TEST_API_KEY"
+        code="groq", name="Groq", base_url="https://x/v1", api_key="test-key"
     )
     llm = LLMModel.objects.create(
         provider=provider, category=ModelCategory.TTS, model_id="orpheus", display_name="o"
