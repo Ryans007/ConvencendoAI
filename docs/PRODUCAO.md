@@ -220,8 +220,11 @@ nano .env
 ```
 
 Preencha `DOMAIN` (sem `https://`), `DJANGO_SECRET_KEY` (use a primeira saída do `openssl`),
-`POSTGRES_PASSWORD` (a segunda) e as três chaves de IA. Não cole chave de API em chat, e-mail nem
-issue: só no `.env` do servidor.
+`POSTGRES_PASSWORD` (a segunda) e `GROQ_API_KEY`, que o `seed_llm` grava no provedor Groq na A10.
+As outras chaves de IA são cadastradas no admin de cada provedor (**Nova chave**). Todas ficam
+criptografadas no banco com uma chave derivada do `DJANGO_SECRET_KEY`: trocar o `DJANGO_SECRET_KEY`
+exige cadastrar as chaves de novo. Não cole chave de API em chat, e-mail nem issue. Numa instalação
+que já tinha as variáveis `*_API_KEY` no `.env`, a migration `llm 0009` as importa para o banco.
 
 ### A9. Subir
 
@@ -242,11 +245,17 @@ causas usuais são DNS ainda não propagado ou porta 80 fechada.
 
 ```bash
 docker compose exec convencendoai-api python manage.py createsuperuser
+docker compose exec convencendoai-api python manage.py seed_llm
 ```
+
+O `seed_llm` cadastra a Groq com a `GROQ_API_KEY` do `.env`, os modelos `gpt-oss-20b`,
+`gpt-oss-120b`, `whisper-large-v3-turbo` e `orpheus-v1-english`, e preenche os papéis. Ele só completa
+o que falta e nunca sobrescreve o que foi configurado no admin, então pode rodar de novo a qualquer
+momento. Sem a variável, ele avisa e a chave pode ser colada no admin do provedor.
 
 Abra `https://app.seu-dominio.com.br/admin/` e entre. Confira:
 
-- O provedor de IA mostra a chave como **definida** (a variável de ambiente existe).
+- O provedor Groq mostra o começo da chave em **Chave atual** (e não "não definida").
 - Cadastre um usuário de teste pelo admin (ele gera uma senha temporária que aparece uma única vez).
   Entre no sistema com ele, troque a senha e faça uma sessão curta.
 - **Prove o IP real:** erre a senha de um usuário inexistente uma vez, e no admin abra
@@ -381,10 +390,12 @@ sudo ufw delete allow 3000/tcp
    POSTGRES_USER=<usuário criado no B4>
    POSTGRES_PASSWORD=<senha criada no B4>
    POSTGRES_HOST=<App Name do banco no B4>
-   GEMINI_API_KEY=<chave>
-   GROQ_API_KEY=<chave>
-   OLLAMA_CLOUD_API_KEY=<chave>
    ```
+
+   Para o `seed_llm` cadastrar a Groq sozinho, acrescente `GROQ_API_KEY=<chave>`; as demais chaves
+   de IA são cadastradas no admin de cada provedor, em **Nova chave**. Numa instalação que já tinha `GEMINI_API_KEY`, `GROQ_API_KEY` e `OLLAMA_CLOUD_API_KEY` nesta
+   aba, mantenha-as até o primeiro deploy desta versão: a migration `llm 0009` as importa para o
+   banco.
 
    O Dokploy grava isso num `.env` ao lado do compose, e o compose lê com `${VARIÁVEL}`. O
    compose acrescenta `localhost` ao `DJANGO_ALLOWED_HOSTS` sozinho, para a checagem de saúde.
@@ -392,6 +403,10 @@ sudo ufw delete allow 3000/tcp
    do container `8080`, **HTTPS ligado**, certificado **Let's Encrypt**. O Dokploy gera os rótulos do
    Traefik; o botão **Preview Compose** mostra o resultado antes de subir.
 6. **Deploy**, e acompanhe a aba de logs.
+
+Depois do primeiro deploy, crie o super-admin e rode o seed no terminal do serviço
+`convencendoai-api` (aba **Docker**, ou `docker exec` no container): `python manage.py
+createsuperuser` e `python manage.py seed_llm`, como na A10.
 
 Como saber que deu certo: o mesmo da Parte A (A9 e A10): `/api/health/` responde `ok` e o IP
 registrado nas tentativas de login com erro é o seu.
@@ -427,8 +442,9 @@ pessoa é obrigada a trocá-la.
 
 As três chaves (Groq, Google, Ollama Cloud) passaram por conversa e por arquivos locais durante o
 desenvolvimento. **Gere chaves novas nos painéis dos provedores para o servidor**, não reutilize as de
-desenvolvimento, e revogue as antigas. Para trocar uma chave depois, mude a variável (no `.env` da
-Parte A, ou na aba Environment da Parte B) e suba de novo: o banco não guarda o valor.
+desenvolvimento, e revogue as antigas. Para trocar uma chave depois, cole a nova em **Nova chave**, no admin do
+provedor: vale na chamada seguinte, sem reiniciar nada. O banco guarda a chave criptografada com uma
+chave derivada do `DJANGO_SECRET_KEY`, e o admin só mostra o começo dela.
 
 ### Antes de convidar alguém (checklist)
 
