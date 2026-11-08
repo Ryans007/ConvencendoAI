@@ -40,6 +40,12 @@ def name_environment_variables(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
+    """Troca o nome da variável de ambiente pela chave criptografada no banco.
+
+    Antes de remover `api_key_env`, a coluna ganha um default vazio: assim, desfazer o
+    `RemoveField` recria a coluna mesmo com provedores cadastrados, e o `RunPython` reverso
+    preenche os nomes das variáveis em seguida.
+    """
 
     dependencies = [
         ("llm", "0008_remove_provider_api_key"),
@@ -51,8 +57,6 @@ class Migration(migrations.Migration):
             name="api_key_encrypted",
             field=models.TextField(blank=True, default="", editable=False),
         ),
-        # Com default, desfazer o RemoveField recria a coluna mesmo com provedores cadastrados;
-        # o RunPython reverso preenche os nomes em seguida.
         migrations.AlterField(
             model_name="llmprovider",
             name="api_key_env",
