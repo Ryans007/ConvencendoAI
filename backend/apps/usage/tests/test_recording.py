@@ -21,7 +21,7 @@ pytestmark = pytest.mark.django_db
 @pytest.fixture
 def provider():
     return LLMProvider.objects.create(
-        code="groq", name="Groq", base_url="https://api.groq.com/openai/v1", api_key_env="LLM_TEST_API_KEY"
+        code="groq", name="Groq", base_url="https://api.groq.com/openai/v1", api_key="test-key"
     )
 
 

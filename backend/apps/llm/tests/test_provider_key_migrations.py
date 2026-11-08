@@ -2,6 +2,8 @@ import pytest
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 
+from apps.llm.models import LLMProvider
+
 pytestmark = pytest.mark.django_db(transaction=True, serialized_rollback=True)
 
 _BEFORE = [("llm", "0006_model_prices")]
@@ -139,3 +141,65 @@ def test_undoing_the_migration_gives_the_key_back_from_the_environment(monkeypat
     assert apps.get_model("llm", "LLMProvider").objects.get(code="groq").api_key == (
         "valor-do-ambiente"
     )
+
+
+_IN_DATABASE = [("llm", "0009_provider_api_key_in_database")]
+
+
+def _named_provider(apps, code: str, variable: str):
+    return apps.get_model("llm", "LLMProvider").objects.create(
+        code=code, name=code, base_url="https://x/v1", api_key_env=variable
+    )
+
+
+def test_the_key_in_the_environment_is_imported_sealed_and_the_variable_column_goes(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "  gsk_ambiente  ")
+    apps = _migrate(_AFTER)
+    _named_provider(apps, "groq", "GROQ_API_KEY")
+
+    apps = _migrate(_IN_DATABASE)
+
+    assert "api_key_env" not in _provider_columns()
+    stored = apps.get_model("llm", "LLMProvider").objects.get(code="groq").api_key_encrypted
+    assert stored and "gsk_ambiente" not in stored
+    assert LLMProvider.objects.get(code="groq").api_key == "gsk_ambiente"
+
+
+def test_a_missing_variable_does_not_stop_the_migration_and_leaves_no_key(monkeypatch, capsys):
+    monkeypatch.delenv("OLLAMA_CLOUD_API_KEY", raising=False)
+    monkeypatch.setenv("GROQ_API_KEY", _SECRET)
+    apps = _migrate(_AFTER)
+    _named_provider(apps, "groq", "GROQ_API_KEY")
+    _named_provider(apps, "ollama-cloud", "OLLAMA_CLOUD_API_KEY")
+
+    _migrate(_IN_DATABASE)
+
+    assert not LLMProvider.objects.get(code="ollama-cloud").has_api_key
+    assert LLMProvider.objects.get(code="groq").has_api_key
+    output = capsys.readouterr().out
+    assert "ollama-cloud" in output
+    assert _SECRET not in output
+
+
+def test_a_blank_variable_leaves_no_key(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "   ")
+    apps = _migrate(_AFTER)
+    _named_provider(apps, "groq", "GROQ_API_KEY")
+
+    _migrate(_IN_DATABASE)
+
+    assert not LLMProvider.objects.get(code="groq").has_api_key
+
+
+def test_undoing_brings_back_the_name_of_the_variable_and_drops_the_stored_key(monkeypatch):
+    monkeypatch.setenv("OLLAMA_CLOUD_API_KEY", "chave")
+    apps = _migrate(_AFTER)
+    _named_provider(apps, "ollama-cloud", "OLLAMA_CLOUD_API_KEY")
+    _migrate(_IN_DATABASE)
+
+    apps = _migrate(_AFTER)
+
+    columns = _provider_columns()
+    assert "api_key_env" in columns and "api_key_encrypted" not in columns
+    provider = apps.get_model("llm", "LLMProvider").objects.get(code="ollama-cloud")
+    assert provider.api_key_env == "OLLAMA_CLOUD_API_KEY"

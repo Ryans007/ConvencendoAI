@@ -16,7 +16,7 @@ def provider() -> LLMProvider:
         code="groq",
         name="Groq",
         base_url="https://api.groq.com/openai/v1",
-        api_key_env="LLM_TEST_API_KEY",
+        api_key="test-key",
     )
 
 
@@ -105,10 +105,9 @@ def test_a_provider_without_the_key_is_refused_like_in_the_normal_path(configure
         code="no-key",
         name="Sem chave",
         base_url="https://example.com/v1",
-        api_key_env="KEY_THAT_IS_NOT_SET",
     )
     model = _chat(keyless, "keyless-model")
 
     with override_models({ModelPurpose.PERSONA: model}):
-        with pytest.raises(ModelNotConfigured, match="KEY_THAT_IS_NOT_SET"):
+        with pytest.raises(ModelNotConfigured, match="no-key"):
             get_llm(ModelPurpose.PERSONA)

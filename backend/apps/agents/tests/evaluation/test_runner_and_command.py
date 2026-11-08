@@ -147,7 +147,7 @@ def test_the_run_is_marked_as_evaluation_usage(tmp_path, monkeypatch):
 
 def test_the_chosen_model_is_used_only_during_the_run(tmp_path, monkeypatch):
     provider = LLMProvider.objects.create(
-        code="groq", name="Groq", base_url="https://x/v1", api_key_env="LLM_TEST_API_KEY"
+        code="groq", name="Groq", base_url="https://x/v1", api_key="test-key"
     )
     small = LLMModel.objects.create(provider=provider, model_id="small", display_name="s")
     large = LLMModel.objects.create(provider=provider, model_id="large", display_name="l")
@@ -230,7 +230,7 @@ def test_a_model_that_does_not_exist_is_refused():
 def test_a_model_id_shared_by_two_providers_asks_for_the_number():
     for code in ("a", "b"):
         provider = LLMProvider.objects.create(
-            code=code, name=code, base_url="https://x/v1", api_key_env="LLM_TEST_API_KEY"
+            code=code, name=code, base_url="https://x/v1", api_key="test-key"
         )
         LLMModel.objects.create(provider=provider, model_id="twin", display_name="twin")
 
@@ -240,7 +240,7 @@ def test_a_model_id_shared_by_two_providers_asks_for_the_number():
 
 def test_a_model_is_found_by_its_number(monkeypatch):
     provider = LLMProvider.objects.create(
-        code="a", name="a", base_url="https://x/v1", api_key_env="LLM_TEST_API_KEY"
+        code="a", name="a", base_url="https://x/v1", api_key="test-key"
     )
     model = LLMModel.objects.create(provider=provider, model_id="solo", display_name="solo")
     _fakes(monkeypatch)

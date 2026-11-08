@@ -16,7 +16,7 @@ def override_models(models: Mapping[str, LLMModel]) -> Iterator[None]:
     bloco e não altera a configuração gravada, então uma sessão real que acontece ao mesmo
     tempo continua com o modelo da configuração. Serve para comparar modelos numa avaliação sem
     mexer no que os alunos usam. Só modelos de chat servem aos papéis de chat; as demais
-    verificações (modelo e provedor ativos, chave no ambiente) são as do caminho normal, feitas
+    verificações (modelo e provedor ativos, chave cadastrada) são as do caminho normal, feitas
     quando a chamada é montada.
     """
     valid_purposes = {purpose.value for purpose in ModelPurpose}
