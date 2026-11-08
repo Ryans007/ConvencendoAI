@@ -44,9 +44,12 @@ services:
     # trocamos por uvicorn --reload para ganhar recarregamento automatico; a pilha ASGI
     # e a mesma nos dois casos. O migrate na subida e conveniencia de desenvolvimento:
     # em producao ele e passo deliberado de deploy, e nao parte do comando do servidor,
-    # porque replicas concorrentes disputariam a mesma migration.
+    # porque replicas concorrentes disputariam a mesma migration. O seed_llm deixa a Groq
+    # configurada a partir da GROQ_API_KEY do .env e so completa o que falta, entao roda a
+    # cada subida; se ele falhar, o erro fica no log e o servidor sobe mesmo assim.
     command: >
       sh -c "python manage.py migrate --noinput &&
+             { python manage.py seed_llm || echo 'seed_llm falhou; veja o erro acima'; } &&
              uvicorn core.asgi:application --host 0.0.0.0 --port ${BACKEND_PORT} --reload"
     env_file:
       - .env

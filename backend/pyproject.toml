@@ -1,6 +1,6 @@
 [project]
 name = "convencendoai-backend"
-version = "0.31.1"
+version = "0.32.0"
 description = "Backend do ConvencendoAI"
 requires-python = ">=3.12,<3.13"
 dependencies = [
@@ -21,6 +21,7 @@ dependencies = [
     "djangorestframework-simplejwt>=5.5",
     "drf-spectacular>=0.28",
     "wordfreq>=3.1.1",
+    "cryptography>=46.0",
 ]
 
 [dependency-groups]

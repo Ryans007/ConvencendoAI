@@ -41,18 +41,17 @@ class ModelNotConfigured(RuntimeError):
 
 
 def _require_key(model: LLMModel) -> LLMModel:
-    """Recusa o modelo cujo provedor não tem a chave definida no ambiente do servidor.
+    """Recusa o modelo cujo provedor não tem chave cadastrada.
 
-    A chave vive só na variável de ambiente que o provedor nomeia. Sem ela, o modelo é tratado
-    como não configurado, antes de montar qualquer cliente e de enviar qualquer pedido, e a
-    mensagem diz qual variável falta, nunca um valor. A sessão e a revisão já tratam
-    `ModelNotConfigured` como serviço de IA indisponível.
+    A chave é cadastrada no admin do provedor. Sem ela, ou com uma chave que não decifra mais,
+    o modelo é tratado como não configurado, antes de montar qualquer cliente e de enviar
+    qualquer pedido, e a mensagem diz qual provedor está sem chave, nunca um valor. A sessão e
+    a revisão já tratam `ModelNotConfigured` como serviço de IA indisponível.
     """
     provider = model.provider
     if not provider.has_api_key:
         raise ModelNotConfigured(
-            f"Provedor '{provider.code}' sem chave: defina a variável de ambiente "
-            f"{provider.api_key_env}."
+            f"Provedor '{provider.code}' sem chave: cadastre a chave no admin."
         )
     return model
 

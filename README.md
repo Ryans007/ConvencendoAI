@@ -133,11 +133,21 @@ Todas as portas vêm do `.env` e podem ser trocadas lá.
 
 ### Configurar os modelos
 
-Nenhum modelo vem configurado: sem eles, a sessão não começa. Pelo admin:
+No ambiente de desenvolvimento, o backend roda `python manage.py seed_llm` a cada subida, logo
+depois das migrations. Com a `GROQ_API_KEY` preenchida no `.env`, ele cadastra a Groq, os modelos
+`openai/gpt-oss-20b`, `openai/gpt-oss-120b`, `whisper-large-v3-turbo` e
+`canopylabs/orpheus-v1-english`, e preenche os papéis abaixo (persona com o 20b, avaliador e
+roteador com o 120b). O sistema já sobe pronto para uso. O seed só completa o que falta: nunca
+sobrescreve a chave, os modelos ou os papéis configurados no admin. Um papel esvaziado de propósito é
+preenchido de novo na subida seguinte; para usar outro modelo, troque o papel em vez de esvaziá-lo.
 
-1. **LLM providers** — cadastre o provedor com a URL **compatível com a API da OpenAI** e a
-   chave. Um mesmo provedor atende chat e áudio. Exemplo, Groq:
-   `https://api.groq.com/openai/v1`.
+Para configurar outro provedor ou outros modelos, use o admin:
+
+1. **LLM providers** — cadastre o provedor com a URL **compatível com a API da OpenAI** e cole
+   a chave em **Nova chave**. Um mesmo provedor atende chat e áudio. Exemplo, Groq:
+   `https://api.groq.com/openai/v1`. A chave fica criptografada no banco e a tela só mostra o
+   começo dela; para trocar, cole a nova na mesma caixa. Trocar o `DJANGO_SECRET_KEY` torna as
+   chaves gravadas ilegíveis, e elas precisam ser cadastradas de novo.
 2. **LLM models** — cadastre cada modelo com a categoria certa (chat, STT ou TTS) e o
    identificador exato que o provedor espera.
 3. **Agent model configs** — escolha qual modelo atende cada papel:
