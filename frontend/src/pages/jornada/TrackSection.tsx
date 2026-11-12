@@ -1,7 +1,7 @@
 import type { TrackState } from "../../api/journey";
 import { ScenarioCard } from "./ScenarioCard";
 import { TimelineMark } from "./TimelineMark";
-import { scenarioMark } from "./journeyView";
+import { scenarioCardKey, scenarioMark } from "./journeyView";
 
 interface TrackSectionProps {
   track: TrackState;
@@ -48,7 +48,7 @@ export function TrackSection({ track }: TrackSectionProps) {
               {index < track.scenario_states.length - 1 && <div className="my-1 w-px flex-1 bg-line" />}
             </div>
             <div className="min-w-0 flex-1 pb-3">
-              <ScenarioCard trackTitle={track.title} scenario={scenario} />
+              <ScenarioCard key={scenarioCardKey(scenario)} trackTitle={track.title} scenario={scenario} />
             </div>
           </li>
         ))}
