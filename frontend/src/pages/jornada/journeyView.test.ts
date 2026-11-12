@@ -1,16 +1,32 @@
 import { describe, expect, it } from "vitest";
 
 import type { LevelState, ScenarioState } from "../../api/journey";
-import { castLine, initialLevelOrder, levelDash, levelStatus, scenarioMark } from "./journeyView";
+import {
+  castLine,
+  initialLevelOrder,
+  latestAttempt,
+  levelDash,
+  levelStatus,
+  scenarioCardKey,
+  scenarioMark,
+} from "./journeyView";
 
 interface LevelOptions {
   approved?: boolean;
   tried?: boolean;
   cooldownSeconds?: number | null;
+  attemptId?: number;
+  completedAt?: string;
 }
 
 function level(order: number, options: LevelOptions = {}): LevelState {
-  const { approved = false, tried = approved, cooldownSeconds = null } = options;
+  const {
+    approved = false,
+    tried = approved,
+    cooldownSeconds = null,
+    attemptId = order,
+    completedAt = "2026-10-07T12:00:00Z",
+  } = options;
   return {
     order,
     name: `Nível ${order}`,
@@ -20,7 +36,7 @@ function level(order: number, options: LevelOptions = {}): LevelState {
     available: cooldownSeconds === null,
     cooldown_remaining_seconds: cooldownSeconds,
     last_attempt: tried
-      ? { id: order, final_score: 70, passed: approved, completed_at: "2026-10-07T12:00:00Z" }
+      ? { id: attemptId, final_score: 70, passed: approved, completed_at: completedAt }
       : null,
   };
 }
@@ -60,23 +76,115 @@ describe("scenarioMark", () => {
   });
 });
 
-describe("initialLevelOrder", () => {
-  it("é o primeiro nível ainda não aprovado", () => {
-    const levels = [level(1, { approved: true }), level(2), level(3)];
+describe("latestAttempt", () => {
+  it("é a tentativa de um nível posterior quando só ele foi feito", () => {
+    const levels = [level(1), level(2), level(3, { tried: true, attemptId: 7 })];
 
-    expect(initialLevelOrder(scenario(levels))).toBe(2);
+    expect(latestAttempt(scenario(levels))).toMatchObject({ levelOrder: 3, attempt: { id: 7 } });
   });
 
-  it("não pula um nível não aprovado só porque um posterior foi aprovado", () => {
-    const levels = [level(1), level(2, { approved: true }), level(3)];
+  it("é a de um nível anterior quando ela foi concluída depois", () => {
+    const levels = [
+      level(1, { tried: true, attemptId: 9, completedAt: "2026-11-12T15:00:00Z" }),
+      level(2),
+      level(3, { approved: true, attemptId: 6, completedAt: "2026-11-08T19:08:59Z" }),
+    ];
+
+    expect(latestAttempt(scenario(levels))?.levelOrder).toBe(1);
+  });
+
+  it("compara instantes, e não o texto, quando os fusos são diferentes", () => {
+    const levels = [
+      level(1, { tried: true, attemptId: 1, completedAt: "2026-11-12T11:30:00-03:00" }),
+      level(2, { tried: true, attemptId: 2, completedAt: "2026-11-12T14:00:00Z" }),
+    ];
+
+    expect(latestAttempt(scenario(levels))?.levelOrder).toBe(1);
+  });
+
+  it("desempata pelo id quando a conclusão é no mesmo instante", () => {
+    const levels = [
+      level(1, { tried: true, attemptId: 5 }),
+      level(2, { tried: true, attemptId: 4 }),
+    ];
+
+    expect(latestAttempt(scenario(levels))?.levelOrder).toBe(1);
+  });
+
+  it("é nula quando o aluno nunca concluiu uma tentativa no cenário", () => {
+    expect(latestAttempt(scenario([level(1), level(2), level(3)]))).toBeNull();
+  });
+});
+
+describe("initialLevelOrder", () => {
+  it("é o nível da última sessão, reprovada, mesmo com níveis anteriores pendentes", () => {
+    const levels = [level(1), level(2), level(3, { tried: true })];
+
+    expect(initialLevelOrder(scenario(levels))).toBe(3);
+  });
+
+  it("é o nível da última sessão quando ela foi aprovada", () => {
+    const levels = [level(1), level(2), level(3, { approved: true })];
+
+    expect(initialLevelOrder(scenario(levels))).toBe(3);
+  });
+
+  it("é um nível anterior quando a tentativa mais recente foi nele", () => {
+    const levels = [
+      level(1, { tried: true, attemptId: 9, completedAt: "2026-11-12T15:00:00Z" }),
+      level(2),
+      level(3, { approved: true, attemptId: 6, completedAt: "2026-11-08T19:08:59Z" }),
+    ];
 
     expect(initialLevelOrder(scenario(levels))).toBe(1);
   });
 
-  it("é o último quando todos estão aprovados", () => {
-    const levels = [1, 2, 3].map((order) => level(order, { approved: true }));
+  it("é o primeiro nível quando o cenário nunca foi tentado", () => {
+    expect(initialLevelOrder(scenario([level(1), level(2), level(3)]))).toBe(1);
+  });
+
+  it("sem tentativa concluída, é o primeiro nível ainda não aprovado", () => {
+    const levels = [level(1, { approved: true, tried: false }), level(2), level(3)];
+
+    expect(initialLevelOrder(scenario(levels))).toBe(2);
+  });
+
+  it("sem tentativa concluída, é o último quando todos estão aprovados", () => {
+    const levels = [1, 2, 3].map((order) => level(order, { approved: true, tried: false }));
 
     expect(initialLevelOrder(scenario(levels))).toBe(3);
+  });
+});
+
+describe("scenarioCardKey", () => {
+  it("muda quando surge uma tentativa mais recente no cenário", () => {
+    const before = scenario([level(1), level(2), level(3)]);
+    const after = scenario([level(1), level(2), level(3, { tried: true, attemptId: 7 })]);
+
+    expect(scenarioCardKey(after)).not.toBe(scenarioCardKey(before));
+  });
+
+  it("não muda quando a jornada é atualizada sem tentativa nova", () => {
+    const levels = () => [level(1), level(2, { tried: true, attemptId: 4 })];
+
+    expect(scenarioCardKey(scenario(levels()))).toBe(scenarioCardKey(scenario(levels())));
+  });
+
+  it("muda quando uma tentativa nova num nível substitui a anterior", () => {
+    const before = scenario([level(1, { tried: true, attemptId: 4 })]);
+    const after = scenario([
+      level(1, { tried: true, attemptId: 8, completedAt: "2026-11-12T15:00:00Z" }),
+    ]);
+
+    expect(scenarioCardKey(after)).not.toBe(scenarioCardKey(before));
+  });
+
+  it("separa cenários diferentes sem tentativa", () => {
+    const levels = [level(1)];
+
+    expect(scenarioCardKey(scenario(levels, { slug: "a" }))).not.toBe(
+      scenarioCardKey(scenario(levels, { slug: "b" })),
+    );
   });
 });
 
