@@ -114,6 +114,7 @@ export class LiveSession {
   private endedByStudent = false;
   private turnStartedAt: number | null = null;
   private pendingWaitMs: number | null = null;
+  private releasedAt: number | null = null;
 
   private readonly microphone = new AudioRecorder();
   private readonly player = new AudioPlayer();
@@ -164,10 +165,12 @@ export class LiveSession {
     if (typeof event.data === "string") {
       const payload = JSON.parse(event.data) as ControlMessage;
       if (payload.type === "no_speech") {
+        this.releasedAt = null;
         this.setState({ phase: "student-turn", noSpeechNotice: true });
         return;
       }
       if (payload.type === "audio_too_large") {
+        this.releasedAt = null;
         this.setState({ phase: "student-turn", audioTooLargeNotice: true });
         return;
       }
@@ -244,8 +247,9 @@ export class LiveSession {
       this.playingAudio = false;
       this.playNextAudio();
     };
-    this.player.play(queued.blob).then(advance, (cause) => {
+    this.player.play(queued.blob, () => this.reportTurnLatency()).then(advance, (cause) => {
       console.error("Falha ao reproduzir audio da persona:", cause);
+      this.releasedAt = null;
       this.reportPlaybackFailure(cause);
       advance();
     });
@@ -355,15 +359,36 @@ export class LiveSession {
   }
 
   stopRecording(): void {
+    if (this.state.phase === "recording") {
+      this.releasedAt = Date.now();
+    }
     void this.sendRecording();
+  }
+
+  /**
+   * Informa ao servidor quanto o aluno esperou entre soltar o botao e a fala da persona comecar a
+   * tocar. So o navegador sabe os dois instantes, e o servidor junta o total as parcelas dele numa
+   * linha de log. Vale uma vez por vez: a segunda fala da mesma rodada nao reporta de novo.
+   */
+  private reportTurnLatency(): void {
+    if (this.releasedAt === null) {
+      return;
+    }
+    const totalMs = Date.now() - this.releasedAt;
+    this.releasedAt = null;
+    if (this.socket.readyState === WebSocket.OPEN) {
+      this.socket.send(JSON.stringify({ type: "turn_latency", total_ms: totalMs }));
+    }
   }
 
   private async sendRecording(): Promise<void> {
     const recording = await this.microphone.stop();
     if (!recording) {
+      this.releasedAt = null;
       return;
     }
     if (!hasSpeech(recording)) {
+      this.releasedAt = null;
       this.setState({ phase: "student-turn", noSpeechNotice: true });
       return;
     }

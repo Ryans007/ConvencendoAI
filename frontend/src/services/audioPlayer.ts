@@ -52,9 +52,11 @@ export class AudioPlayer {
 
   /**
    * Toca o áudio e resolve quando ele termina. Rejeita com o erro original se o navegador recusar
-   * tocar ou falhar ao decodificar, para quem chama decidir o que fazer.
+   * tocar ou falhar ao decodificar, para quem chama decidir o que fazer. `onStart` é chamado uma
+   * vez, quando o som começa a sair de fato, e não quando o pedido de reprodução é feito: entre os
+   * dois há a decodificação, que faz parte do que o aluno espera.
    */
-  play(blob: Blob): Promise<void> {
+  play(blob: Blob, onStart?: () => void): Promise<void> {
     this.revokeCurrent();
     const url = URL.createObjectURL(blob);
     this.currentUrl = url;
@@ -62,7 +64,12 @@ export class AudioPlayer {
       const settle = (callback: () => void) => {
         this.element.onended = null;
         this.element.onerror = null;
+        this.element.onplaying = null;
         callback();
+      };
+      this.element.onplaying = () => {
+        this.element.onplaying = null;
+        onStart?.();
       };
       this.element.onended = () => settle(resolve);
       this.element.onerror = () =>
