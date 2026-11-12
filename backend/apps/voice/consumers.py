@@ -82,6 +82,8 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         self.user = None
         self.attempt = None
         self.hints_enabled = False
+        self.ready = False
+        self._start_task: asyncio.Task | None = None
         self.current_hint: str | None = None
         self.pending_wait_ms: int | None = None
         await self.accept()
@@ -128,7 +130,41 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             await self._fail("A primeira mensagem deve ser a de autenticação com o token.")
             return
         self.started = True
-        await self._start_session(token)
+        self._start_task = asyncio.create_task(self._run_start_session(token))
+
+    async def _run_start_session(self, token: str) -> None:
+        """Roda a abertura da sessão como tarefa própria, para a queda da conexão poder cancelá-la.
+
+        Os handlers de uma conexão rodam um de cada vez, então com a abertura dentro do handler de
+        autenticação o aviso de queda só era atendido depois da fala de abertura, que leva
+        segundos de modelo e de voz. Nesse intervalo a reserva da conexão já morta continuava
+        valendo, e a conexão seguinte do mesmo aluno, como a que a tela refaz ao recarregar, era
+        recusada por "já existe uma sessão aberta". Uma falha inesperada da abertura encerra a
+        sessão com o erro de sempre, porque numa tarefa ela não chegaria a ninguém.
+        """
+        try:
+            await self._start_session(token)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            await self._fail_with_error(exc)
+            return
+        self.ready = True
+
+    async def _open_lease(self, user):
+        """Reserva a sessão do aluno sem perder a reserva se a abertura for cancelada no meio.
+
+        A reserva é criada numa thread, e cancelar quem espera por ela não a interrompe: sem
+        cuidado, a reserva nasceria depois do cancelamento, sem ninguém para liberá-la. Por
+        isso, ao ser cancelada, a abertura espera a thread terminar e libera o que ela criou.
+        """
+        acquisition = asyncio.ensure_future(sync_to_async(open_session_lease)(user))
+        try:
+            return await asyncio.shield(acquisition)
+        except asyncio.CancelledError:
+            with contextlib.suppress(Exception):
+                await sync_to_async(release_session_lease)(await acquisition)
+            raise
 
     async def _start_session(self, token: str) -> None:
         """Autentica o aluno, confere a jornada e os limites, abre a tentativa e abre a cena.
@@ -163,7 +199,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             return
 
         try:
-            self.lease = await sync_to_async(open_session_lease)(user)
+            self.lease = await self._open_lease(user)
         except SessionRefused as refusal:
             code = SessionErrorCode(refusal.code)
             await self._fail(FAILURE_DESCRIPTIONS[code], code=code)
@@ -209,12 +245,18 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
     async def disconnect(self, code) -> None:
         """Libera a sessão reservada do aluno, por qualquer motivo que a conexão tenha terminado.
 
-        Cancela também o prazo da autenticação, se ele ainda estava correndo.
+        Cancela também o prazo da autenticação, se ele ainda estava correndo, e a abertura da
+        sessão, se a conexão caiu antes de ela terminar: a reserva é liberada na hora, e não
+        depois de a fala de abertura ser gerada.
 
         Uma falha ao liberar vai para o log e não derruba o consumidor: a reserva vence sozinha
         depois do tempo máximo, então o pior caso é o aluno esperar, e não a conexão quebrar.
         """
         self._cancel_auth_deadline()
+        start_task = getattr(self, "_start_task", None)
+        if start_task is not None and not start_task.done():
+            start_task.cancel()
+            await asyncio.gather(start_task, return_exceptions=True)
         try:
             await sync_to_async(release_session_lease)(getattr(self, "lease", None))
         except Exception as exc:
@@ -227,10 +269,14 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
     async def receive(self, text_data: str | None = None, bytes_data: bytes | None = None) -> None:
         """Atende uma mensagem do cliente com o uso dos modelos atribuído ao aluno e à sessão.
 
-        Enquanto a sessão não começou, a única mensagem aceita é a de autenticação.
+        Enquanto a sessão não começou, a única mensagem aceita é a de autenticação, e enquanto
+        ela abre, nada é atendido: o cliente só fala depois de ouvir a abertura.
         """
         if not self.started:
             await self._authenticate_first_message(text_data, bytes_data)
+            return
+        if not self.ready:
+            print("[session] mensagem recebida antes de a sessão abrir; ignorada")
             return
         with self._usage_owner():
             await self._receive(text_data, bytes_data)

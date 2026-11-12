@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { LiveSession, NO_HINT, type LiveSessionState } from "../services/liveSession";
+import { openWhenSettled } from "../services/openWhenSettled";
 
 export interface UseLiveSessionResult extends LiveSessionState {
   startRecording: () => void;
@@ -34,17 +35,21 @@ export function useLiveSession(
   const sessionRef = useRef<LiveSession | null>(null);
   const [state, setState] = useState<LiveSessionState>(INITIAL_STATE);
 
-  useEffect(() => {
-    const session = new LiveSession(scenarioSlug, levelOrder, hintsEnabled);
-    sessionRef.current = session;
-    const unsubscribe = session.subscribe(setState);
-
-    return () => {
-      unsubscribe();
-      session.dispose();
-      sessionRef.current = null;
-    };
-  }, [scenarioSlug, levelOrder, hintsEnabled]);
+  useEffect(
+    () =>
+      openWhenSettled(
+        () => new LiveSession(scenarioSlug, levelOrder, hintsEnabled),
+        (session) => {
+          sessionRef.current = session;
+          const unsubscribe = session.subscribe(setState);
+          return () => {
+            unsubscribe();
+            sessionRef.current = null;
+          };
+        },
+      ),
+    [scenarioSlug, levelOrder, hintsEnabled],
+  );
 
   return {
     ...state,
