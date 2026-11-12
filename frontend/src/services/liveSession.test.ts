@@ -53,10 +53,15 @@ class FakeAudio {
   error: Error | null = null;
   onended: (() => void) | null = null;
   onerror: (() => void) | null = null;
+  onplaying: (() => void) | null = null;
   readonly played: string[] = [];
 
   constructor() {
     FakeAudio.instances.push(this);
+  }
+
+  triggerPlaying(): void {
+    this.onplaying?.();
   }
 
   play(): Promise<void> {
@@ -655,6 +660,107 @@ describe("LiveSession gravando a fala do aluno", () => {
     });
     expect(socket.sent.at(-1)).toBeInstanceOf(ArrayBuffer);
     expect(JSON.stringify(states.at(-1))).not.toContain("3000");
+  });
+
+  it("reporta ao servidor o tempo entre soltar o botao e a fala da persona comecar a tocar", async () => {
+    microphone();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const { session, socket } = await studentTurn(false);
+
+    await session.startRecording();
+    vi.advanceTimersByTime(800);
+    session.stopRecording();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    vi.advanceTimersByTime(4200);
+    socket.dispatch("message", { data: new ArrayBuffer(4) });
+    await Promise.resolve();
+    player().triggerPlaying();
+    vi.useRealTimers();
+
+    expect(JSON.parse(socket.sent.at(-1) as string)).toEqual({
+      type: "turn_latency",
+      total_ms: 4200,
+    });
+  });
+
+  it("a segunda fala da mesma rodada nao reporta a latencia de novo", async () => {
+    microphone();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const { session, socket } = await studentTurn(false);
+
+    await session.startRecording();
+    vi.advanceTimersByTime(800);
+    session.stopRecording();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    socket.dispatch("message", { data: new ArrayBuffer(4) });
+    socket.dispatch("message", { data: new ArrayBuffer(4) });
+    await Promise.resolve();
+    player().triggerPlaying();
+    await endAudio();
+    player().triggerPlaying();
+    vi.useRealTimers();
+
+    const reports = socket.sent.filter(
+      (message) => typeof message === "string" && message.includes("turn_latency"),
+    );
+    expect(reports).toHaveLength(1);
+  });
+
+  it("a abertura da sessao, sem o aluno ter falado, nao reporta latencia", async () => {
+    const session = new LiveSession("negociar-prazo", 3);
+    const socket = FakeWebSocket.instances[0];
+    socket.dispatch("open", {});
+    socket.dispatch("message", { data: new ArrayBuffer(4) });
+    await Promise.resolve();
+    player().triggerPlaying();
+
+    expect(session).toBeDefined();
+    expect(JSON.stringify(socket.sent)).not.toContain("turn_latency");
+  });
+
+  it("depois de 'nao ouvimos', a latencia conta da nova soltura do botao", async () => {
+    microphone();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const { session, socket } = await studentTurn(false);
+
+    await session.startRecording();
+    vi.advanceTimersByTime(800);
+    session.stopRecording();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    vi.advanceTimersByTime(5000);
+    socket.dispatch("message", { data: JSON.stringify({ type: "no_speech" }) });
+    await session.startRecording();
+    vi.advanceTimersByTime(800);
+    session.stopRecording();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    vi.advanceTimersByTime(3000);
+    socket.dispatch("message", { data: new ArrayBuffer(4) });
+    await Promise.resolve();
+    player().triggerPlaying();
+    vi.useRealTimers();
+
+    expect(JSON.parse(socket.sent.at(-1) as string)).toEqual({
+      type: "turn_latency",
+      total_ms: 3000,
+    });
+  });
+
+  it("uma fala que o navegador recusa tocar nao reporta latencia", async () => {
+    microphone();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const { session, socket } = await studentTurn(false);
+
+    await session.startRecording();
+    vi.advanceTimersByTime(800);
+    session.stopRecording();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    vi.useRealTimers();
+    FakeAudio.nextPlayRejects = true;
+    socket.dispatch("message", { data: new ArrayBuffer(4) });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    player().triggerPlaying();
+
+    expect(JSON.stringify(socket.sent)).not.toContain("turn_latency");
   });
 
   it("depois de 'nao ouvimos', a espera continua contando do fim da fala do personagem", async () => {

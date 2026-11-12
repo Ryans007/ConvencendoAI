@@ -9,6 +9,7 @@ class FakeAudio {
   error: Error | null = null;
   onended: (() => void) | null = null;
   onerror: (() => void) | null = null;
+  onplaying: (() => void) | null = null;
   readonly played: string[] = [];
 
   constructor() {
@@ -144,5 +145,18 @@ describe("AudioPlayer", () => {
     void player.play(speech());
 
     expect(revoked).toEqual(["blob:1"]);
+  });
+
+  it("avisa o início do som uma só vez, quando o navegador começa a tocar", () => {
+    const player = new AudioPlayer();
+    const onStart = vi.fn();
+
+    void player.play(speech(), onStart);
+    expect(onStart).not.toHaveBeenCalled();
+    const element = FakeAudio.instances[0];
+    element.onplaying?.();
+    element.onplaying?.();
+
+    expect(onStart).toHaveBeenCalledTimes(1);
   });
 });
