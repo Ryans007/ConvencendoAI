@@ -42,6 +42,12 @@ from apps.voice.services.failures import (
 )
 from apps.voice.services.stt import Transcription, transcribe_with_words
 from apps.voice.services.tts import synthesize
+from apps.voice.services.turn_latency import (
+    TurnMarks,
+    elapsed_ms,
+    format_turn_latency,
+    valid_latency_ms,
+)
 
 _AUTH_TIMEOUT_SECONDS = 10
 _AUTH_MAX_CHARS = 4096
@@ -86,6 +92,8 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         self._start_task: asyncio.Task | None = None
         self.current_hint: str | None = None
         self.pending_wait_ms: int | None = None
+        self.turn_marks: TurnMarks | None = None
+        self.turn_number = 0
         await self.accept()
         self._auth_deadline = asyncio.create_task(self._close_if_not_authenticated())
 
@@ -318,6 +326,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
 
         waited_ms, self.pending_wait_ms = self.pending_wait_ms, None
         started_at = time.monotonic()
+        self.turn_marks = None
         try:
             transcription = await sync_to_async(transcribe_with_words)(bytes_data)
         except Exception as exc:
@@ -331,6 +340,8 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({"type": "no_speech"}))
             return
 
+        self.turn_number += 1
+        self.turn_marks = TurnMarks(audio_received_at=started_at, stt_ms=elapsed_ms(started_at))
         conversation_log("You", text)
         await self._record_speech_turn(transcription, waited_ms)
 
@@ -350,6 +361,8 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             self.pending_wait_ms = valid_wait_ms(message.get("waited_ms"))
         elif message.get("type") == "hint_request":
             await self._answer_hint_request()
+        elif message.get("type") == "turn_latency":
+            self._log_turn_latency(message.get("total_ms"))
         elif message.get("type") == "playback_failed":
             self._log_playback_failure(message.get("reason"))
         elif message.get("type") == "end_session":
@@ -387,6 +400,20 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             print("[session] pedido de encerramento antes de qualquer resposta; ignorado")
             return
         await self._finish(dict(snapshot.values), EndedBy.STUDENT)
+
+    def _log_turn_latency(self, raw_total_ms: object) -> None:
+        """Escreve a linha de latência da última vez do aluno, depois que o navegador a reporta.
+
+        O navegador é o único que sabe quando o aluno soltou o botão e quando a fala começou a
+        tocar, então o total vem dele e as parcelas vêm do servidor. A medida é consumida uma
+        vez: um segundo relato para a mesma vez, uma vez sem áudio processado ou um valor
+        inválido não escrevem nada.
+        """
+        marks, self.turn_marks = self.turn_marks, None
+        total_ms = valid_latency_ms(raw_total_ms)
+        if marks is None or total_ms is None or self.attempt is None:
+            return
+        print(format_turn_latency(self.attempt.pk, self.turn_number, marks, total_ms))
 
     @staticmethod
     def _log_playback_failure(reason: object) -> None:
@@ -436,6 +463,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         `started_at` marca o início da rodada (a chegada do áudio do aluno, ou a conexão
         na abertura), para que o tempo total registrado inclua a transcrição.
         """
+        graph_started_at = time.monotonic()
         try:
             if initial_state is not None:
                 state = await self.graph.ainvoke(initial_state, config=self.thread_config)
@@ -444,6 +472,8 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         except Exception as exc:
             await self._fail_with_error(exc)
             return
+        if self.turn_marks is not None:
+            self.turn_marks.graph_ms = elapsed_ms(graph_started_at)
 
         spoken = await self._speak_new_messages(state, started_at)
         if not spoken:
@@ -488,6 +518,9 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             await self.send(bytes_data=audio)
             if not first_audio_sent:
                 first_audio_sent = True
+                if self.turn_marks is not None:
+                    self.turn_marks.tts_ms = elapsed_ms(synthesis_started_at)
+                    self.turn_marks.server_ms = elapsed_ms(started_at)
                 print(f"[timing] first audio sent after {time.monotonic() - started_at:.2f}s")
         return True
 
