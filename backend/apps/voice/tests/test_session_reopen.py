@@ -1,4 +1,5 @@
 import asyncio
+import threading
 import time
 
 import pytest
@@ -25,10 +26,12 @@ class _SlowFirstPersona:
 
     def __init__(self) -> None:
         self.calls = 0
+        self.first_call_started = threading.Event()
 
     def invoke(self, messages):
         self.calls += 1
         if self.calls == 1:
+            self.first_call_started.set()
             time.sleep(_OPENING_SECONDS)
         return PersonaTurn(line="Hello there.", pass_to="student")
 
@@ -38,16 +41,30 @@ class _Router:
         return RoutingDecision(speaker="")
 
 
-def _prepare(monkeypatch) -> None:
+def _prepare(monkeypatch) -> _SlowFirstPersona:
     persona = _SlowFirstPersona()
     monkeypatch.setattr(graph_personas, "get_structured_llm", lambda p, s: persona)
     monkeypatch.setattr(graph_routing, "get_structured_llm", lambda p, s: _Router())
     monkeypatch.setattr(voice_consumers, "synthesize", lambda text, voice: b"wav")
+    return persona
 
 
 def _communicator(user) -> SessionCommunicator:
     token = str(AccessToken.for_user(user))
     return SessionCommunicator(URLRouter(websocket_urlpatterns), _URL.format(token=token))
+
+
+async def _wait_for_the_slow_call(persona: _SlowFirstPersona) -> None:
+    """Espera a chamada lenta da persona começar, para ela ser a da conexão que vai cair.
+
+    Só a reserva existir não basta: a conexão pode ser cancelada antes de chamar a persona, e
+    então a chamada lenta caberia à conexão seguinte, que deveria abrir depressa.
+    """
+    for _ in range(100):
+        if persona.first_call_started.is_set():
+            return
+        await asyncio.sleep(0.05)
+    raise AssertionError("a chamada lenta da persona nunca começou")
 
 
 async def _wait_for_lease() -> None:
@@ -63,12 +80,13 @@ def test_a_connection_that_drops_while_opening_does_not_block_the_next(
     django_user_model, monkeypatch
 ):
     user = django_user_model.objects.create(username="maria")
-    _prepare(monkeypatch)
+    persona = _prepare(monkeypatch)
 
     async def run() -> bytes:
         discarded = _communicator(user)
         await discarded.connect()
         await _wait_for_lease()
+        await _wait_for_the_slow_call(persona)
         await discarded.disconnect()
 
         kept = _communicator(user)
@@ -84,12 +102,13 @@ def test_the_reservation_of_a_connection_that_dropped_while_opening_is_released(
     django_user_model, monkeypatch
 ):
     user = django_user_model.objects.create(username="maria")
-    _prepare(monkeypatch)
+    persona = _prepare(monkeypatch)
 
     async def run() -> int:
         discarded = _communicator(user)
         await discarded.connect()
         await _wait_for_lease()
+        await _wait_for_the_slow_call(persona)
         await discarded.disconnect()
         await asyncio.sleep(_OPENING_SECONDS + 0.5)
         return await sync_to_async(LiveSessionLease.objects.count)()
