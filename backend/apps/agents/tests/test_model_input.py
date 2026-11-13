@@ -47,3 +47,20 @@ def test_empty_history_still_produces_a_valid_text_message():
 
     assert len(messages) == 2
     assert "(no one has spoken yet)" in messages[1].content
+
+
+def test_the_line_instruction_comes_after_the_conversation():
+    history = [AIMessage(content="[Rachel] Did you work in a team?"), HumanMessage(content="Yes.")]
+
+    body = conversation_messages("prompt", history, "THIS LINE\nHand the floor to Tom.")[1].content
+
+    assert body.index("Student: Yes.") < body.index("Now respond, following your instructions.")
+    assert body.endswith("Now respond, following your instructions.\nTHIS LINE\nHand the floor to Tom.")
+
+
+def test_without_a_line_instruction_the_message_is_unchanged():
+    history = [HumanMessage(content="Yes.")]
+
+    assert conversation_messages("prompt", history, "")[1].content == (
+        conversation_messages("prompt", history)[1].content
+    )

@@ -170,7 +170,7 @@ def test_persona_without_a_handoff_gets_no_handoff_instruction(monkeypatch):
     assert "HAND THE FLOOR" not in prompts[0]
 
 
-def test_the_persona_that_hands_the_floor_never_asks_the_student(monkeypatch):
+def test_the_line_that_hands_the_floor_is_spoken_as_the_model_wrote_it(monkeypatch):
     content = _content()
     rachel, tom = content.role_keys()
     rachel_name = content.role(rachel).name
@@ -197,9 +197,9 @@ def test_the_persona_that_hands_the_floor_never_asks_the_student(monkeypatch):
         result = make_persona_node(content, "")({**_state(history, rachel), "hand_floor_to": tom})
 
     assert result["messages"][0].content == (
-        f"[{rachel_name}] Good to hear. {tom_name}, it is your turn."
+        f"[{rachel_name}] Good to hear. {tom_name}, it is your turn. What was the hardest part?"
     )
-    assert {"kind": "handoff_question_dropped", "speaker": rachel} in events
+    assert "handoff_question_dropped" not in [event["kind"] for event in events]
 
 
 def test_a_fallback_line_is_never_followed_by_the_handoff(monkeypatch):

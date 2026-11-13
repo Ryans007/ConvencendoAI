@@ -2,6 +2,7 @@ import re
 
 from langchain_core.messages import HumanMessage
 
+from apps.agents.services.line_instruction import is_debut
 from apps.agents.services.participation import SceneParticipation
 from apps.agents.services.schemas import ClosingLine
 from apps.agents.services.scenario_content import Role, ScenarioContent
@@ -9,7 +10,6 @@ from apps.agents.services.transcript import transcript_text
 from apps.llm.constants import ModelPurpose
 from apps.llm.services.factory import get_structured_llm
 
-_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 _LEADING_PREFIX = re.compile(r"^\s*\[?([A-Z][a-zA-Z.\s]{0,20})\]?:\s*")
 _BRACKET_NAME = re.compile(r"^\s*\[[^\]]+\]\s*")
 
@@ -19,19 +19,6 @@ def sanitize_line(text: str) -> str:
     text = _BRACKET_NAME.sub("", (text or "").strip())
     text = _LEADING_PREFIX.sub("", text)
     return text.strip()
-
-
-def without_questions(text: str) -> str:
-    """Tira da fala as frases que são pergunta, se sobrar alguma frase.
-
-    Quem passa a palavra ao colega não pergunta ao aluno: a pergunta da rodada é de quem recebe.
-    Medido com o modelo real, mesmo com o bloco de passagem pedindo uma fala sem pergunta, o
-    modelo ainda terminava com uma em cerca de 1 de cada 5 passagens, e o aluno recebia duas
-    perguntas na mesma rodada. Uma fala que é só pergunta fica como veio, porque trocá-la por
-    nada deixaria a persona muda.
-    """
-    kept = [part for part in _SENTENCE_END.split(text.strip()) if part and "?" not in part]
-    return " ".join(kept) if kept else text
 
 
 def _others_text(content: ScenarioContent, role: Role) -> str:
@@ -282,12 +269,7 @@ YOU ARE THE STUDENT'S SUPPORT IN THIS SCENE
     )
     handoff_text = _HANDOFF_TEXT.format(name=hand_floor_to.name) if hand_floor_to else ""
     received_text = _RECEIVED_TEXT.format(name=received_from.name) if received_from else ""
-    debut = (
-        participation is not None
-        and redirect_to is None
-        and hand_floor_to is None
-        and participation.lines_by_role.get(role.key, 0) == 0
-    )
+    debut = is_debut(role, participation, redirect_to, hand_floor_to)
     debut_template = _SUPPORTING_DEBUT_TEXT if role.supporting else _DEBUT_TEXT
     debut_text = (
         debut_template.format(name=role.name, function=role.scene_function) if debut else ""
