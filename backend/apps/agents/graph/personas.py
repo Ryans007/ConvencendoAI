@@ -3,6 +3,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from apps.agents.graph.state import ScenarioState
 from apps.agents.services.adaptation import adaptation_hint
 from apps.agents.services.dialogue_lines import addressed_persona
+from apps.agents.services.line_instruction import line_instruction
 from apps.agents.services.model_input import conversation_messages
 from apps.agents.services.participation import scene_participation
 from apps.agents.services.round_trace import record_round_event
@@ -12,7 +13,6 @@ from apps.agents.services.personas import (
     generate_closing_hint_line,
     generate_closing_line,
     sanitize_line,
-    without_questions,
 )
 from apps.agents.services.schemas import PersonaTurn
 from apps.agents.services.scenario_content import Role, ScenarioContent
@@ -161,17 +161,14 @@ def make_persona_node(content: ScenarioContent, memory: str):
             if other.supporting
             else {"received_from": previous}
         )
+        participation = scene_participation(content, other.key, so_far)
         other_system = build_system_prompt(
-            content,
-            other,
-            memory,
-            adaptation_line,
-            scene_participation(content, other.key, so_far),
-            **prompt_marks,
+            content, other, memory, adaptation_line, participation, **prompt_marks
         )
+        instruction = line_instruction(other, participation, **prompt_marks)
         other_llm = get_structured_llm(ModelPurpose.PERSONA, PersonaTurn)
         _, other_text, _ = _generate_turn(
-            other_llm, conversation_messages(other_system, so_far), other, so_far
+            other_llm, conversation_messages(other_system, so_far, instruction), other, so_far
         )
         _speak(other, other_text)
         return AIMessage(content=f"[{other.name}] {other_text}")
@@ -181,31 +178,30 @@ def make_persona_node(content: ScenarioContent, memory: str):
 
         O coadjuvante responde ao que o aluno disse ou dá o fato da função dele, sem pergunta:
         se a pergunta da rodada ficasse com ele, o aluno responderia a quem não conduz a cena,
-        e a persona da vez reagiria a uma resposta dada a outro. Uma pergunta que o modelo
-        escreva mesmo assim é retirada da fala, e o evento `supporting_question_dropped` fica no
-        registro. A persona da vez continua sendo a mesma na rodada seguinte.
+        e a persona da vez reagiria a uma resposta dada a outro. A ausência de pergunta vem da
+        instrução da fala (`line_instruction`), e a fala é dita como o modelo a gerou. A persona
+        da vez continua sendo a mesma na rodada seguinte.
         """
         supporting = content.supporting_role()
+        participation = scene_participation(content, supporting.key, history)
         system = build_system_prompt(
             content,
             supporting,
             memory,
             adaptation_line,
-            scene_participation(content, supporting.key, history),
+            participation,
             supporting_first_before=leader,
         )
+        instruction = line_instruction(supporting, participation, supporting_first_before=leader)
         llm = get_structured_llm(ModelPurpose.PERSONA, PersonaTurn)
         _, text, _ = _generate_turn(
-            llm, conversation_messages(system, history), supporting, history
+            llm, conversation_messages(system, history, instruction), supporting, history
         )
-        stepped_in = without_questions(text)
-        if stepped_in != text:
-            record_round_event("supporting_question_dropped", speaker=supporting.key)
-        _speak(supporting, stepped_in)
+        _speak(supporting, text)
         record_round_event(
             "supporting_entered", speaker=supporting.key, mode="first", leader=leader.key
         )
-        lines = [AIMessage(content=f"[{supporting.name}] {stepped_in}")]
+        lines = [AIMessage(content=f"[{supporting.name}] {text}")]
         lines.append(_follow_up_line(leader, supporting, history + lines, adaptation_line))
         names = [candidate.name for candidate in content.roles]
         if addressed_persona(lines[-1].content, leader.name, names) is not None:
@@ -272,6 +268,11 @@ def make_persona_node(content: ScenarioContent, memory: str):
             return supporting_first_round(role, history, adaptation_line)
 
         participation = scene_participation(content, key, history)
+        turn_marks = {
+            "redirect_to": None if entering == "after" else redirect_role,
+            "hand_floor_to": hand_role,
+            "supporting_follows": supporting if entering == "after" else None,
+        }
         system = build_system_prompt(
             content,
             role,
@@ -279,22 +280,16 @@ def make_persona_node(content: ScenarioContent, memory: str):
             adaptation_line,
             participation,
             addressed_by_student=addressed and entering != "after",
-            redirect_to=None if entering == "after" else redirect_role,
-            hand_floor_to=hand_role,
-            supporting_follows=supporting if entering == "after" else None,
+            **turn_marks,
         )
-        messages = conversation_messages(system, history)
+        instruction = line_instruction(role, participation, **turn_marks)
+        messages = conversation_messages(system, history, instruction)
         if entering == "after":
             receiver = None
 
         llm = get_structured_llm(ModelPurpose.PERSONA, PersonaTurn)
         turn, text, from_fallback = _generate_turn(llm, messages, role, history)
         directed = receiver.key if receiver else key
-        if (receiver or entering == "after") and not from_fallback:
-            handing_text = without_questions(text)
-            if handing_text != text:
-                record_round_event("handoff_question_dropped", speaker=key)
-                text = handing_text
         if turn.pass_to in keys and turn.pass_to not in (key, directed):
             print(f"[routing] {role.name} tentou passar a vez; quem decide e o diretor de cena")
             record_round_event("handoff_ignored", speaker=key, reason="director_decides")

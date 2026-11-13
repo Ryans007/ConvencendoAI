@@ -70,10 +70,10 @@ def _lines(result: dict) -> list[str]:
     return [message.content for message in result["messages"]]
 
 
-def test_first_the_supporting_role_speaks_without_a_question_and_the_leader_asks(monkeypatch):
+def test_first_the_supporting_role_speaks_and_the_leader_asks(monkeypatch):
     prompts = _script(
         monkeypatch,
-        Mike="Yes, I heard the lift all the time. Should I take your bags back?",
+        Mike="Yes, I heard the lift all the time.",
         Emma="I'm sorry about that. Would you like the fifth floor?",
     )
 
@@ -88,15 +88,13 @@ def test_first_the_supporting_role_speaks_without_a_question_and_the_leader_asks
     assert "YOU STEP IN BRIEFLY NOW" in prompts["Mike"]
     assert "Emma speaks right after you" in prompts["Mike"]
     assert "Mike JUST HANDED THE FLOOR TO YOU" in prompts["Emma"]
-    kinds = [event["kind"] for event in events]
-    assert "supporting_question_dropped" in kinds
     assert {"kind": "round_end", "speaker": "emma", "next_speaker": "emma"} in events
 
 
 def test_after_the_called_principal_answers_and_the_supporting_role_closes(monkeypatch):
     prompts = _script(
         monkeypatch,
-        James="Of course, the fifth floor is quiet. Is that okay?",
+        James="Of course, the fifth floor is quiet.",
         Mike="I can take your bags up now. Are you ready?",
     )
 
