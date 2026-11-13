@@ -755,6 +755,137 @@
         {"check": "last_line_to_student", "value": true},
         {"check": "supporting_not_by_balance", "value": true}
       ]
+    },
+    {
+      "id": "P41-real-topic-handoff-hr-asks-about-the-project",
+      "goal": "Real round that failed in a simulated session on 2026-11-12: Rachel hands the floor to Tom, who enters for the first time. Rachel asks nothing, and Tom introduces themselves, reacts to the student and asks once.",
+      "scenario": "entrevista-de-emprego", "level": 3, "samples": 4,
+      "current": "rachel", "hand_floor_to": "tom", "turn_count": 2,
+      "history": [
+        "[Rachel] Hello, welcome to your interview. I am Rachel from HR.",
+        "Student: Hello, thank you. Nice to meet you, Rachel.",
+        "[Rachel] Nice to meet you too. What backend projects have you worked on recently?",
+        "Student: I worked on a delivery tracking system using Django and PostgreSQL, with caching and code reviews."
+      ],
+      "expect": [
+        {"check": "speaker", "value": "rachel"},
+        {"check": "passes_to", "value": "tom"},
+        {"check": "introduces", "value": "tom"},
+        {"check": "single_question", "value": true},
+        {"check": "last_line_to_student", "value": true},
+        {"judge": "Does Rachel react to what the student just said and tell the student that Tom continues, without asking the student anything?"},
+        {"judge": "Does Tom speak as the backend tech lead and ask the student a question, instead of answering a question as if Tom were the student?"}
+      ]
+    },
+    {
+      "id": "P42-real-topic-handoff-hr-asks-about-the-metric",
+      "goal": "Real round that failed in a simulated session on 2026-11-12: Rachel hands the floor to Tom. Rachel asks nothing, and Tom reacts to the student and asks once.",
+      "scenario": "entrevista-de-emprego", "level": 3, "samples": 4,
+      "current": "rachel", "hand_floor_to": "tom", "turn_count": 5,
+      "history": [
+        "[Rachel] Good morning, thank you for coming. Let's start the interview.",
+        "Student: Good morning, thank you for having me. I am excited to talk about the backend developer position.",
+        "[Rachel] Thank you for the warm welcome. Tom will continue the interview.",
+        "[Tom] Hi, I'm Tom, the backend tech lead. I see you're excited. Could you tell me about a project where you improved API speed?",
+        "Student: Sure, in my delivery tracking project I added Redis caching and optimized PostgreSQL queries, reducing API response time from 800ms to 200ms.",
+        "[Tom] Nice improvement. Why did you choose Redis over another caching solution?",
+        "Student: I chose Redis because it is simple to set up, works well with Django, and gives fast in‑memory caching for our frequent queries.",
+        "[Tom] Did you consider Memcached, and why not?",
+        "Student: I thought Redis had richer data types and persistence, and our team already used it, so it was easier than Memcached.",
+        "[Tom] Great, thanks for explaining that. Rachel, please continue.",
+        "[Rachel] How did you test the cache performance in production?",
+        "Student: We used Django's debug toolbar and New Relic to monitor query times, comparing response times before and after enabling Redis in production."
+      ],
+      "expect": [
+        {"check": "speaker", "value": "rachel"},
+        {"check": "passes_to", "value": "tom"},
+        {"check": "single_question", "value": true},
+        {"check": "last_line_to_student", "value": true},
+        {"judge": "Does Rachel react to what the student just said and tell the student that Tom continues, without asking the student anything?"},
+        {"judge": "Does Tom speak as the backend tech lead and ask the student a question, instead of answering a question as if Tom were the student?"}
+      ]
+    },
+    {
+      "id": "P43-real-balance-handoff-manager-skips-the-introduction",
+      "goal": "Real round that failed in a simulated session on 2026-11-12: Emma hands the floor to James, who enters for the first time. Emma asks nothing, and James introduces themselves, reacts to the student and asks once.",
+      "scenario": "problema-no-quarto", "level": 3, "samples": 4,
+      "current": "emma", "hand_floor_to": "james", "turn_count": 2,
+      "history": [
+        "[Emma] Good afternoon, what room are you in?",
+        "Student: My room is 312, the air‑conditioner is not working and it's very hot. Could I change rooms, please?",
+        "[Emma] I can arrange a technician today, it will take about an hour. Would you like us to send a technician first?",
+        "Student: I would prefer a different room tonight, please. I cannot wait an hour for the repair."
+      ],
+      "expect": [
+        {"check": "speaker", "value": "emma"},
+        {"check": "passes_to", "value": "james"},
+        {"check": "introduces", "value": "james"},
+        {"check": "single_question", "value": true},
+        {"check": "last_line_to_student", "value": true},
+        {"judge": "Does Emma react to what the student just said and tell the student that James continues, without asking the student anything?"},
+        {"judge": "Does James speak as the hotel manager and ask the student a question, instead of answering a question as if James were the student?"}
+      ]
+    },
+    {
+      "id": "P44-real-topic-handoff-tech-lead-answers-for-the-student",
+      "goal": "Real round that failed in a simulated session on 2026-11-12: Rachel hands the floor to Tom, who enters for the first time. Rachel asks nothing, and Tom introduces themselves, reacts to the student and asks once.",
+      "scenario": "entrevista-de-emprego", "level": 3, "samples": 4,
+      "current": "rachel", "hand_floor_to": "tom", "turn_count": 2,
+      "history": [
+        "[Rachel] Hello, thanks for coming. Let's start the interview.",
+        "Student: Thank you, I'm happy to be here.",
+        "[Rachel] Can you tell me about a project where you improved API performance?",
+        "Student: In my delivery tracking project, I added Redis caching to the API, which cut response time from 500ms to 150ms."
+      ],
+      "expect": [
+        {"check": "speaker", "value": "rachel"},
+        {"check": "passes_to", "value": "tom"},
+        {"check": "introduces", "value": "tom"},
+        {"check": "single_question", "value": true},
+        {"check": "last_line_to_student", "value": true},
+        {"judge": "Does Rachel react to what the student just said and tell the student that Tom continues, without asking the student anything?"},
+        {"judge": "Does Tom speak as the backend tech lead and ask the student a question, instead of answering a question as if Tom were the student?"}
+      ]
+    },
+    {
+      "id": "P45-real-topic-handoff-hr-question-left-hanging",
+      "goal": "Real round that failed in a simulated session on 2026-11-12: Rachel hands the floor to Tom, who enters for the first time. Rachel asks nothing, and Tom introduces themselves, reacts to the student and asks once.",
+      "scenario": "entrevista-de-emprego", "level": 3, "samples": 4,
+      "current": "rachel", "hand_floor_to": "tom", "turn_count": 2,
+      "history": [
+        "[Rachel] Welcome to your interview for the backend developer role at TechCorp. How are you today?",
+        "Student: I am fine, thank you. I am excited for the interview.",
+        "[Rachel] Can you tell me about a backend project you worked on that improved performance?",
+        "Student: I worked on a delivery tracking system using Django and PostgreSQL; I added Redis caching, which cut response time by 40%."
+      ],
+      "expect": [
+        {"check": "speaker", "value": "rachel"},
+        {"check": "passes_to", "value": "tom"},
+        {"check": "introduces", "value": "tom"},
+        {"check": "single_question", "value": true},
+        {"check": "last_line_to_student", "value": true},
+        {"judge": "Does Rachel react to what the student just said and tell the student that Tom continues, without asking the student anything?"},
+        {"judge": "Does Tom speak as the backend tech lead and ask the student a question, instead of answering a question as if Tom were the student?"}
+      ]
+    },
+    {
+      "id": "P46-real-topic-handoff-tech-lead-skips-the-introduction",
+      "goal": "Real round that failed in a simulated session on 2026-11-12: Rachel hands the floor to Tom, who enters for the first time. Rachel asks nothing, and Tom introduces themselves, reacts to the student and asks once.",
+      "scenario": "entrevista-de-emprego", "level": 3, "samples": 4,
+      "current": "rachel", "hand_floor_to": "tom", "turn_count": 1,
+      "history": [
+        "[Rachel] Hello! Could you tell me about your last backend project?",
+        "Student: Sure, I built a delivery tracking system with Django and PostgreSQL, using caching and doing code reviews."
+      ],
+      "expect": [
+        {"check": "speaker", "value": "rachel"},
+        {"check": "passes_to", "value": "tom"},
+        {"check": "introduces", "value": "tom"},
+        {"check": "single_question", "value": true},
+        {"check": "last_line_to_student", "value": true},
+        {"judge": "Does Rachel react to what the student just said and tell the student that Tom continues, without asking the student anything?"},
+        {"judge": "Does Tom speak as the backend tech lead and ask the student a question, instead of answering a question as if Tom were the student?"}
+      ]
     }
   ]
 }
