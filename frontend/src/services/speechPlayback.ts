@@ -7,9 +7,10 @@ export interface AudioBufferLike {
 
 export interface AudioSourceLike {
   buffer: AudioBufferLike | null;
-  onended: (() => void) | null;
+  onended: ((event: Event) => void) | null;
   connect(destination: unknown): void;
   start(when: number): void;
+  stop(): void;
 }
 
 /** O pedaco do contexto de audio do navegador que o player usa, para poder ser trocado nos testes. */
@@ -77,6 +78,7 @@ export class SpeechPlayback {
   private scheduledAny = false;
   private nextStart = 0;
   private lastSource: AudioSourceLike | null = null;
+  private readonly sources: AudioSourceLike[] = [];
   private lastSourceEnded = false;
   private underruns = 0;
   private windowStartedAt: number | null = null;
@@ -119,6 +121,26 @@ export class SpeechPlayback {
     this.aborted = true;
     this.ended = true;
     this.drive();
+  }
+
+  /**
+   * Para a fala agora, por exemplo porque o aluno saiu da tela: interrompe o que ja estava
+   * agendado e nao deixa mais nada comecar. Quem esperava o resultado o recebe como fala cortada.
+   */
+  stop(): void {
+    for (const source of this.sources) {
+      try {
+        source.stop();
+      } catch {
+        continue;
+      }
+    }
+    this.aborted = true;
+    this.ended = true;
+    this.pending = [];
+    this.pendingSamples = 0;
+    this.lastSourceEnded = true;
+    this.finishIfDone();
   }
 
   /**
@@ -208,6 +230,7 @@ export class SpeechPlayback {
       }
     };
     source.start(when);
+    this.sources.push(source);
     this.nextStart = when + buffer.duration;
     this.lastSource = source;
     this.lastSourceEnded = false;

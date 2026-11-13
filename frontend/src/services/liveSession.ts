@@ -2,6 +2,8 @@ import { resolveWsBaseUrl } from "../api/origin";
 import { AudioPlayer } from "./audioPlayer";
 import { AudioRecorder, hasSpeech } from "./audioRecorder";
 import { getAccessToken } from "./session";
+import { activeSpeechContext, unlockSpeechAudio } from "./speechAudio";
+import { SpeechPlayback, type SpeechOutcome } from "./speechPlayback";
 
 export type LiveSessionPhase =
   | "connecting"
@@ -55,7 +57,9 @@ interface ControlMessage {
     | "evaluating"
     | "hint"
     | "hint_unavailable"
-    | "speaker";
+    | "speaker"
+    | "speech_start"
+    | "speech_end";
   attempt_id?: number;
   final_score?: number;
   passed?: boolean;
@@ -64,12 +68,16 @@ interface ControlMessage {
   retry_after_seconds?: number;
   text?: string;
   name?: string;
+  sample_rate?: number;
+  channels?: number;
+  bytes?: number;
 }
 
-interface QueuedAudio {
-  blob: Blob;
-  speaker: string | null;
-}
+type QueuedAudio =
+  | { kind: "blob"; blob: Blob; speaker: string | null }
+  | { kind: "speech"; playback: SpeechPlayback; speaker: string | null };
+
+const DEFAULT_SPEECH_RATE = 24000;
 
 interface PendingOutcome {
   phase: "ended" | "error";
@@ -115,6 +123,13 @@ export class LiveSession {
   private turnStartedAt: number | null = null;
   private pendingWaitMs: number | null = null;
   private releasedAt: number | null = null;
+  private speechContext: AudioContext | null = null;
+  private incomingSpeech: SpeechPlayback | null = null;
+  private discardingSpeech = false;
+  private currentSpeech: SpeechPlayback | null = null;
+  private deferredLatencyMs: number | null = null;
+  private turnUnderruns = 0;
+  private turnCutLines = 0;
 
   private readonly microphone = new AudioRecorder();
   private readonly player = new AudioPlayer();
@@ -140,10 +155,18 @@ export class LiveSession {
    * Manda o token de acesso na primeira mensagem da conexao, e nunca na URL: o log de acesso do
    * servidor grava a URL inteira, e o token ficaria la. O servidor so inicia a sessao depois
    * desta mensagem e recusa qualquer audio que chegue antes. O token e lido agora, e nao na
-   * criacao da sessao, para valer o que a renovacao acabou de emitir.
+   * criacao da sessao, para valer o que a renovacao acabou de emitir. Declara que sabe tocar a fala
+   * em fluxo so quando o contexto de audio foi liberado e esta tocando agora, porque a abertura da
+   * persona fala antes de qualquer toque na tela da sessao; do contrario o servidor manda a fala
+   * inteira, como sempre.
    */
   private authenticate(): void {
-    this.socket.send(JSON.stringify({ type: "auth", token: getAccessToken() ?? "" }));
+    const message: Record<string, unknown> = { type: "auth", token: getAccessToken() ?? "" };
+    this.speechContext = activeSpeechContext();
+    if (this.speechContext !== null) {
+      message.stream_audio = true;
+    }
+    this.socket.send(JSON.stringify(message));
   }
 
   subscribe(listener: Listener): () => void {
@@ -185,6 +208,14 @@ export class LiveSession {
         }
         return;
       }
+      if (payload.type === "speech_start") {
+        this.startIncomingSpeech(payload);
+        return;
+      }
+      if (payload.type === "speech_end") {
+        this.finishIncomingSpeech(payload.bytes ?? 0);
+        return;
+      }
       if (payload.type === "hint_unavailable") {
         this.setState({ hint: { status: "unavailable", text: null } });
         return;
@@ -212,7 +243,16 @@ export class LiveSession {
       return;
     }
 
+    if (this.incomingSpeech !== null) {
+      this.incomingSpeech.push(new Uint8Array(event.data));
+      return;
+    }
+    if (this.discardingSpeech) {
+      return;
+    }
+
     this.audioQueue.push({
+      kind: "blob",
       blob: new Blob([event.data], { type: "audio/wav" }),
       speaker: this.announcedSpeaker,
     });
@@ -242,6 +282,10 @@ export class LiveSession {
       this.playingAudio = false;
       return;
     }
+    if (queued.kind === "speech") {
+      this.playQueuedSpeech(queued.playback, queued.speaker);
+      return;
+    }
     this.setState({ phase: "persona-speaking", speakerName: queued.speaker, personaAudible: true });
     const advance = () => {
       this.playingAudio = false;
@@ -253,6 +297,112 @@ export class LiveSession {
       this.reportPlaybackFailure(cause);
       advance();
     });
+  }
+
+  /**
+   * Abre uma fala em fluxo: cria o player dela e a poe na fila, no lugar de uma fala inteira. Os
+   * pedacos que chegam depois vao para ele ate o aviso de fim. Se o aparelho nao esta preparado
+   * (nao ha contexto de audio ativo ou o formato nao e suportado), os pedacos dessa fala sao
+   * descartados e o servidor e avisado, e a sessao volta a pedir a fala inteira nas seguintes.
+   */
+  private startIncomingSpeech(payload: ControlMessage): void {
+    this.incomingSpeech = null;
+    this.discardingSpeech = false;
+    try {
+      if (this.speechContext === null) {
+        const failure = new Error("sem contexto de audio ativo para a fala em fluxo");
+        failure.name = "NoSpeechContext";
+        throw failure;
+      }
+      const playback = new SpeechPlayback(this.speechContext, {
+        sampleRate: payload.sample_rate ?? DEFAULT_SPEECH_RATE,
+        channels: payload.channels ?? 1,
+      });
+      this.incomingSpeech = playback;
+      this.audioQueue.push({ kind: "speech", playback, speaker: this.announcedSpeaker });
+      this.announcedSpeaker = null;
+      this.playNextAudio();
+    } catch (cause) {
+      this.discardingSpeech = true;
+      this.speechContext = null;
+      this.reportPlaybackFailure(cause);
+      if (this.socket.readyState === WebSocket.OPEN) {
+        this.socket.send(JSON.stringify({ type: "stream_audio", enabled: false }));
+      }
+    }
+  }
+
+  /** O servidor terminou a fala em fluxo e disse quantos bytes mandou. */
+  private finishIncomingSpeech(bytes: number): void {
+    this.incomingSpeech?.finish(bytes);
+    this.incomingSpeech = null;
+    this.discardingSpeech = false;
+  }
+
+  /**
+   * Toca a fala em fluxo que e a da vez. O nome de quem fala aparece ja, como "pensando", e a fala so
+   * conta como tocando quando o primeiro som comeca, que e tambem o instante da latencia da vez.
+   */
+  private playQueuedSpeech(playback: SpeechPlayback, speaker: string | null): void {
+    this.currentSpeech = playback;
+    this.setState({ phase: "persona-speaking", speakerName: speaker, personaAudible: false });
+    void playback
+      .play(() => {
+        this.setState({ personaAudible: true });
+        this.reportTurnLatency(true);
+      })
+      .then((outcome) => {
+        this.noteSpeechOutcome(outcome);
+        this.currentSpeech = null;
+        this.playingAudio = false;
+        this.playNextAudio();
+      });
+  }
+
+  /**
+   * Guarda o que a fala em fluxo contou durante a reproducao, para ir na latencia da vez, e avisa o
+   * servidor quando ela chegou cortada, porque o console do celular nao e acessivel a quem mantem o
+   * sistema.
+   */
+  private noteSpeechOutcome(outcome: SpeechOutcome): void {
+    this.turnUnderruns += outcome.underruns;
+    if (!outcome.cut) {
+      return;
+    }
+    this.turnCutLines += 1;
+    if (this.socket.readyState === WebSocket.OPEN) {
+      this.socket.send(
+        JSON.stringify({
+          type: "speech_cut",
+          expected_bytes: outcome.expectedBytes,
+          received_bytes: outcome.receivedBytes,
+        }),
+      );
+    }
+  }
+
+  /**
+   * Manda a latencia que a fala em fluxo deixou guardada, junto do que ela contou. So sai quando a
+   * fila esvazia, porque os esvaziamentos e os cortes so se conhecem depois que as falas da vez
+   * terminam de tocar.
+   */
+  private flushDeferredLatency(): void {
+    if (this.deferredLatencyMs === null) {
+      return;
+    }
+    if (this.socket.readyState === WebSocket.OPEN) {
+      this.socket.send(
+        JSON.stringify({
+          type: "turn_latency",
+          total_ms: this.deferredLatencyMs,
+          underruns: this.turnUnderruns,
+          cut_lines: this.turnCutLines,
+        }),
+      );
+    }
+    this.deferredLatencyMs = null;
+    this.turnUnderruns = 0;
+    this.turnCutLines = 0;
   }
 
   /**
@@ -277,6 +427,7 @@ export class LiveSession {
     if (this.playingAudio || this.audioQueue.length > 0) {
       return;
     }
+    this.flushDeferredLatency();
 
     if (this.pendingOutcome) {
       const outcome = this.pendingOutcome;
@@ -325,6 +476,8 @@ export class LiveSession {
    * esta pendente, e o fechamento nao pode ser tratado como queda.
    */
   private handleClose(): void {
+    this.incomingSpeech?.abort();
+    this.incomingSpeech = null;
     if (
       this.endedByStudent ||
       this.pendingOutcome !== null ||
@@ -345,6 +498,7 @@ export class LiveSession {
   async startRecording(): Promise<void> {
     if (!this.playingAudio) {
       this.player.unlock();
+      unlockSpeechAudio();
     }
     if (this.state.phase !== "student-turn" || this.microphone.active) {
       return;
@@ -370,12 +524,16 @@ export class LiveSession {
    * tocar. So o navegador sabe os dois instantes, e o servidor junta o total as parcelas dele numa
    * linha de log. Vale uma vez por vez: a segunda fala da mesma rodada nao reporta de novo.
    */
-  private reportTurnLatency(): void {
+  private reportTurnLatency(streamed = false): void {
     if (this.releasedAt === null) {
       return;
     }
     const totalMs = Date.now() - this.releasedAt;
     this.releasedAt = null;
+    if (streamed) {
+      this.deferredLatencyMs = totalMs;
+      return;
+    }
     if (this.socket.readyState === WebSocket.OPEN) {
       this.socket.send(JSON.stringify({ type: "turn_latency", total_ms: totalMs }));
     }
@@ -393,6 +551,8 @@ export class LiveSession {
       return;
     }
     const buffer = await recording.blob.arrayBuffer();
+    this.turnUnderruns = 0;
+    this.turnCutLines = 0;
     this.sendTurnTiming();
     this.socket.send(buffer);
     this.setState({
@@ -457,6 +617,14 @@ export class LiveSession {
   /** Libera a conexao e o microfone ao desmontar a tela. */
   dispose(): void {
     this.endedByStudent = true;
+    for (const queued of this.audioQueue.splice(0)) {
+      if (queued.kind === "speech") {
+        queued.playback.stop();
+      }
+    }
+    this.incomingSpeech?.stop();
+    this.incomingSpeech = null;
+    this.currentSpeech?.stop();
     this.microphone.release();
     if (this.socket.readyState === WebSocket.OPEN || this.socket.readyState === WebSocket.CONNECTING) {
       this.socket.close();

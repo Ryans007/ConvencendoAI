@@ -1,80 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  SpeechPlayback,
-  type AudioBufferLike,
-  type AudioContextLike,
-  type AudioSourceLike,
-} from "./speechPlayback";
+import { SpeechPlayback } from "./speechPlayback";
+import { FakeContext } from "./testing/fakeAudioContext";
 
 const RATE = 24000;
 const FORMAT = { sampleRate: RATE, channels: 1 };
-
-class FakeSource implements AudioSourceLike {
-  buffer: AudioBufferLike | null = null;
-  onended: (() => void) | null = null;
-  startedAt: number | null = null;
-  connected = false;
-
-  connect(): void {
-    this.connected = true;
-  }
-
-  start(when: number): void {
-    this.startedAt = when;
-  }
-
-  get endsAt(): number {
-    return (this.startedAt ?? 0) + (this.buffer?.duration ?? 0);
-  }
-}
-
-class FakeBuffer implements AudioBufferLike {
-  readonly length: number;
-  readonly sampleRate: number;
-
-  constructor(length: number, sampleRate: number) {
-    this.length = length;
-    this.sampleRate = sampleRate;
-  }
-
-  get duration(): number {
-    return this.length / this.sampleRate;
-  }
-
-  copyToChannel(): void {}
-}
-
-class FakeContext implements AudioContextLike {
-  currentTime = 0;
-  readonly destination = {};
-  readonly sources: FakeSource[] = [];
-
-  createBuffer(_channels: number, length: number, sampleRate: number): AudioBufferLike {
-    return new FakeBuffer(length, sampleRate);
-  }
-
-  createBufferSource(): AudioSourceLike {
-    const source = new FakeSource();
-    this.sources.push(source);
-    return source;
-  }
-
-  advance(seconds: number): void {
-    this.currentTime += seconds;
-    for (const source of this.sources) {
-      if (source.startedAt !== null && source.endsAt <= this.currentTime && source.onended) {
-        const done = source.onended;
-        source.onended = null;
-        done();
-      }
-    }
-  }
-
-  get scheduledSeconds(): number {
-    return this.sources.reduce((total, source) => total + (source.buffer?.duration ?? 0), 0);
-  }
-}
 
 function audio(seconds: number): Uint8Array {
   return new Uint8Array(Math.round(seconds * RATE) * 2);
@@ -317,5 +247,26 @@ describe("services/speechPlayback", () => {
     expect(context.sources).toHaveLength(0);
     expect(outcome.receivedBytes).toBe(0);
     expect(outcome.cut).toBe(false);
+  });
+});
+
+describe("services/speechPlayback, parando a fala", () => {
+  it("parar interrompe o que estava agendado, termina a fala como cortada e nao deixa comecar mais nada", async () => {
+    const context = new FakeContext();
+    const { playback: speech, time } = playback(context);
+    const done = speech.play(() => undefined);
+    for (let piece = 0; piece < 4; piece += 1) {
+      speech.push(audio(0.2));
+      time.tick(20);
+    }
+    const scheduled = context.sources.length;
+
+    speech.stop();
+    speech.push(audio(0.2));
+    const outcome = await done;
+
+    expect(context.sources.every((source) => source.stopped)).toBe(true);
+    expect(context.sources).toHaveLength(scheduled);
+    expect(outcome.cut).toBe(true);
   });
 });
