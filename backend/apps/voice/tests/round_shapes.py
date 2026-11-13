@@ -96,11 +96,13 @@ def student_token(django_user_model) -> str:
     return str(AccessToken.for_user(user))
 
 
-async def connect(token: str, slug: str = "negociar-prazo", *, hints: bool = False):
+async def connect(
+    token: str, slug: str = "negociar-prazo", *, hints: bool = False, stream_audio: bool = False
+):
     """Abre a sessão como o frontend e devolve a conexão, ainda sem ter lido a abertura."""
     query = f"token={token}" + ("&hints=1" if hints else "")
     communicator = SessionCommunicator(
-        URLRouter(websocket_urlpatterns), f"/ws/voice/{slug}/3/?{query}"
+        URLRouter(websocket_urlpatterns), f"/ws/voice/{slug}/3/?{query}", stream_audio=stream_audio
     )
     connected, _ = await communicator.connect()
     assert connected
