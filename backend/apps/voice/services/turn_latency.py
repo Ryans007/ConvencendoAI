@@ -10,7 +10,8 @@ class TurnMarks:
     """As medidas do servidor numa vez do aluno, preenchidas conforme as etapas terminam.
 
     `audio_received_at` é o relógio monotônico da chegada do áudio. As demais são durações em
-    milissegundos, e ficam vazias até a etapa correspondente acabar.
+    milissegundos, e ficam vazias até a etapa correspondente acabar. `lines` é o número de falas
+    da rodada, para as rodadas de mais de uma fala poderem ser separadas das de uma só.
     """
 
     audio_received_at: float
@@ -18,6 +19,7 @@ class TurnMarks:
     graph_ms: int | None = None
     tts_ms: int | None = None
     server_ms: int | None = None
+    lines: int | None = None
 
 
 def elapsed_ms(started_at: float) -> int:
@@ -61,7 +63,8 @@ def format_turn_latency(
 ) -> str:
     """A linha de log de uma vez: o total sentido pelo aluno e as parcelas de cada etapa.
 
-    `total_ms` vai do aluno soltar o botão até a primeira fala da persona começar a tocar.
+    `total_ms` vai do aluno soltar o botão até a primeira fala da persona começar a tocar, e
+    `lines` diz quantas falas a rodada teve.
     `outside_server_ms` é o que sobra depois de descontar o tempo do servidor: fechamento da
     gravação, envio do áudio, chegada da resposta e início da reprodução no navegador.
     `underruns` e `cut_lines` são o que o navegador contou durante a fala: as vezes em que o
@@ -72,6 +75,7 @@ def format_turn_latency(
     fields = {
         "attempt": attempt_id,
         "turn": turn,
+        "lines": marks.lines,
         "total_ms": total_ms,
         "server_ms": marks.server_ms,
         "stt_ms": marks.stt_ms,

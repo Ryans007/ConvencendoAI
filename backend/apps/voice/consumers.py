@@ -559,6 +559,8 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         messages = list(state.get("messages") or [])
         new_messages = messages[self.seen_messages :]
         self.seen_messages = len(messages)
+        if self.turn_marks is not None:
+            self.turn_marks.lines = sum(isinstance(message, AIMessage) for message in new_messages)
         first_audio_sent = False
 
         for message in new_messages:

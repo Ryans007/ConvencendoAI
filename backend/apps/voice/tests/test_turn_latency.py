@@ -6,7 +6,7 @@ from channels.routing import URLRouter
 
 from apps.agents.graph import personas as graph_personas
 from apps.agents.graph import routing as graph_routing
-from apps.agents.services.schemas import PersonaTurn
+from apps.agents.services.schemas import PersonaTurn, RoutingDecision
 from apps.voice.routing import websocket_urlpatterns
 from apps.voice.services.turn_latency import (
     TurnMarks,
@@ -14,6 +14,7 @@ from apps.voice.services.turn_latency import (
     valid_count,
     valid_latency_ms,
 )
+from apps.voice.tests.round_shapes import connect, install, read_frames, student_token
 from apps.voice.tests.session_client import SessionCommunicator
 from apps.voice.tests.test_consumer_speech_turns import _prepare, _ScriptedPersonaLLM, _token
 
@@ -45,12 +46,14 @@ def _latency_lines(capsys) -> list[str]:
 
 
 def test_the_line_has_the_total_and_the_stage_breakdown():
-    marks = TurnMarks(audio_received_at=0.0, stt_ms=700, graph_ms=1800, tts_ms=900, server_ms=3500)
+    marks = TurnMarks(
+        audio_received_at=0.0, stt_ms=700, graph_ms=1800, tts_ms=900, server_ms=3500, lines=2
+    )
 
     line = format_turn_latency(7, 2, marks, 4200)
 
     assert line == (
-        "[latency] attempt=7 turn=2 total_ms=4200 server_ms=3500 stt_ms=700 "
+        "[latency] attempt=7 turn=2 lines=2 total_ms=4200 server_ms=3500 stt_ms=700 "
         "graph_ms=1800 tts_ms=900 outside_server_ms=700 underruns=n/a cut_lines=n/a"
     )
 
@@ -62,6 +65,7 @@ def test_an_unfinished_stage_shows_as_not_available():
 
     assert "server_ms=n/a" in line
     assert "outside_server_ms=n/a" in line
+    assert "lines=n/a" in line
 
 
 @pytest.mark.parametrize("raw", [-1, 11 * 60 * 1000, "4200", True, None, [4200]])
@@ -82,6 +86,7 @@ def test_the_browser_report_writes_one_line_with_the_server_stages(
 
     [line] = _latency_lines(capsys)
     assert "turn=1" in line
+    assert "lines=1" in line
     assert "total_ms=4200" in line
     for stage in ("server_ms", "stt_ms", "graph_ms", "tts_ms", "outside_server_ms"):
         assert f"{stage}=n/a" not in line
@@ -203,3 +208,26 @@ def test_an_invalid_count_does_not_discard_the_latency_of_the_turn(
     assert "total_ms=4200" in line
     assert "underruns=n/a" in line
     assert "cut_lines=n/a" in line
+
+
+def test_a_round_with_two_lines_reports_lines_two(django_user_model, monkeypatch, capsys):
+    install(
+        monkeypatch,
+        ["Hello, let's talk.", "That one is for Tom.", "Sure. What is still missing?"],
+        RoutingDecision(speaker="rachel", topic_owner="tom"),
+    )
+    token = student_token(django_user_model)
+
+    async def run() -> None:
+        communicator = await connect(token)
+        await read_frames(communicator, 1)
+        await communicator.send_to(bytes_data=b"student-audio")
+        await read_frames(communicator, 2)
+        await communicator.send_to(text_data=json.dumps({"type": "turn_latency", "total_ms": 5000}))
+        await communicator.disconnect()
+
+    async_to_sync(run)()
+
+    [line] = _latency_lines(capsys)
+    assert "lines=2" in line
+    assert "total_ms=5000" in line
