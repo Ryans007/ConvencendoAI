@@ -5,6 +5,7 @@ from asgiref.sync import async_to_sync
 from channels.routing import URLRouter
 
 from apps.agents.graph import personas as graph_personas
+from apps.agents.graph import routing as graph_routing
 from apps.agents.services.schemas import PersonaTurn
 from apps.voice.routing import websocket_urlpatterns
 from apps.voice.services.turn_latency import TurnMarks, format_turn_latency, valid_latency_ms
@@ -116,6 +117,7 @@ def test_each_turn_is_numbered_in_its_own_line(django_user_model, monkeypatch, c
         *(PersonaTurn(line=f"Line {number}?", pass_to="student") for number in range(3))
     )
     monkeypatch.setattr(graph_personas, "get_structured_llm", lambda purpose, schema: persona)
+    monkeypatch.setattr(graph_routing, "should_hand_over", lambda *args, **kwargs: False)
     token = _token(django_user_model)
 
     async def run() -> None:
