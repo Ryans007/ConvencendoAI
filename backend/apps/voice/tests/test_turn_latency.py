@@ -8,7 +8,12 @@ from apps.agents.graph import personas as graph_personas
 from apps.agents.graph import routing as graph_routing
 from apps.agents.services.schemas import PersonaTurn
 from apps.voice.routing import websocket_urlpatterns
-from apps.voice.services.turn_latency import TurnMarks, format_turn_latency, valid_latency_ms
+from apps.voice.services.turn_latency import (
+    TurnMarks,
+    format_turn_latency,
+    valid_count,
+    valid_latency_ms,
+)
 from apps.voice.tests.session_client import SessionCommunicator
 from apps.voice.tests.test_consumer_speech_turns import _prepare, _ScriptedPersonaLLM, _token
 
@@ -46,7 +51,7 @@ def test_the_line_has_the_total_and_the_stage_breakdown():
 
     assert line == (
         "[latency] attempt=7 turn=2 total_ms=4200 server_ms=3500 stt_ms=700 "
-        "graph_ms=1800 tts_ms=900 outside_server_ms=700"
+        "graph_ms=1800 tts_ms=900 outside_server_ms=700 underruns=n/a cut_lines=n/a"
     )
 
 
@@ -139,3 +144,62 @@ def test_each_turn_is_numbered_in_its_own_line(django_user_model, monkeypatch, c
     first, second = _latency_lines(capsys)
     assert "turn=1" in first and "total_ms=3000" in first
     assert "turn=2" in second and "total_ms=3500" in second
+
+
+def test_the_line_carries_the_underruns_and_cut_lines_the_browser_counted():
+    marks = TurnMarks(audio_received_at=0.0, stt_ms=700, graph_ms=1800, tts_ms=900, server_ms=3500)
+
+    line = format_turn_latency(7, 2, marks, 4200, underruns=2, cut_lines=1)
+
+    assert line.endswith("outside_server_ms=700 underruns=2 cut_lines=1")
+
+
+def test_a_browser_that_does_not_count_shows_the_counts_as_not_available():
+    marks = TurnMarks(audio_received_at=0.0, stt_ms=700, graph_ms=1800, tts_ms=900, server_ms=3500)
+
+    line = format_turn_latency(7, 2, marks, 4200)
+
+    assert line.endswith("underruns=n/a cut_lines=n/a")
+
+
+@pytest.mark.parametrize("raw", [-1, 1001, "2", True, None, 2.5, [2]])
+def test_an_invalid_count_is_discarded(raw):
+    assert valid_count(raw) is None
+
+
+def test_a_valid_count_is_kept_and_the_maximum_can_be_set():
+    assert valid_count(0) == 0
+    assert valid_count(37) == 37
+    assert valid_count(5_000_000, maximum=20_000_000) == 5_000_000
+    assert valid_count(20_000_001, maximum=20_000_000) is None
+
+
+def test_the_report_with_the_counts_writes_them_in_the_same_line(
+    django_user_model, monkeypatch, capsys
+):
+    _prepare(monkeypatch)
+
+    _report(
+        _token(django_user_model),
+        {"type": "turn_latency", "total_ms": 4200, "underruns": 2, "cut_lines": 1},
+    )
+
+    [line] = _latency_lines(capsys)
+    assert "underruns=2" in line
+    assert "cut_lines=1" in line
+
+
+def test_an_invalid_count_does_not_discard_the_latency_of_the_turn(
+    django_user_model, monkeypatch, capsys
+):
+    _prepare(monkeypatch)
+
+    _report(
+        _token(django_user_model),
+        {"type": "turn_latency", "total_ms": 4200, "underruns": -3, "cut_lines": "x"},
+    )
+
+    [line] = _latency_lines(capsys)
+    assert "total_ms=4200" in line
+    assert "underruns=n/a" in line
+    assert "cut_lines=n/a" in line

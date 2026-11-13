@@ -48,6 +48,7 @@ from apps.voice.services.turn_latency import (
     TurnMarks,
     elapsed_ms,
     format_turn_latency,
+    valid_count,
     valid_latency_ms,
 )
 
@@ -55,7 +56,8 @@ _AUTH_TIMEOUT_SECONDS = 10
 _AUTH_MAX_CHARS = 4096
 _SPEAKER_PREFIX = re.compile(r"^\[([^\]]+)\]\s*(.*)$", re.DOTALL)
 _PLAYBACK_REASON = re.compile(r"^[A-Za-z]{1,40}$")
-_DEVICE_NOTICES = frozenset({"stream_audio", "playback_failed"})
+_DEVICE_NOTICES = frozenset({"stream_audio", "playback_failed", "speech_cut"})
+_MAX_SPEECH_BYTES = 20_000_000
 
 logger = logging.getLogger(__name__)
 
@@ -383,7 +385,11 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         elif message.get("type") == "hint_request":
             await self._answer_hint_request()
         elif message.get("type") == "turn_latency":
-            self._log_turn_latency(message.get("total_ms"))
+            self._log_turn_latency(
+                message.get("total_ms"), message.get("underruns"), message.get("cut_lines")
+            )
+        elif message.get("type") == "speech_cut":
+            self._log_speech_cut(message.get("expected_bytes"), message.get("received_bytes"))
         elif message.get("type") == "stream_audio":
             if message.get("enabled") is False:
                 self.stream_audio = False
@@ -425,7 +431,29 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             return
         await self._finish(dict(snapshot.values), EndedBy.STUDENT)
 
-    def _log_turn_latency(self, raw_total_ms: object) -> None:
+    @staticmethod
+    def _log_speech_cut(raw_expected: object, raw_received: object) -> None:
+        """Registra que uma fala chegou cortada ao navegador, com os bytes esperados e recebidos.
+
+        O console do celular não é acessível a quem mantém o sistema, então este é o único lugar
+        onde o corte aparece. Os dois números vêm do cliente: só entram no log se forem inteiros
+        plausíveis, e o que não for vira "desconhecido", para a conexão não servir de via para
+        escrever texto livre no log.
+        """
+        expected = valid_count(raw_expected, _MAX_SPEECH_BYTES)
+        received = valid_count(raw_received, _MAX_SPEECH_BYTES)
+        print(
+            "[session] fala cortada no navegador: "
+            f"esperados {'desconhecido' if expected is None else expected} bytes, "
+            f"recebidos {'desconhecido' if received is None else received}"
+        )
+
+    def _log_turn_latency(
+        self,
+        raw_total_ms: object,
+        raw_underruns: object = None,
+        raw_cut_lines: object = None,
+    ) -> None:
         """Escreve a linha de latência da última vez do aluno, depois que o navegador a reporta.
 
         O navegador é o único que sabe quando o aluno soltou o botão e quando a fala começou a
@@ -437,7 +465,16 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         total_ms = valid_latency_ms(raw_total_ms)
         if marks is None or total_ms is None or self.attempt is None:
             return
-        print(format_turn_latency(self.attempt.pk, self.turn_number, marks, total_ms))
+        print(
+            format_turn_latency(
+                self.attempt.pk,
+                self.turn_number,
+                marks,
+                total_ms,
+                underruns=valid_count(raw_underruns),
+                cut_lines=valid_count(raw_cut_lines),
+            )
+        )
 
     @staticmethod
     def _log_playback_failure(reason: object) -> None:
