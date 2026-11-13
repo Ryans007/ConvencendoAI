@@ -610,7 +610,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         A thread é sempre parada e esperada ao fim, também quando quem envia falha, para o fluxo
         do provedor ser fechado e o uso gravado.
         """
-        stream = synthesize_stream(text, voice)
+        stream = await sync_to_async(synthesize_stream)(text, voice)
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
         stop = threading.Event()

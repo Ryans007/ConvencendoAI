@@ -7,10 +7,13 @@ import pytest
 from asgiref.sync import async_to_sync, sync_to_async
 
 from apps.agents.services.schemas import RoutingDecision
+from apps.llm.models import AgentModelConfig
+from apps.llm.services.factory import AudioClient
 from apps.progress.models import Attempt
 from apps.usage.models import LiveSessionLease
 from apps.voice import consumers as voice_consumers
 from apps.voice.services.pcm_stream import PcmFormat
+from apps.voice.services import tts
 from apps.voice.tests.round_shapes import (
     END_SESSION,
     STUDENT_TEXT,
@@ -18,6 +21,8 @@ from apps.voice.tests.round_shapes import (
     install,
     student_token,
 )
+from apps.voice.tests.test_pcm_stream import pcm, split, wav_header
+from apps.voice.tests.test_tts_stream import _FakeGroqClient, _FakeStreamingSpeech
 
 pytestmark = pytest.mark.django_db(transaction=True, serialized_rollback=True)
 
@@ -329,3 +334,31 @@ def test_the_notice_that_the_device_cannot_stream_is_not_lost_while_the_session_
 
     assert frames == [{"type": "speaker", "name": "Rachel"}, _OPENING.encode()]
     assert requested == []
+
+
+def test_the_real_stream_is_built_outside_the_event_loop_because_it_reads_the_database(
+    django_user_model, monkeypatch
+):
+    install(monkeypatch, [_OPENING], RoutingDecision(speaker="none", topic_owner="none"))
+    source = pcm(2000)
+    speech = _FakeStreamingSpeech(split(wav_header() + source, [701, 1203, 999]))
+
+    def audio_client_that_reads_the_database(purpose):
+        AgentModelConfig.get_solo()
+        return AudioClient(client=_FakeGroqClient(speech), model_id="tts-model")
+
+    monkeypatch.setattr(tts, "get_audio_client", audio_client_that_reads_the_database)
+    token = student_token(django_user_model)
+
+    async def run() -> dict:
+        communicator = await connect(token, stream_audio=True)
+        line = await _read_line(communicator)
+        await communicator.disconnect()
+        return line
+
+    line = async_to_sync(run)()
+
+    assert line["error"] is None
+    assert line["start"]["sample_rate"] == 24000
+    assert b"".join(line["chunks"]) == source
+    assert line["end"] == {"type": "speech_end", "bytes": len(source)}
