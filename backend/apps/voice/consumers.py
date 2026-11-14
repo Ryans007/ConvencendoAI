@@ -58,6 +58,7 @@ _SPEAKER_PREFIX = re.compile(r"^\[([^\]]+)\]\s*(.*)$", re.DOTALL)
 _PLAYBACK_REASON = re.compile(r"^[A-Za-z]{1,40}$")
 _DEVICE_NOTICES = frozenset({"stream_audio", "playback_failed", "speech_cut"})
 _MAX_SPEECH_BYTES = 20_000_000
+_MAX_EARLY_MESSAGES = 4
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +95,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         self.attempt = None
         self.hints_enabled = False
         self.ready = False
+        self._early_messages: list[tuple[str | None, bytes | None]] = []
         self.stream_audio = False
         self.first_audio_sent = False
         self._start_task: asyncio.Task | None = None
@@ -160,11 +162,23 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         """
         try:
             await self._start_session(token)
+            await self._replay_early_messages()
         except asyncio.CancelledError:
             raise
         except Exception as exc:
             await self._fail_with_error(exc)
-            return
+
+    async def _replay_early_messages(self) -> None:
+        """Atende, em ordem, as mensagens que chegaram enquanto a sessão abria, e só então a libera.
+
+        A sessão só fica pronta quando não há mais nada guardado, e a checagem e a marca não têm
+        espera entre si: uma mensagem que chega durante o reprocessamento entra no fim da fila, e
+        uma que chega depois da marca é atendida direto, sempre uma de cada vez.
+        """
+        while self._early_messages:
+            text_data, bytes_data = self._early_messages.pop(0)
+            with self._usage_owner():
+                await self._receive(text_data, bytes_data)
         self.ready = True
 
     async def _open_lease(self, user):
@@ -286,9 +300,12 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         """Atende uma mensagem do cliente com o uso dos modelos atribuído ao aluno e à sessão.
 
         Enquanto a sessão não começou, a única mensagem aceita é a de autenticação. Enquanto ela
-        abre, só as mensagens de aviso do aparelho são atendidas, porque o navegador pode
-        precisar dizer que não toca em fluxo ou que recusou tocar justamente durante a abertura;
-        o resto é ignorado, porque o cliente só fala depois de ouvir a abertura.
+        abre, as mensagens de aviso do aparelho são atendidas na hora, porque o navegador pode
+        precisar dizer que não toca em fluxo ou que recusou tocar justamente durante a abertura.
+        O resto, como a fala do aluno, fica guardado e é atendido em ordem assim que a abertura
+        termina: guardar, e não descartar, evita perder a resposta de um cliente que responde no
+        instante em que a última fala da abertura acaba de chegar. O número de mensagens guardadas
+        é limitado, porque quem fala antes de ouvir a abertura não é um aluno de verdade.
         """
         if not self.started:
             await self._authenticate_first_message(text_data, bytes_data)
@@ -296,8 +313,10 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         if not self.ready:
             if self._is_device_notice(text_data):
                 await self._handle_client_message(text_data)
+            elif len(self._early_messages) < _MAX_EARLY_MESSAGES:
+                self._early_messages.append((text_data, bytes_data))
             else:
-                print("[session] mensagem recebida antes de a sessão abrir; ignorada")
+                print("[session] mensagens demais antes de a sessão abrir; ignorada")
             return
         with self._usage_owner():
             await self._receive(text_data, bytes_data)
@@ -520,33 +539,93 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
     async def _advance(
         self, initial_state: dict | None, *, resume: str | dict | None, started_at: float
     ) -> None:
-        """Roda o grafo até a próxima pausa e fala as novas mensagens.
+        """Roda o grafo até a próxima pausa e fala as falas à medida que elas ficam prontas.
 
         `started_at` marca o início da rodada (a chegada do áudio do aluno, ou a conexão
         na abertura), para que o tempo total registrado inclua a transcrição.
+
+        O grafo roda em fluxo, e cada fala que o nó da persona anuncia vai para uma fila que uma
+        tarefa falante esvazia em ordem: a primeira fala é sintetizada e enviada enquanto o texto
+        das seguintes ainda está sendo gerado. Uma só tarefa fala, então a ordem das falas e o
+        limite de uma síntese por vez são os de antes. Ao fim do fluxo o estado do grafo é lido: as
+        falas que o nó não anunciou são faladas pelo caminho de sempre, as anunciadas são
+        conferidas contra o que ficou registrado, e a pausa ou o fim da cena sai de saber se ainda
+        há uma próxima etapa. A primeira falha, do modelo ou da voz, encerra a sessão e para o
+        outro lado, sem mais áudio.
         """
+        graph_input = initial_state if initial_state is not None else Command(resume=resume)
+        announced: asyncio.Queue = asyncio.Queue()
+        lines: list[tuple[str, str]] = []
+        self.first_audio_sent = False
+        speaker = asyncio.ensure_future(self._speak_announced(announced, started_at))
         graph_started_at = time.monotonic()
         try:
-            if initial_state is not None:
-                state = await self.graph.ainvoke(initial_state, config=self.thread_config)
-            else:
-                state = await self.graph.ainvoke(Command(resume=resume), config=self.thread_config)
+            async with contextlib.aclosing(
+                self.graph.astream(graph_input, config=self.thread_config, stream_mode="custom")
+            ) as stream:
+                async for item in stream:
+                    if speaker.done():
+                        break
+                    lines.append((item["speaker"], item["text"]))
+                    if self.turn_marks is not None and self.turn_marks.graph_ms is None:
+                        self.turn_marks.graph_ms = elapsed_ms(graph_started_at)
+                    announced.put_nowait(item)
+        except Exception as exc:
+            await self._stop_speaker(speaker)
+            await self._fail_with_error(exc)
+            return
+        if self.turn_marks is not None and self.turn_marks.graph_ms is None:
+            self.turn_marks.graph_ms = elapsed_ms(graph_started_at)
+
+        announced.put_nowait(None)
+        try:
+            if not await speaker:
+                return
         except Exception as exc:
             await self._fail_with_error(exc)
             return
-        if self.turn_marks is not None:
-            self.turn_marks.graph_ms = elapsed_ms(graph_started_at)
 
-        spoken = await self._speak_new_messages(state, started_at)
+        snapshot = await self.graph.aget_state(self.thread_config)
+        state = dict(snapshot.values)
+        try:
+            spoken = await self._speak_new_messages(state, started_at, lines)
+        except Exception as exc:
+            await self._fail_with_error(exc)
+            return
         if not spoken:
             return
         print(f"[timing] round total: {time.monotonic() - started_at:.2f}s")
 
-        if "__interrupt__" not in state:
+        if not snapshot.next:
             await self._finish(state)
 
-    async def _speak_new_messages(self, state: dict, started_at: float) -> bool:
-        """Sintetiza e envia, em ordem, as falas novas das personas.
+    async def _speak_announced(self, announced: asyncio.Queue, started_at: float) -> bool:
+        """Fala, em ordem, cada fala anunciada pelo grafo, até a fila acabar.
+
+        Devolve `False` quando uma fala falha: a sessão já foi encerrada, e as falas que ainda
+        estavam na fila não são ditas.
+        """
+        while True:
+            item = await announced.get()
+            if item is None:
+                return True
+            if not await self._speak_line(item["speaker"], item["text"], started_at):
+                return False
+
+    @staticmethod
+    async def _stop_speaker(speaker: asyncio.Future) -> None:
+        """Para a tarefa falante e espera ela acabar, para nenhuma fala sair depois do erro."""
+        speaker.cancel()
+        await asyncio.gather(speaker, return_exceptions=True)
+
+    async def _speak_new_messages(
+        self, state: dict, started_at: float, announced: list[tuple[str, str]] | None = None
+    ) -> bool:
+        """Sintetiza e envia, em ordem, as falas novas das personas que ainda não foram ditas.
+
+        As `announced` já foram ditas enquanto o grafo rodava e são conferidas, uma a uma e na
+        ordem, contra as primeiras falas novas do estado: se o aluno ouviu uma fala diferente da
+        que ficou registrada, a rodada é uma falha, e não uma conversa diferente.
 
         Antes de cada áudio sai uma mensagem `speaker` com o nome de quem fala, para a tela dizer
         quem é: o nome é o único texto de uma fala que chega ao cliente, e nunca o que foi dito.
@@ -560,13 +639,16 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         messages = list(state.get("messages") or [])
         new_messages = messages[self.seen_messages :]
         self.seen_messages = len(messages)
+        new_lines = [message for message in new_messages if isinstance(message, AIMessage)]
         if self.turn_marks is not None:
-            self.turn_marks.lines = sum(isinstance(message, AIMessage) for message in new_messages)
-        self.first_audio_sent = False
+            self.turn_marks.lines = len(new_lines)
 
-        for message in new_messages:
-            if not isinstance(message, AIMessage):
-                continue
+        spoken_already = announced or []
+        for index, line in enumerate(spoken_already):
+            if index >= len(new_lines) or _split_speaker(new_lines[index].content) != line:
+                raise RuntimeError("a fala anunciada não é a que ficou registrada na conversa")
+
+        for message in new_lines[len(spoken_already) :]:
             name, text = _split_speaker(message.content)
             if not await self._speak_line(name, text, started_at):
                 return False

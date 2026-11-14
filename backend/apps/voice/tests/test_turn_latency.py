@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 import pytest
@@ -21,6 +22,16 @@ from apps.voice.tests.test_consumer_speech_turns import _prepare, _ScriptedPerso
 pytestmark = pytest.mark.django_db
 
 
+async def _let_the_opening_settle() -> None:
+    """Dá à sessão o instante de se declarar pronta antes de o teste responder.
+
+    O servidor guarda a resposta que chega antes disso, e cancelar uma conexão que fecha logo em
+    seguida descarta o que ainda não foi atendido. Um aluno de verdade só responde depois de ouvir
+    a abertura, o que leva segundos; o teste, que responde na hora, espera.
+    """
+    await asyncio.sleep(0.1)
+
+
 def _report(token: str, *reports: dict, audios: int = 1) -> None:
     """Abre a sessão, manda os áudios e depois os relatos de latência do navegador."""
 
@@ -31,6 +42,7 @@ def _report(token: str, *reports: dict, audios: int = 1) -> None:
         connected, _ = await communicator.connect()
         assert connected
         await communicator.receive_persona_audio()
+        await _let_the_opening_settle()
         for _ in range(audios):
             await communicator.send_to(bytes_data=b"student-audio")
             await communicator.receive_persona_audio()
@@ -136,6 +148,7 @@ def test_each_turn_is_numbered_in_its_own_line(django_user_model, monkeypatch, c
         )
         await communicator.connect()
         await communicator.receive_persona_audio()
+        await _let_the_opening_settle()
         for total in (3000, 3500):
             await communicator.send_to(bytes_data=b"student-audio")
             await communicator.receive_persona_audio()
@@ -221,6 +234,7 @@ def test_a_round_with_two_lines_reports_lines_two(django_user_model, monkeypatch
     async def run() -> None:
         communicator = await connect(token)
         await read_frames(communicator, 1)
+        await _let_the_opening_settle()
         await communicator.send_to(bytes_data=b"student-audio")
         await read_frames(communicator, 2)
         await communicator.send_to(text_data=json.dumps({"type": "turn_latency", "total_ms": 5000}))
