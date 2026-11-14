@@ -95,6 +95,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         self.hints_enabled = False
         self.ready = False
         self.stream_audio = False
+        self.first_audio_sent = False
         self._start_task: asyncio.Task | None = None
         self.current_hint: str | None = None
         self.pending_wait_ms: int | None = None
@@ -561,44 +562,54 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         self.seen_messages = len(messages)
         if self.turn_marks is not None:
             self.turn_marks.lines = sum(isinstance(message, AIMessage) for message in new_messages)
-        first_audio_sent = False
+        self.first_audio_sent = False
 
         for message in new_messages:
             if not isinstance(message, AIMessage):
                 continue
             name, text = _split_speaker(message.content)
-            role = next((r for r in self.content.roles if r.name == name), None)
-            voice = role.voice if role else self.content.roles[0].voice
-            speaker_name = role.name if role else name
-            await self.send(text_data=json.dumps({"type": "speaker", "name": speaker_name}))
-            synthesis_started_at = time.monotonic()
+            if not await self._speak_line(name, text, started_at):
+                return False
+        return True
 
-            def mark_first_audio(synthesis_started_at: float = synthesis_started_at) -> None:
-                nonlocal first_audio_sent
-                if first_audio_sent:
-                    return
-                first_audio_sent = True
-                if self.turn_marks is not None:
-                    self.turn_marks.tts_ms = elapsed_ms(synthesis_started_at)
-                    self.turn_marks.server_ms = elapsed_ms(started_at)
-                print(f"[timing] first audio sent after {time.monotonic() - started_at:.2f}s")
+    async def _speak_line(self, name: str, text: str, started_at: float) -> bool:
+        """Fala uma única fala: o nome de quem fala, depois a síntese e o envio do áudio.
 
-            if self.stream_audio:
-                try:
-                    await self._send_streamed_speech(text, voice, mark_first_audio)
-                except Exception as exc:
-                    await self._fail_with_error(exc)
-                    return False
-                print(f"[timing] tts ({name}): {time.monotonic() - synthesis_started_at:.2f}s")
-                continue
+        O áudio sai em fluxo ou inteiro, conforme o navegador declarou. O primeiro áudio da
+        rodada grava as marcas de tempo da vez. Devolve `False` quando o provedor de voz falha:
+        a sessão já foi encerrada com o erro de sempre, e quem chamou não deve continuar.
+        """
+        role = next((r for r in self.content.roles if r.name == name), None)
+        voice = role.voice if role else self.content.roles[0].voice
+        speaker_name = role.name if role else name
+        await self.send(text_data=json.dumps({"type": "speaker", "name": speaker_name}))
+        synthesis_started_at = time.monotonic()
+
+        def mark_first_audio() -> None:
+            if self.first_audio_sent:
+                return
+            self.first_audio_sent = True
+            if self.turn_marks is not None:
+                self.turn_marks.tts_ms = elapsed_ms(synthesis_started_at)
+                self.turn_marks.server_ms = elapsed_ms(started_at)
+            print(f"[timing] first audio sent after {time.monotonic() - started_at:.2f}s")
+
+        if self.stream_audio:
             try:
-                audio = await sync_to_async(synthesize)(text, voice)
+                await self._send_streamed_speech(text, voice, mark_first_audio)
             except Exception as exc:
                 await self._fail_with_error(exc)
                 return False
             print(f"[timing] tts ({name}): {time.monotonic() - synthesis_started_at:.2f}s")
-            await self.send(bytes_data=audio)
-            mark_first_audio()
+            return True
+        try:
+            audio = await sync_to_async(synthesize)(text, voice)
+        except Exception as exc:
+            await self._fail_with_error(exc)
+            return False
+        print(f"[timing] tts ({name}): {time.monotonic() - synthesis_started_at:.2f}s")
+        await self.send(bytes_data=audio)
+        mark_first_audio()
         return True
 
     async def _send_streamed_speech(self, text: str, voice: str, on_first_audio) -> None:
