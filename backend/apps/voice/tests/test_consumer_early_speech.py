@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 import threading
 import time
 
@@ -225,3 +226,62 @@ def test_the_models_and_the_synthesis_of_a_two_line_round_are_attributed_to_the_
     assert owners["model"] and all(o is not None and o.attempt_id == attempt.pk for o in owners["model"])
     assert len(owners["synthesis"]) == 3
     assert all(o is not None and o.attempt_id == attempt.pk for o in owners["synthesis"])
+
+
+def _graph_times(capsys) -> tuple[int, int]:
+    """O `graph_ms` e o `graph_total_ms` da única linha de latência que o servidor escreveu."""
+    [line] = [
+        line for line in capsys.readouterr().out.splitlines() if line.startswith("[latency]")
+    ]
+    first = int(re.search(r"graph_ms=(\d+)", line).group(1))
+    total = int(re.search(r"graph_total_ms=(\d+)", line).group(1))
+    return first, total
+
+
+def _report_after_a_round(django_user_model, monkeypatch, lines, routing, *, reads: int) -> None:
+    install(monkeypatch, lines, routing)
+    token = student_token(django_user_model)
+
+    async def run() -> None:
+        communicator = await connect(token)
+        await _read_any(communicator, False)
+        await asyncio.sleep(0.1)
+        await communicator.send_to(bytes_data=b"student-audio")
+        for _ in range(reads):
+            await _read_any(communicator, False)
+        await communicator.send_to(text_data=json.dumps({"type": "turn_latency", "total_ms": 3000}))
+        await communicator.disconnect()
+
+    async_to_sync(run)()
+
+
+def test_the_latency_line_shows_how_much_earlier_the_first_line_was_ready(
+    django_user_model, monkeypatch, capsys
+):
+    def slow_second_line() -> str:
+        time.sleep(0.6)
+        return _RECEIVING
+
+    _report_after_a_round(
+        django_user_model, monkeypatch, [_OPENING, _PASSING, slow_second_line], _REDIRECT, reads=2
+    )
+
+    first_ready, all_ready = _graph_times(capsys)
+
+    assert all_ready - first_ready >= 500
+
+
+def test_in_a_round_of_one_line_the_two_graph_times_are_the_same(
+    django_user_model, monkeypatch, capsys
+):
+    _report_after_a_round(
+        django_user_model,
+        monkeypatch,
+        [_OPENING, "What have you finished so far?"],
+        RoutingDecision(speaker="none", topic_owner="none"),
+        reads=1,
+    )
+
+    first_ready, all_ready = _graph_times(capsys)
+
+    assert 0 <= all_ready - first_ready <= 150

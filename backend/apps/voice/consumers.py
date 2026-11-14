@@ -574,8 +574,10 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             await self._stop_speaker(speaker)
             await self._fail_with_error(exc)
             return
-        if self.turn_marks is not None and self.turn_marks.graph_ms is None:
-            self.turn_marks.graph_ms = elapsed_ms(graph_started_at)
+        if self.turn_marks is not None:
+            self.turn_marks.graph_total_ms = elapsed_ms(graph_started_at)
+            if self.turn_marks.graph_ms is None:
+                self.turn_marks.graph_ms = self.turn_marks.graph_total_ms
 
         announced.put_nowait(None)
         try:

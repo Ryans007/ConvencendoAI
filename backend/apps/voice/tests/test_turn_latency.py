@@ -59,14 +59,21 @@ def _latency_lines(capsys) -> list[str]:
 
 def test_the_line_has_the_total_and_the_stage_breakdown():
     marks = TurnMarks(
-        audio_received_at=0.0, stt_ms=700, graph_ms=1800, tts_ms=900, server_ms=3500, lines=2
+        audio_received_at=0.0,
+        stt_ms=700,
+        graph_ms=1800,
+        graph_total_ms=2700,
+        tts_ms=900,
+        server_ms=3500,
+        lines=2,
     )
 
     line = format_turn_latency(7, 2, marks, 4200)
 
     assert line == (
         "[latency] attempt=7 turn=2 lines=2 total_ms=4200 server_ms=3500 stt_ms=700 "
-        "graph_ms=1800 tts_ms=900 outside_server_ms=700 underruns=n/a cut_lines=n/a"
+        "graph_ms=1800 graph_total_ms=2700 tts_ms=900 outside_server_ms=700 "
+        "underruns=n/a cut_lines=n/a"
     )
 
 
