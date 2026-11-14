@@ -1,4 +1,5 @@
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langgraph.config import get_stream_writer
 
 from apps.agents.graph.state import ScenarioState
 from apps.agents.services.adaptation import adaptation_hint
@@ -26,7 +27,20 @@ def _fallback_key(content: ScenarioContent, state: ScenarioState) -> str:
 
 
 def _speak(role: Role, text: str) -> None:
+    """Escreve a fala no log e a anuncia a quem acompanha a execução do grafo em fluxo.
+
+    É chamada uma vez por fala, no instante em que o texto fica definitivo, em todos os caminhos do
+    nó, então o consumidor da sessão ao vivo pode falar a primeira fala da rodada sem esperar a
+    geração das seguintes. O anúncio é só um aviso: o que o nó devolve no estado continua sendo a
+    fonte da conversa, e as execuções que não acompanham o fluxo (texto, avaliador, testes que
+    chamam o nó direto) seguem como antes, porque fora de um grafo em fluxo não há para quem avisar.
+    """
     conversation_log(role.name, text)
+    try:
+        writer = get_stream_writer()
+    except RuntimeError:
+        return
+    writer({"speaker": role.name, "text": text})
 
 
 def _generate_turn(

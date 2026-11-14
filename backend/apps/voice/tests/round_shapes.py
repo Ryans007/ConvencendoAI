@@ -19,13 +19,19 @@ STUDENT_TEXT = "I need one more week."
 
 
 class ScriptedPersona:
-    """Persona falsa que fala o roteiro, uma fala por chamada, e levanta as exceções do roteiro."""
+    """Persona falsa que fala o roteiro, uma fala por chamada, e levanta as exceções do roteiro.
+
+    Um passo que seja uma função é chamado na hora da fala e devolve o texto ou levanta, o que
+    permite travar a geração de uma fala até o teste liberá-la.
+    """
 
     def __init__(self, lines):
         self._lines = iter(lines)
 
     def invoke(self, messages):
         step = next(self._lines)
+        if callable(step):
+            step = step()
         if isinstance(step, BaseException):
             raise step
         return PersonaTurn(line=step, pass_to="student")
