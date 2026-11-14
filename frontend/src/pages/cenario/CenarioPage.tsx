@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { AvatarPlaceholder } from "../../components/AvatarPlaceholder";
 import { useScenarioBriefing } from "../../hooks/useScenarioBriefing";
+import { unlockSpeechAudio } from "../../services/speechAudio";
 import type { ReportContext } from "../relatorio/reportContext";
 
 /**
@@ -110,6 +111,7 @@ export default function CenarioPage() {
             <button
               type="button"
               onClick={() => {
+                unlockSpeechAudio();
                 const reportContext: ReportContext = {
                   scenarioTitle: briefing.title,
                   levelLabel: `${briefing.difficulty_label}, nível ${briefing.expected_cefr}`,

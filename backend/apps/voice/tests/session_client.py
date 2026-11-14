@@ -13,7 +13,8 @@ class SessionCommunicator(WebsocketCommunicator):
     quiser. Os parâmetros que sobram, como `hints`, seguem na URL.
     """
 
-    def __init__(self, application, path: str, *args, **kwargs):
+    def __init__(self, application, path: str, *args, stream_audio: bool = False, **kwargs):
+        self.stream_audio = stream_audio
         url = urlsplit(path)
         query = parse_qs(url.query)
         self.token = query.pop("token", [None])[0]
@@ -23,7 +24,10 @@ class SessionCommunicator(WebsocketCommunicator):
     async def connect(self, timeout: float = 1):
         connected, subprotocol = await super().connect(timeout)
         if connected and self.token is not None:
-            await self.send_to(text_data=json.dumps({"type": "auth", "token": self.token}))
+            auth = {"type": "auth", "token": self.token}
+            if self.stream_audio:
+                auth["stream_audio"] = True
+            await self.send_to(text_data=json.dumps(auth))
         return connected, subprotocol
 
     async def receive_persona_line(self) -> tuple[str, bytes]:

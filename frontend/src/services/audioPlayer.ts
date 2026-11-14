@@ -2,7 +2,7 @@ const SILENCE_SAMPLE_RATE = 8000;
 const SILENCE_SAMPLES = 800;
 
 /** Um WAV mono de 16 bits só de zeros, curto o bastante para não ser ouvido nem notado. */
-function createSilence(): Blob {
+export function createSilence(): Blob {
   const dataBytes = SILENCE_SAMPLES * 2;
   const view = new DataView(new ArrayBuffer(44 + dataBytes));
   const writeText = (offset: number, text: string) => {

@@ -3,11 +3,13 @@ import contextlib
 import json
 import logging
 import re
+import threading
 import time
 from urllib.parse import parse_qs
 
 from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import F
 from langchain_core.messages import AIMessage
@@ -41,11 +43,12 @@ from apps.voice.services.failures import (
     classify_failure,
 )
 from apps.voice.services.stt import Transcription, transcribe_with_words
-from apps.voice.services.tts import synthesize
+from apps.voice.services.tts import synthesize, synthesize_stream
 from apps.voice.services.turn_latency import (
     TurnMarks,
     elapsed_ms,
     format_turn_latency,
+    valid_count,
     valid_latency_ms,
 )
 
@@ -53,6 +56,8 @@ _AUTH_TIMEOUT_SECONDS = 10
 _AUTH_MAX_CHARS = 4096
 _SPEAKER_PREFIX = re.compile(r"^\[([^\]]+)\]\s*(.*)$", re.DOTALL)
 _PLAYBACK_REASON = re.compile(r"^[A-Za-z]{1,40}$")
+_DEVICE_NOTICES = frozenset({"stream_audio", "playback_failed", "speech_cut"})
+_MAX_SPEECH_BYTES = 20_000_000
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +94,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         self.attempt = None
         self.hints_enabled = False
         self.ready = False
+        self.stream_audio = False
         self._start_task: asyncio.Task | None = None
         self.current_hint: str | None = None
         self.pending_wait_ms: int | None = None
@@ -137,6 +143,7 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         if not isinstance(token, str):
             await self._fail("A primeira mensagem deve ser a de autenticação com o token.")
             return
+        self.stream_audio = message.get("stream_audio") is True and settings.STREAM_PERSONA_SPEECH
         self.started = True
         self._start_task = asyncio.create_task(self._run_start_session(token))
 
@@ -277,17 +284,33 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
     async def receive(self, text_data: str | None = None, bytes_data: bytes | None = None) -> None:
         """Atende uma mensagem do cliente com o uso dos modelos atribuído ao aluno e à sessão.
 
-        Enquanto a sessão não começou, a única mensagem aceita é a de autenticação, e enquanto
-        ela abre, nada é atendido: o cliente só fala depois de ouvir a abertura.
+        Enquanto a sessão não começou, a única mensagem aceita é a de autenticação. Enquanto ela
+        abre, só as mensagens de aviso do aparelho são atendidas, porque o navegador pode
+        precisar dizer que não toca em fluxo ou que recusou tocar justamente durante a abertura;
+        o resto é ignorado, porque o cliente só fala depois de ouvir a abertura.
         """
         if not self.started:
             await self._authenticate_first_message(text_data, bytes_data)
             return
         if not self.ready:
-            print("[session] mensagem recebida antes de a sessão abrir; ignorada")
+            if self._is_device_notice(text_data):
+                await self._handle_client_message(text_data)
+            else:
+                print("[session] mensagem recebida antes de a sessão abrir; ignorada")
             return
         with self._usage_owner():
             await self._receive(text_data, bytes_data)
+
+    @staticmethod
+    def _is_device_notice(text_data: str | None) -> bool:
+        """É um aviso do aparelho que vale mesmo enquanto a sessão ainda abre?"""
+        if text_data is None:
+            return False
+        try:
+            message = json.loads(text_data)
+        except json.JSONDecodeError:
+            return False
+        return isinstance(message, dict) and message.get("type") in _DEVICE_NOTICES
 
     async def _receive(self, text_data: str | None, bytes_data: bytes | None) -> None:
         """Recebe o áudio de um turno do aluno, transcreve e avança a conversa.
@@ -362,7 +385,14 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         elif message.get("type") == "hint_request":
             await self._answer_hint_request()
         elif message.get("type") == "turn_latency":
-            self._log_turn_latency(message.get("total_ms"))
+            self._log_turn_latency(
+                message.get("total_ms"), message.get("underruns"), message.get("cut_lines")
+            )
+        elif message.get("type") == "speech_cut":
+            self._log_speech_cut(message.get("expected_bytes"), message.get("received_bytes"))
+        elif message.get("type") == "stream_audio":
+            if message.get("enabled") is False:
+                self.stream_audio = False
         elif message.get("type") == "playback_failed":
             self._log_playback_failure(message.get("reason"))
         elif message.get("type") == "end_session":
@@ -401,7 +431,29 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             return
         await self._finish(dict(snapshot.values), EndedBy.STUDENT)
 
-    def _log_turn_latency(self, raw_total_ms: object) -> None:
+    @staticmethod
+    def _log_speech_cut(raw_expected: object, raw_received: object) -> None:
+        """Registra que uma fala chegou cortada ao navegador, com os bytes esperados e recebidos.
+
+        O console do celular não é acessível a quem mantém o sistema, então este é o único lugar
+        onde o corte aparece. Os dois números vêm do cliente: só entram no log se forem inteiros
+        plausíveis, e o que não for vira "desconhecido", para a conexão não servir de via para
+        escrever texto livre no log.
+        """
+        expected = valid_count(raw_expected, _MAX_SPEECH_BYTES)
+        received = valid_count(raw_received, _MAX_SPEECH_BYTES)
+        print(
+            "[session] fala cortada no navegador: "
+            f"esperados {'desconhecido' if expected is None else expected} bytes, "
+            f"recebidos {'desconhecido' if received is None else received}"
+        )
+
+    def _log_turn_latency(
+        self,
+        raw_total_ms: object,
+        raw_underruns: object = None,
+        raw_cut_lines: object = None,
+    ) -> None:
         """Escreve a linha de latência da última vez do aluno, depois que o navegador a reporta.
 
         O navegador é o único que sabe quando o aluno soltou o botão e quando a fala começou a
@@ -413,7 +465,16 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
         total_ms = valid_latency_ms(raw_total_ms)
         if marks is None or total_ms is None or self.attempt is None:
             return
-        print(format_turn_latency(self.attempt.pk, self.turn_number, marks, total_ms))
+        print(
+            format_turn_latency(
+                self.attempt.pk,
+                self.turn_number,
+                marks,
+                total_ms,
+                underruns=valid_count(raw_underruns),
+                cut_lines=valid_count(raw_cut_lines),
+            )
+        )
 
     @staticmethod
     def _log_playback_failure(reason: object) -> None:
@@ -509,6 +570,25 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
             speaker_name = role.name if role else name
             await self.send(text_data=json.dumps({"type": "speaker", "name": speaker_name}))
             synthesis_started_at = time.monotonic()
+
+            def mark_first_audio(synthesis_started_at: float = synthesis_started_at) -> None:
+                nonlocal first_audio_sent
+                if first_audio_sent:
+                    return
+                first_audio_sent = True
+                if self.turn_marks is not None:
+                    self.turn_marks.tts_ms = elapsed_ms(synthesis_started_at)
+                    self.turn_marks.server_ms = elapsed_ms(started_at)
+                print(f"[timing] first audio sent after {time.monotonic() - started_at:.2f}s")
+
+            if self.stream_audio:
+                try:
+                    await self._send_streamed_speech(text, voice, mark_first_audio)
+                except Exception as exc:
+                    await self._fail_with_error(exc)
+                    return False
+                print(f"[timing] tts ({name}): {time.monotonic() - synthesis_started_at:.2f}s")
+                continue
             try:
                 audio = await sync_to_async(synthesize)(text, voice)
             except Exception as exc:
@@ -516,13 +596,66 @@ class LiveSessionConsumer(AsyncWebsocketConsumer):
                 return False
             print(f"[timing] tts ({name}): {time.monotonic() - synthesis_started_at:.2f}s")
             await self.send(bytes_data=audio)
-            if not first_audio_sent:
-                first_audio_sent = True
-                if self.turn_marks is not None:
-                    self.turn_marks.tts_ms = elapsed_ms(synthesis_started_at)
-                    self.turn_marks.server_ms = elapsed_ms(started_at)
-                print(f"[timing] first audio sent after {time.monotonic() - started_at:.2f}s")
+            mark_first_audio()
         return True
+
+    async def _send_streamed_speech(self, text: str, voice: str, on_first_audio) -> None:
+        """Manda uma fala ao navegador em pedaços, à medida que o provedor os gera.
+
+        A fala é `speech_start` com o formato do áudio, os pedaços de PCM e `speech_end` com o
+        total de bytes enviados, que o navegador confere para saber se a fala chegou inteira. O
+        provedor é lido numa thread, que entrega cada pedaço por uma fila, para o servidor mandar
+        o primeiro enquanto o resto ainda está sendo sintetizado. Uma falha do provedor, antes ou
+        no meio da fala, é levantada aqui e não manda `speech_end`: o chamador encerra a sessão.
+        A thread é sempre parada e esperada ao fim, também quando quem envia falha, para o fluxo
+        do provedor ser fechado e o uso gravado.
+        """
+        stream = await sync_to_async(synthesize_stream)(text, voice)
+        loop = asyncio.get_running_loop()
+        queue: asyncio.Queue = asyncio.Queue()
+        stop = threading.Event()
+
+        def produce() -> None:
+            chunks = iter(stream)
+            try:
+                for chunk in chunks:
+                    if stop.is_set():
+                        break
+                    loop.call_soon_threadsafe(queue.put_nowait, chunk)
+                loop.call_soon_threadsafe(queue.put_nowait, None)
+            except Exception as exc:
+                loop.call_soon_threadsafe(queue.put_nowait, exc)
+            finally:
+                chunks.close()
+
+        producer = asyncio.ensure_future(sync_to_async(produce)())
+        try:
+            sent = 0
+            item = await queue.get()
+            while item is not None:
+                if isinstance(item, Exception):
+                    raise item
+                if sent == 0:
+                    audio_format = stream.format
+                    await self.send(
+                        text_data=json.dumps(
+                            {
+                                "type": "speech_start",
+                                "format": "pcm_s16le",
+                                "sample_rate": audio_format.sample_rate,
+                                "channels": audio_format.channels,
+                            }
+                        )
+                    )
+                await self.send(bytes_data=item)
+                if sent == 0:
+                    on_first_audio()
+                sent += len(item)
+                item = await queue.get()
+            await self.send(text_data=json.dumps({"type": "speech_end", "bytes": sent}))
+        finally:
+            stop.set()
+            await asyncio.gather(producer, return_exceptions=True)
 
     async def _finish(self, state: dict, ended_by: str = EndedBy.TURN_LIMIT) -> None:
         """Encerra a cena: avisa o cliente, avalia, grava a tentativa e manda o resultado.
